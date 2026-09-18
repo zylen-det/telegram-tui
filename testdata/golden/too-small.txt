@@ -1,0 +1,17 @@
+
+
+
+
+
+
+
+
+    telegram-tui requires at least 60x18; current 59x17
+
+
+
+
+
+
+
+

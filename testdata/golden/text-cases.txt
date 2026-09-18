@@ -1,0 +1,24 @@
+ telegram-tui                              Weekend 開 發 群                                     online
+╭─Chats──────────────────────╮╭─Weekend 開 發 群 ────────────────────────────────────────────────────ⓘ╮
+│▀▀▀▀▀▀ Mina Chen            ││                                                                    │
+│▀▀▀▀▀▀ Ship it              ││                                                                    │
+│▀▀▀▀▀▀ 13:02 mute           ││                                                                    │
+│                            ││                                                                    │
+│▀▀▀▀▀▀ Weekend 開 發 群        ││                                                                    │
+│▀▀▀▀▀▀ 明 天 見  👋             ││                                                                    │
+│▀▀▀▀▀▀ 14:35 [3]            ││                                                                    │
+│                            ││                                                                    │
+│                            ││                                                                    │
+│                            ││                                                                    │
+│                            ││                                                                    │
+│                            ││                                                                    │
+│                            ││                                                                    │
+│                            ││▀▀▀▀ 文 字 測 試   09:01                                                │
+│                            ││▀▀▀▀ 中 文 內 容 與  English                                             │
+│                            ││     Emoji 👩  and é combining                                       │
+│                            ││     averyveryveryveryveryveryveryveryveryveryveryveryveryveryveryve│
+│                            ││     ryveryveryveryverylongtoken                                    │
+│                            ││ 準 備 送 出 的  draft                                                   │
+│                            ││                                                                    │
+│                            ││                                                             [Send] │
+╰────────────────────────────╯╰────────────────────────────────────────────────────────────────────╯
