@@ -29,11 +29,15 @@ func openMessageSearch(state State) (State, []Command) {
 }
 
 func reduceMessageSearchValueChanged(state State, event MessageSearchValueChanged) (State, []Command) {
-	search := state.MessageSearch
-	if search == nil || state.Focus != FocusSearchInput || search.ChatID != event.ChatID {
+	active := state.MessageSearch
+	if active == nil || state.Focus != FocusSearchInput || active.ChatID != event.ChatID {
 		return state, nil
 	}
+	// Copy-on-write: clone the owned MessageSearchState so the caller's State
+	// keeps the previous query and result slices.
+	search := *active
 	search.Input = []rune(event.Value)
+	state.MessageSearch = &search
 	return state, nil
 }
 

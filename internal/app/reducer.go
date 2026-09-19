@@ -2,8 +2,10 @@ package app
 
 import (
 	"image/color"
+	"maps"
 	"math"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -36,7 +38,25 @@ func Reduce(input State, raw Event) (State, []Command) {
 		return reduceComposerValueChanged(input, event)
 	}
 
-	state := cloneReducerState(input)
+	// The remaining value events each own exactly one overlay (auth prompt,
+	// photo path, message search, chat search, chat settings input). They are
+	// dispatched before the clone so typing rewrites only that overlay, not the
+	// whole application state. Every one of them must copy-on-write its owned
+	// pointer state instead of mutating through it.
+	switch event := event.(type) {
+	case PromptValueChanged:
+		return reducePromptValueChanged(input, event)
+	case PhotoPathValueChanged:
+		return reducePhotoPathValueChanged(input, event)
+	case MessageSearchValueChanged:
+		return reduceMessageSearchValueChanged(input, event)
+	case ChatSearchValueChanged:
+		return reduceChatSearchValueChanged(input, event)
+	case ChatSettingsValueChanged:
+		return reduceChatSettingsValueChanged(input, event)
+	}
+
+	state := cloneReducerStateForEvent(input, event)
 
 	switch event := event.(type) {
 	case Started:
@@ -46,16 +66,6 @@ func Reduce(input State, raw Event) (State, []Command) {
 		state.Layout = layoutForSize(event.Width, event.Height)
 		clampAllHistoryOffsets(&state)
 		resizeStickerPicker(&state)
-	case PromptValueChanged:
-		return reducePromptValueChanged(state, event)
-	case PhotoPathValueChanged:
-		return reducePhotoPathValueChanged(state, event)
-	case MessageSearchValueChanged:
-		return reduceMessageSearchValueChanged(state, event)
-	case ChatSearchValueChanged:
-		return reduceChatSearchValueChanged(state, event)
-	case ChatSettingsValueChanged:
-		return reduceChatSettingsValueChanged(state, event)
 	case ChatSettingsLoaded:
 		return reduceChatSettingsLoaded(state, event)
 	case ChatSettingsLoadFailed:
@@ -3599,6 +3609,27 @@ func editableTargetPresent(state State) bool {
 	return ok && editableMessage(message)
 }
 
+func cloneChatDraftWriteState(state State) State {
+	state.DraftSync = maps.Clone(state.DraftSync)
+	if state.DraftSync == nil {
+		state.DraftSync = make(map[domain.ChatID]DraftSyncState)
+	}
+	state.Chats = slices.Clone(state.Chats)
+	return state
+}
+
+func cloneTopicDraftWriteState(state State, key topicKey) State {
+	state.TopicDraftSync = maps.Clone(state.TopicDraftSync)
+	if state.TopicDraftSync == nil {
+		state.TopicDraftSync = make(map[topicKey]DraftSyncState)
+	}
+	state.ForumTopics = maps.Clone(state.ForumTopics)
+	if byTopic := state.ForumTopics[key.ChatID]; byTopic != nil {
+		state.ForumTopics[key.ChatID] = maps.Clone(byTopic)
+	}
+	return state
+}
+
 func reduceComposerValueChanged(state State, event ComposerValueChanged) (State, []Command) {
 	if state.Quitting {
 		return state, nil
@@ -3649,6 +3680,7 @@ func reduceComposerValueChanged(state State, event ComposerValueChanged) (State,
 		}
 		drafts[allKey] = event.Value
 		state.TopicDrafts = drafts
+		state = cloneTopicDraftWriteState(state, allKey)
 		commands := syncCommandMenuForValue(&state, event.ChatID, event.Value)
 		commands = append(commands, queueTopicDraftSave(&state, allKey))
 		return state, commands
@@ -3663,6 +3695,7 @@ func reduceComposerValueChanged(state State, event ComposerValueChanged) (State,
 		}
 		drafts[key] = event.Value
 		state.TopicDrafts = drafts
+		state = cloneTopicDraftWriteState(state, key)
 		commands := syncCommandMenuForValue(&state, event.ChatID, event.Value)
 		commands = append(commands, queueTopicDraftSave(&state, key))
 		return state, commands
@@ -3681,6 +3714,7 @@ func reduceComposerValueChanged(state State, event ComposerValueChanged) (State,
 	}
 	drafts[event.ChatID] = event.Value
 	state.Drafts = drafts
+	state = cloneChatDraftWriteState(state)
 	commands := syncCommandMenuForValue(&state, event.ChatID, event.Value)
 	commands = append(commands, queueDraftSave(&state, event.ChatID))
 	return state, commands
@@ -3702,7 +3736,10 @@ func reducePromptValueChanged(state State, event PromptValueChanged) (State, []C
 	if state.Quitting {
 		return state, nil
 	}
-	state.Prompt.Input = []rune(event.Value)
+	// Copy-on-write: the caller's State keeps its own PromptState.
+	prompt := *state.Prompt
+	prompt.Input = []rune(event.Value)
+	state.Prompt = &prompt
 	return state, nil
 }
 
@@ -3729,7 +3766,10 @@ func reducePhotoPathValueChanged(state State, event PhotoPathValueChanged) (Stat
 		}
 		input = append(input, r)
 	}
-	state.PhotoSend.Input = input
+	// Copy-on-write: the caller's State keeps its own PhotoSendState.
+	photo := *state.PhotoSend
+	photo.Input = input
+	state.PhotoSend = &photo
 	return state, nil
 }
 
@@ -4104,6 +4144,342 @@ func clonePromptState(prompt *PromptState) *PromptState {
 	clone := *prompt
 	clone.Input = append([]rune(nil), prompt.Input...)
 	return &clone
+}
+
+// cloneReducerStateForEvent keeps the reducer's copy-on-write contract while
+// avoiding the legacy whole-state clone for events whose mutation surface is
+// known and narrow. Complex/cold paths still fall back to cloneReducerState;
+// they can be migrated independently without weakening input-state isolation.
+func cloneReducerStateForEvent(state State, event Event) State {
+	switch event := event.(type) {
+	case Started, TerminalFocusChanged, ChatsLoadFailed, StartupFailed,
+		ShutdownComplete, OperationFailed, ClipboardWriteFailed, ClipboardWritten,
+		ToastExpired, PromptRequested:
+		// These reducers only replace scalar or top-level pointer fields.
+		return state
+	case Resized:
+		clone := state
+		clone.History = maps.Clone(state.History)
+		if clone.History == nil {
+			clone.History = make(map[domain.ChatID]HistoryState)
+		}
+		if state.StickerPicker != nil {
+			picker := *state.StickerPicker
+			clone.StickerPicker = &picker
+		}
+		return clone
+	case ChatsLoaded:
+		clone := cloneCloudDraftState(state)
+		clone.History = maps.Clone(state.History)
+		if clone.History == nil {
+			clone.History = make(map[domain.ChatID]HistoryState)
+		}
+		clone.Avatars = maps.Clone(state.Avatars)
+		if clone.Avatars == nil {
+			clone.Avatars = make(map[string]AvatarState)
+		}
+		return clone
+	case MessagesLoaded:
+		return cloneMessagesLoadedState(state)
+	case ActionReceived:
+		return cloneReducerStateForAction(state, event)
+	case TelegramEvent:
+		return cloneReducerStateForTelegramEvent(state, event)
+	default:
+		return cloneReducerState(state)
+	}
+}
+
+func cloneReducerStateForAction(state State, event ActionReceived) State {
+	if event.Action == Quit {
+		// Quit changes only top-level fields and emits shutdown commands.
+		return state
+	}
+	if reducerHasRoutedOverlay(state) {
+		return cloneReducerState(state)
+	}
+	switch event.Action {
+	case FocusPane, FocusNext, FocusPrevious, ToggleDetails, SelectMessage:
+		return state
+	case SelectChat:
+		if chatSelectionUsesOrdinaryChats(state, event.ChatID) {
+			return cloneChatSelectionState(state)
+		}
+	case SelectNext, SelectPrevious:
+		if state.Focus == FocusDetails {
+			return state
+		}
+		if chatID, ok := adjacentChatID(state, event.Action == SelectPrevious); ok && chatSelectionUsesOrdinaryChats(state, chatID) {
+			return cloneChatSelectionState(state)
+		}
+	case SelectNextUnread, SelectNextMention:
+		if state.Focus != FocusChats {
+			return state
+		}
+		match := func(chat domain.Chat) bool { return chat.UnreadCount > 0 }
+		if event.Action == SelectNextMention {
+			match = func(chat domain.Chat) bool { return chat.UnreadMentionCount > 0 }
+		}
+		chatID, ok := nextMatchingChatID(state, match)
+		if !ok {
+			return state
+		}
+		if chatSelectionUsesOrdinaryChats(state, chatID) {
+			return cloneChatSelectionState(state)
+		}
+	case SelectNextMessage, SelectPreviousMessage, PageUp, PageDown:
+		clone := state
+		clone.History = maps.Clone(state.History)
+		if clone.History == nil {
+			clone.History = make(map[domain.ChatID]HistoryState)
+		}
+		return clone
+	}
+	return cloneReducerState(state)
+}
+
+func adjacentChatID(state State, previous bool) (domain.ChatID, bool) {
+	if len(state.Chats) == 0 || state.SelectedChat < 0 || state.SelectedChat >= len(state.Chats) {
+		return 0, false
+	}
+	delta := 1
+	if previous {
+		delta = -1
+	}
+	index := max(0, min(len(state.Chats)-1, state.SelectedChat+delta))
+	return state.Chats[index].ID, true
+}
+
+func chatSelectionUsesOrdinaryChats(state State, destination domain.ChatID) bool {
+	destinationIndex := chatIndex(state.Chats, destination)
+	if destinationIndex < 0 || state.Chats[destinationIndex].IsForum {
+		return false
+	}
+	if state.SelectedChat >= 0 && state.SelectedChat < len(state.Chats) && state.Chats[state.SelectedChat].IsForum {
+		return false
+	}
+	return true
+}
+
+func cloneChatSelectionState(state State) State {
+	clone := state
+	clone.DraftSync = maps.Clone(state.DraftSync)
+	if clone.DraftSync == nil {
+		clone.DraftSync = make(map[domain.ChatID]DraftSyncState)
+	}
+	clone.TopicDraftSync = maps.Clone(state.TopicDraftSync)
+	if clone.TopicDraftSync == nil {
+		clone.TopicDraftSync = make(map[topicKey]DraftSyncState)
+	}
+	clone.History = maps.Clone(state.History)
+	if clone.History == nil {
+		clone.History = make(map[domain.ChatID]HistoryState)
+	}
+	clone.Avatars = maps.Clone(state.Avatars)
+	if clone.Avatars == nil {
+		clone.Avatars = make(map[string]AvatarState)
+	}
+	return clone
+}
+
+// reducerHasRoutedOverlay mirrors reduceAction's dispatch gates. If one is
+// active, even a navigation-looking action belongs to that feature reducer and
+// therefore needs the existing conservative clone until that feature owns its
+// own copy-on-write preparation.
+func reducerHasRoutedOverlay(state State) bool {
+	return state.Prompt != nil ||
+		state.CommandMenu != nil ||
+		state.ChatSearch != nil ||
+		state.ChatActions != nil ||
+		state.Modal != nil ||
+		state.Topics != nil ||
+		state.Members != nil ||
+		state.Administration != nil ||
+		state.ChatSettings != nil ||
+		state.InviteLinks != nil ||
+		state.PinnedMessages != nil ||
+		state.MessageSearch != nil ||
+		state.StickerPicker != nil ||
+		state.PhotoSend != nil ||
+		state.MessageMenu != nil ||
+		state.ReactionPicker != nil ||
+		state.ForwardPicker != nil
+}
+
+func cloneReducerStateForTelegramEvent(state State, event TelegramEvent) State {
+	switch update := event.Value.(type) {
+	case *telegram.Ready:
+		if update == nil {
+			return state
+		}
+		event.Value = *update
+		return cloneReducerStateForTelegramEvent(state, event)
+	case *telegram.Closed:
+		if update == nil {
+			return state
+		}
+		event.Value = *update
+		return cloneReducerStateForTelegramEvent(state, event)
+	case *telegram.ConnectionChanged:
+		if update == nil {
+			return state
+		}
+		event.Value = *update
+		return cloneReducerStateForTelegramEvent(state, event)
+	case *telegram.ChatUpserted:
+		if update == nil {
+			return state
+		}
+		event.Value = *update
+		return cloneReducerStateForTelegramEvent(state, event)
+	case *telegram.DraftChanged:
+		if update == nil {
+			return state
+		}
+		event.Value = *update
+		return cloneReducerStateForTelegramEvent(state, event)
+	case *telegram.MessageUpserted:
+		if update == nil {
+			return state
+		}
+		event.Value = *update
+		return cloneReducerStateForTelegramEvent(state, event)
+	case *telegram.MessageContentUpdated:
+		if update == nil {
+			return state
+		}
+		event.Value = *update
+		return cloneReducerStateForTelegramEvent(state, event)
+	case *telegram.MessageEdited:
+		if update == nil {
+			return state
+		}
+		event.Value = *update
+		return cloneReducerStateForTelegramEvent(state, event)
+	case *telegram.MessageReactionsUpdated:
+		if update == nil {
+			return state
+		}
+		event.Value = *update
+		return cloneReducerStateForTelegramEvent(state, event)
+	case telegram.Ready, telegram.Closed, telegram.ConnectionChanged:
+		// These update paths only change scalar fields (or are no-ops).
+		return state
+	case telegram.ChatUpserted:
+		clone := cloneCloudDraftState(state)
+		clone.Avatars = maps.Clone(state.Avatars)
+		if clone.Avatars == nil {
+			clone.Avatars = make(map[string]AvatarState)
+		}
+		return clone
+	case telegram.DraftChanged:
+		return cloneCloudDraftState(state)
+	case telegram.MessageUpserted:
+		return cloneMessageUpsertState(state)
+	case telegram.MessageContentUpdated:
+		return cloneMessageMutationState(state, update.ChatID)
+	case telegram.MessageEdited:
+		return cloneMessageMutationState(state, update.ChatID)
+	case telegram.MessageReactionsUpdated:
+		return cloneMessageMutationState(state, update.ChatID)
+	default:
+		return cloneReducerState(state)
+	}
+}
+
+func cloneCloudDraftState(state State) State {
+	clone := state
+	clone.Chats = slices.Clone(state.Chats)
+	clone.Drafts = maps.Clone(state.Drafts)
+	if clone.Drafts == nil {
+		clone.Drafts = make(map[domain.ChatID]string)
+	}
+	clone.DraftReplies = maps.Clone(state.DraftReplies)
+	if clone.DraftReplies == nil {
+		clone.DraftReplies = make(map[domain.ChatID]domain.MessageID)
+	}
+	clone.DraftDates = maps.Clone(state.DraftDates)
+	if clone.DraftDates == nil {
+		clone.DraftDates = make(map[domain.ChatID]int64)
+	}
+	clone.DraftSync = maps.Clone(state.DraftSync)
+	if clone.DraftSync == nil {
+		clone.DraftSync = make(map[domain.ChatID]DraftSyncState)
+	}
+	clone.TopicDrafts = maps.Clone(state.TopicDrafts)
+	if clone.TopicDrafts == nil {
+		clone.TopicDrafts = make(map[topicKey]string)
+	}
+	clone.TopicDraftReplies = maps.Clone(state.TopicDraftReplies)
+	if clone.TopicDraftReplies == nil {
+		clone.TopicDraftReplies = make(map[topicKey]domain.MessageID)
+	}
+	clone.TopicDraftDates = maps.Clone(state.TopicDraftDates)
+	if clone.TopicDraftDates == nil {
+		clone.TopicDraftDates = make(map[topicKey]int64)
+	}
+	clone.TopicDraftSync = maps.Clone(state.TopicDraftSync)
+	if clone.TopicDraftSync == nil {
+		clone.TopicDraftSync = make(map[topicKey]DraftSyncState)
+	}
+	return clone
+}
+
+func cloneMessagesLoadedState(state State) State {
+	clone := state
+	clone.Messages = maps.Clone(state.Messages)
+	if clone.Messages == nil {
+		clone.Messages = make(map[domain.ChatID][]domain.Message)
+	}
+	clone.History = maps.Clone(state.History)
+	if clone.History == nil {
+		clone.History = make(map[domain.ChatID]HistoryState)
+	}
+	clone.TopicHistory = maps.Clone(state.TopicHistory)
+	if clone.TopicHistory == nil {
+		clone.TopicHistory = make(map[topicKey]HistoryState)
+	}
+	clone.Avatars = maps.Clone(state.Avatars)
+	if clone.Avatars == nil {
+		clone.Avatars = make(map[string]AvatarState)
+	}
+	return clone
+}
+
+// cloneMessageMutationState copies only the Messages map and the one chat slice
+// whose message structs may be changed. Nested message data stays shared until
+// a reducer replaces it; the optimized update paths replace, rather than edit,
+// reaction/media values.
+func cloneMessageMutationState(state State, chatID domain.ChatID) State {
+	clone := state
+	clone.Messages = maps.Clone(state.Messages)
+	if clone.Messages == nil {
+		clone.Messages = make(map[domain.ChatID][]domain.Message)
+	}
+	clone.Messages[chatID] = slices.Clone(state.Messages[chatID])
+	return clone
+}
+
+// A message upsert rebuilds the affected chat's message slice through
+// mergeMessages, so it only needs ownership of the containing map plus the
+// small branches that the upsert may update while reconciling chat metadata,
+// history and avatar work.
+func cloneMessageUpsertState(state State) State {
+	clone := state
+	clone.Messages = maps.Clone(state.Messages)
+	if clone.Messages == nil {
+		clone.Messages = make(map[domain.ChatID][]domain.Message)
+	}
+	clone.Chats = slices.Clone(state.Chats)
+	clone.History = maps.Clone(state.History)
+	if clone.History == nil {
+		clone.History = make(map[domain.ChatID]HistoryState)
+	}
+	clone.Avatars = maps.Clone(state.Avatars)
+	if clone.Avatars == nil {
+		clone.Avatars = make(map[string]AvatarState)
+	}
+	return clone
 }
 
 func cloneReducerState(state State) State {

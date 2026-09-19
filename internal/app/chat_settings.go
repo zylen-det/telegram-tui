@@ -340,14 +340,20 @@ func reduceChatSettingSaveFailed(state State, e ChatSettingSaveFailed) (State, [
 	return state, nil
 }
 func reduceChatSettingsValueChanged(state State, e ChatSettingsValueChanged) (State, []Command) {
-	s := state.ChatSettings
-	if s == nil || s.Working || state.Focus != FocusChatSettingsInput || s.ChatID != e.ChatID {
+	active := state.ChatSettings
+	if active == nil || active.Working || state.Focus != FocusChatSettingsInput || active.ChatID != e.ChatID {
 		return state, nil
 	}
+	// Copy-on-write: clone the owned ChatSettingsState before replacing either
+	// editor buffer so the caller's State stays untouched.
+	s := *active
 	if e.Field == ChatSettingTitle && s.Mode == ChatSettingsTitleEditor && s.TitleEditorID == e.EditorID {
 		s.TitleInput = []rune(e.Value)
 	} else if e.Field == ChatSettingDescription && s.Mode == ChatSettingsDescriptionEditor && s.DescriptionEditorID == e.EditorID {
 		s.DescriptionInput = []rune(e.Value)
+	} else {
+		return state, nil
 	}
+	state.ChatSettings = &s
 	return state, nil
 }

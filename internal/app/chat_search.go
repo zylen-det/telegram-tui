@@ -17,10 +17,13 @@ func openChatSearch(state State) (State, []Command) {
 }
 
 func reduceChatSearchValueChanged(state State, event ChatSearchValueChanged) (State, []Command) {
-	search := state.ChatSearch
-	if search == nil || state.Focus != FocusChatSearchInput {
+	active := state.ChatSearch
+	if active == nil || state.Focus != FocusChatSearchInput {
 		return state, nil
 	}
+	// Copy-on-write: clone the owned ChatSearchState so the caller's State keeps
+	// its previous query and result sections.
+	search := *active
 	input := make([]rune, 0, len(event.Value))
 	for _, value := range event.Value {
 		if value != '\r' && value != '\n' {
@@ -43,6 +46,7 @@ func reduceChatSearchValueChanged(state State, event ChatSearchValueChanged) (St
 		search.MessagesError = nil
 		search.Selected = 0
 		search.Submitted = false
+		state.ChatSearch = &search
 		return state, nil
 	}
 
@@ -77,6 +81,7 @@ func reduceChatSearchValueChanged(state State, event ChatSearchValueChanged) (St
 	search.GlobalMessages = nil
 	search.Selected = 0
 	search.Submitted = true
+	state.ChatSearch = &search
 	return state, []Command{
 		SearchPublicChatsCommand{RequestID: requestID, Query: search.Query},
 		SearchAllMessagesCommand{RequestID: requestID, Query: search.Query, Limit: 10},
