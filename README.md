@@ -9,6 +9,8 @@ A keyboard-first Telegram client that lives in [Kitty](https://sw.kovidgoyal.net
 
 telegram-tui is an unofficial client and is not affiliated with Telegram.
 
+![telegram-tui showing the chat list and an active group conversation](docs/assets/telegram-tui.png)
+
 ## Highlights
 
 - Sign in with a phone number, verification code, and optional Telegram 2FA without leaving the TUI.
@@ -17,7 +19,7 @@ telegram-tui is an unofficial client and is not affiliated with Telegram.
 - Search chats and messages, jump to unread or mentioned chats, browse pinned messages, and use bot-command completion.
 - Reply, edit, delete, forward, pin, copy, and react to messages when Telegram permits the action.
 - Keep Telegram cloud drafts—including reply targets—synchronized across devices.
-- Send photos, videos, audio, documents, and stickers. Images and available thumbnails render inline; other media opens in the system application.
+- Send photos, videos, audio, documents, and stickers. Preview images and available thumbnails inline as terminal pixel cells, or view images at full fidelity through Kitty's graphics protocol; other media opens in the system application.
 - Browse members and use supported group/channel administration controls.
 - Continue reading cached content offline and reconnect without losing the active view.
 - Use a transparent terminal canvas that follows Kitty's configured background opacity.
