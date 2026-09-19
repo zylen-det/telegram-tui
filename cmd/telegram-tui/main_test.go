@@ -43,12 +43,38 @@ func TestRunVersionDoesNotInitializeRuntime(t *testing.T) {
 	called := false
 	startApplication = func(context.Context, appOptions) error { called = true; return nil }
 	t.Cleanup(func() { startApplication = original })
-	var stdout, stderr bytes.Buffer
-	if code := run(context.Background(), []string{"--version"}, strings.NewReader(""), &stdout, &stderr); code != 0 {
-		t.Fatalf("run() code = %d, stderr = %q", code, stderr.String())
+
+	for _, argument := range []string{"-v", "--version"} {
+		t.Run(argument, func(t *testing.T) {
+			called = false
+			var stdout, stderr bytes.Buffer
+			if code := run(context.Background(), []string{argument}, strings.NewReader(""), &stdout, &stderr); code != 0 {
+				t.Fatalf("run() code = %d, stderr = %q", code, stderr.String())
+			}
+			if called || strings.TrimSpace(stdout.String()) == "" || stderr.Len() != 0 {
+				t.Fatalf("version output/runtime = %q/%v stderr=%q", stdout.String(), called, stderr.String())
+			}
+		})
 	}
-	if called || strings.TrimSpace(stdout.String()) == "" || stderr.Len() != 0 {
-		t.Fatalf("version output/runtime = %q/%v stderr=%q", stdout.String(), called, stderr.String())
+}
+
+func TestRunHelpDoesNotInitializeRuntime(t *testing.T) {
+	original := startApplication
+	called := false
+	startApplication = func(context.Context, appOptions) error { called = true; return nil }
+	t.Cleanup(func() { startApplication = original })
+
+	for _, argument := range []string{"-h", "--help"} {
+		t.Run(argument, func(t *testing.T) {
+			called = false
+			var stdout, stderr bytes.Buffer
+			if code := run(context.Background(), []string{argument}, strings.NewReader(""), &stdout, &stderr); code != 0 {
+				t.Fatalf("run() code = %d, stderr = %q", code, stderr.String())
+			}
+			if called || stdout.String() != helpText+"\n" || stderr.Len() != 0 {
+				t.Fatalf("help output/runtime = %q/%v stderr=%q", stdout.String(), called, stderr.String())
+			}
+		})
 	}
 }
 
@@ -57,7 +83,7 @@ func TestRunRejectsUnknownArgumentSafely(t *testing.T) {
 	if code := run(context.Background(), []string{"--api-hash=secret"}, strings.NewReader(""), &stdout, &stderr); code != 1 {
 		t.Fatalf("run() code = %d", code)
 	}
-	if strings.Contains(stderr.String(), "secret") || !strings.Contains(stderr.String(), "only --version") {
+	if strings.Contains(stderr.String(), "secret") || !strings.Contains(stderr.String(), "supports only -h") {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
 }

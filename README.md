@@ -98,6 +98,15 @@ Check a binary without opening the terminal UI:
 ./bin/telegram-tui --version
 ```
 
+## Command-line options
+
+Run `telegram-tui` without arguments to start the client. Credentials are accepted only through the TUI, environment, or local config.
+
+| Option | Action |
+|---|---|
+| `-h`, `--help` | Show command-line help and exit |
+| `-v`, `--version` | Show the version and exit |
+
 ## Credentials and first run
 
 Credential priority is fixed:

@@ -43,13 +43,25 @@ type appOptions struct {
 
 var startApplication = productionApplication
 
+const helpText = `Usage: telegram-tui [options]
+
+Options:
+  -h, --help       Show help
+  -v, --version    Show version`
+
 func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	if len(args) == 1 && args[0] == "--version" {
-		_, _ = fmt.Fprintln(stdout, buildinfo.Current().Version)
-		return 0
+	if len(args) == 1 {
+		switch args[0] {
+		case "-h", "--help":
+			_, _ = fmt.Fprintln(stdout, helpText)
+			return 0
+		case "-v", "--version":
+			_, _ = fmt.Fprintln(stdout, buildinfo.Current().Version)
+			return 0
+		}
 	}
 	if len(args) != 0 {
-		_, _ = fmt.Fprintln(stderr, "telegram-tui accepts only --version; credentials belong in the TUI, environment, or local config")
+		_, _ = fmt.Fprintln(stderr, "telegram-tui supports only -h, --help, -v, and --version; credentials belong in the TUI, environment, or local config")
 		return 1
 	}
 	if err := startApplication(ctx, appOptions{stdin: stdin, stdout: stdout, stderr: stderr}); err != nil {
