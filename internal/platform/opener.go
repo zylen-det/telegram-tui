@@ -6,13 +6,46 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"strings"
 )
 
 var (
 	ErrExternalOpenerUnavailable = errors.New("external opener unavailable")
 	ErrExternalOpenFailed        = errors.New("external open failed")
 )
+
+// externalOpenerEnvironmentKeys is the minimum process environment needed by
+// xdg-open and the desktop launchers it delegates to. In particular, keep this
+// as an allow-list so Telegram credentials and unrelated application secrets
+// are never inherited by an external media viewer.
+var externalOpenerEnvironmentKeys = []string{
+	"PATH",
+	"HOME",
+	"USER",
+	"LOGNAME",
+	"LANG",
+	"LANGUAGE",
+	"LC_ALL",
+	"LC_CTYPE",
+	"LC_MESSAGES",
+	"DISPLAY",
+	"WAYLAND_DISPLAY",
+	"XAUTHORITY",
+	"XDG_RUNTIME_DIR",
+	"DBUS_SESSION_BUS_ADDRESS",
+	"XDG_CURRENT_DESKTOP",
+	"XDG_SESSION_DESKTOP",
+	"XDG_SESSION_TYPE",
+	"DESKTOP_SESSION",
+	"DE",
+	"DESKTOP",
+	"KDE_FULL_SESSION",
+	"GNOME_DESKTOP_SESSION_ID",
+	"XDG_CONFIG_HOME",
+	"XDG_CONFIG_DIRS",
+	"XDG_DATA_HOME",
+	"XDG_DATA_DIRS",
+	"BROWSER",
+}
 
 // OpenFile opens a local file with the system-default external application.
 func OpenFile(ctx context.Context, localPath string) error {
@@ -32,17 +65,19 @@ func OpenFile(ctx context.Context, localPath string) error {
 	if _, err := exec.LookPath(cmd.Path); err != nil {
 		return ErrExternalOpenerUnavailable
 	}
-	// Filter environment: pass desktop session vars but exclude private prefixes.
-	filteredEnv := make([]string, 0, len(os.Environ()))
-	for _, env := range os.Environ() {
-		if strings.HasPrefix(env, "VIDEO_OPEN_") {
-			continue
-		}
-		filteredEnv = append(filteredEnv, env)
-	}
-	cmd.Env = filteredEnv
+	cmd.Env = externalOpenerEnvironment()
 	if err := cmd.Run(); err != nil {
 		return ErrExternalOpenFailed
 	}
 	return nil
+}
+
+func externalOpenerEnvironment() []string {
+	environment := make([]string, 0, len(externalOpenerEnvironmentKeys))
+	for _, key := range externalOpenerEnvironmentKeys {
+		if value, ok := os.LookupEnv(key); ok {
+			environment = append(environment, key+"="+value)
+		}
+	}
+	return environment
 }

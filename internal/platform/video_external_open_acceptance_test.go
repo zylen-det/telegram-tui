@@ -17,6 +17,11 @@ func TestVideoExternalOpenAcceptance_SystemDefaultOpenerBoundary(t *testing.T) {
 	writeAcceptanceOpener(t, dir, "printf '%s' \"$1\" > "+strconv.Quote(marker)+"\n/usr/bin/env > "+strconv.Quote(environment)+"\nexit 0\n")
 	t.Setenv("PATH", dir)
 	t.Setenv("WAYLAND_DISPLAY", "wayland-test")
+	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/run/user/test/bus")
+	t.Setenv("XDG_CURRENT_DESKTOP", "test-desktop")
+	t.Setenv("TELEGRAM_API_ID", "123456")
+	t.Setenv("TELEGRAM_API_HASH", "private-api-hash")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "private-cloud-secret")
 	t.Setenv("VIDEO_OPEN_PRIVATE_SENTINEL", "must-not-reach-opener")
 
 	localPath := "/tmp/private received clip.mp4"
@@ -32,11 +37,27 @@ func TestVideoExternalOpenAcceptance_SystemDefaultOpenerBoundary(t *testing.T) {
 		t.Fatalf("read opener environment: %v", err)
 	}
 	envText := string(envBytes)
-	if !strings.Contains(envText, "WAYLAND_DISPLAY=wayland-test") {
-		t.Fatal("desktop session environment did not reach the system opener")
+	for _, allowed := range []string{
+		"WAYLAND_DISPLAY=wayland-test",
+		"DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/test/bus",
+		"XDG_CURRENT_DESKTOP=test-desktop",
+	} {
+		if !strings.Contains(envText, allowed) {
+			t.Fatalf("desktop session environment %q did not reach the system opener", allowed)
+		}
 	}
-	if strings.Contains(envText, "VIDEO_OPEN_PRIVATE_SENTINEL") || strings.Contains(envText, "must-not-reach-opener") {
-		t.Fatal("arbitrary private environment reached the system opener")
+	for _, private := range []string{
+		"TELEGRAM_API_ID",
+		"TELEGRAM_API_HASH",
+		"private-api-hash",
+		"AWS_SECRET_ACCESS_KEY",
+		"private-cloud-secret",
+		"VIDEO_OPEN_PRIVATE_SENTINEL",
+		"must-not-reach-opener",
+	} {
+		if strings.Contains(envText, private) {
+			t.Fatalf("private environment value %q reached the system opener", private)
+		}
 	}
 }
 
