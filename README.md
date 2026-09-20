@@ -3,7 +3,7 @@
 [![CI](https://github.com/zylen-det/telegram-tui/actions/workflows/ci.yml/badge.svg)](https://github.com/zylen-det/telegram-tui/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A keyboard-first Telegram client that lives in [Kitty](https://sw.kovidgoyal.net/kitty/). It is built with [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) and [TDLib](https://github.com/tdlib/td), combining a responsive terminal UI, inline images, mouse support, desktop notifications, and a persistent Telegram session.
+A Telegram client that lives in [Kitty](https://sw.kovidgoyal.net/kitty/). It is built with [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) and [TDLib](https://github.com/tdlib/td), combining a responsive terminal UI, inline images, mouse support, desktop notifications, and a persistent Telegram session.
 
 > **Project status:** telegram-tui is an early release for Arch Linux x86-64 and Kitty. It supports one Telegram account. Calls, stories, and multi-account use are not implemented yet.
 
