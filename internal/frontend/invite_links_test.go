@@ -5,23 +5,21 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
 	"github.com/zylen-det/telegram-tui/internal/telegram"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 func TestInviteLinksKeyboardAndInfoCapability(t *testing.T) {
-	if got, ok := mapKeyPress(app.FocusDetails, tea.KeyPressMsg(tea.Key{Code: 'l', Text: "l"})); !ok || got.Action != app.OpenInviteLinks {
+	if got, ok := mapKeyPress(FocusDetails, tea.KeyPressMsg(tea.Key{Code: 'l', Text: "l"})); !ok || got.Action != OpenInviteLinks {
 		t.Fatalf("details l = (%#v,%t)", got, ok)
 	}
-	for key, want := range map[tea.Key]app.Action{
-		{Code: tea.KeyDown}:   app.SelectNext,
-		{Code: tea.KeyUp}:     app.SelectPrevious,
-		{Code: tea.KeyEnter}:  app.Activate,
-		{Code: tea.KeyEscape}: app.Close,
+	for key, want := range map[tea.Key]Action{
+		{Code: tea.KeyDown}:   SelectNext,
+		{Code: tea.KeyUp}:     SelectPrevious,
+		{Code: tea.KeyEnter}:  Activate,
+		{Code: tea.KeyEscape}: Close,
 	} {
-		if got, ok := mapKeyPress(app.FocusInviteLinks, tea.KeyPressMsg(key)); !ok || got.Action != want {
+		if got, ok := mapKeyPress(FocusInviteLinks, tea.KeyPressMsg(key)); !ok || got.Action != want {
 			t.Fatalf("links key %#v = (%#v,%t), want %v", key, got, ok, want)
 		}
 	}
@@ -36,7 +34,7 @@ func TestInviteLinksKeyboardAndInfoCapability(t *testing.T) {
 	found := false
 	for _, hit := range buildDetailsLayer(model, newRenderStyles(false)).Interactions {
 		if hit.ID == "details:invite-links" {
-			found = hit.Click.Action == app.OpenInviteLinks
+			found = hit.Click.Action == OpenInviteLinks
 		}
 	}
 	if !found {
@@ -45,9 +43,9 @@ func TestInviteLinksKeyboardAndInfoCapability(t *testing.T) {
 }
 
 func TestInviteLinksModalShowsSelectedActionsAndConfirmation(t *testing.T) {
-	model := ui.ViewModel{
-		Width: 100, Height: 30, Layout: ui.Layout{Mode: app.LayoutWide}, Focus: app.FocusInviteLinks,
-		InviteLinks: &app.InviteLinksState{ChatID: 9, Primary: &telegram.InviteLink{URL: "https://t.me/+primary"}, Links: []telegram.InviteLink{{URL: "https://t.me/+one", Name: "Friends\x1b"}}, Selected: 2},
+	model := ViewModel{
+		Width: 100, Height: 30, Layout: ViewLayout{Mode: LayoutWide}, Focus: FocusInviteLinks,
+		InviteLinks: &InviteLinksState{ChatID: 9, Primary: &telegram.InviteLink{URL: "https://t.me/+primary"}, Links: []telegram.InviteLink{{URL: "https://t.me/+one", Name: "Friends\x1b"}}, Selected: 2},
 	}
 	layer := buildInviteLinksLayer(model, newRenderStyles(true))
 	if layer.Layer == nil || !layer.IsModal {
@@ -60,7 +58,7 @@ func TestInviteLinksModalShowsSelectedActionsAndConfirmation(t *testing.T) {
 	}
 	open := false
 	for _, hit := range layer.Interactions {
-		if hit.Click.Action == app.OpenInviteLinkDetail && hit.Click.InviteURL == "https://t.me/+one" {
+		if hit.Click.Action == OpenInviteLinkDetail && hit.Click.InviteURL == "https://t.me/+one" {
 			open = true
 		}
 	}
@@ -76,7 +74,7 @@ func TestInviteLinksModalShowsSelectedActionsAndConfirmation(t *testing.T) {
 	}
 	confirm := false
 	for _, hit := range layer.Interactions {
-		if hit.Click.Action == app.ConfirmRevokeInviteLink && hit.Click.InviteURL == "https://t.me/+primary" {
+		if hit.Click.Action == ConfirmRevokeInviteLink && hit.Click.InviteURL == "https://t.me/+primary" {
 			confirm = true
 		}
 	}

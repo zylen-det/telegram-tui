@@ -5,15 +5,13 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 func chatSettingsFrame(bounds image.Rectangle) image.Rectangle {
 	return centeredSurfaceRectangle(bounds, min(72, bounds.Dx()), min(16, bounds.Dy())).Intersect(bounds)
 }
 
-func buildChatSettingsLayer(model ui.ViewModel, styles renderStyles, inputView string) surfaceResult {
+func buildChatSettingsLayer(model ViewModel, styles renderStyles, inputView string) surfaceResult {
 	settings := model.ChatSettings
 	if settings == nil {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
@@ -35,12 +33,12 @@ func buildChatSettingsLayer(model ui.ViewModel, styles renderStyles, inputView s
 		root.AddLayers(lipgloss.NewLayer(styles.Title.Render(ansi.Truncate(title, max(1, frame.Dx()-5), ""))).X(2).Y(0).Z(zModalContent))
 	}
 	closeLocal := image.Rect(frame.Dx()-2, 0, frame.Dx()-1, 1)
-	interactions = append(interactions, addInteractive(root, frame.Min, closeLocal, "chat-settings:close", zModalControl, renderLine(styles.Accent, "×", 1), app.ActionReceived{Action: app.Close}, app.ActionReceived{}, app.ActionReceived{}))
+	interactions = append(interactions, addInteractive(root, frame.Min, closeLocal, "chat-settings:close", zModalControl, renderLine(styles.Accent, "×", 1), ActionReceived{Action: Close}, ActionReceived{}, ActionReceived{}))
 
-	rows := app.ChatSettingsMenuItems(settings)
-	if settings.Mode == app.ChatSettingsTitleEditor || settings.Mode == app.ChatSettingsDescriptionEditor {
+	rows := ChatSettingsMenuItems(settings)
+	if settings.Mode == ChatSettingsTitleEditor || settings.Mode == ChatSettingsDescriptionEditor {
 		label := "Title"
-		if settings.Mode == app.ChatSettingsDescriptionEditor {
+		if settings.Mode == ChatSettingsDescriptionEditor {
 			label = "Description"
 		}
 		addSettingsHeader(root, frame, 2, label, styles)
@@ -48,7 +46,7 @@ func buildChatSettingsLayer(model ui.ViewModel, styles renderStyles, inputView s
 		view := inputView
 		if view == "" {
 			value := settings.TitleInput
-			if settings.Mode == app.ChatSettingsDescriptionEditor {
+			if settings.Mode == ChatSettingsDescriptionEditor {
 				value = settings.DescriptionInput
 			}
 			view = sanitizeDisplayString(string(value))
@@ -57,7 +55,7 @@ func buildChatSettingsLayer(model ui.ViewModel, styles renderStyles, inputView s
 		root.AddLayers(lipgloss.NewLayer(renderLine(styles.Panel, view, inputRect.Dx())).X(inputRect.Min.X - frame.Min.X).Y(inputRect.Min.Y - frame.Min.Y).Z(zModalContent))
 	}
 	startY := 3
-	if settings.Mode == app.ChatSettingsTitleEditor || settings.Mode == app.ChatSettingsDescriptionEditor {
+	if settings.Mode == ChatSettingsTitleEditor || settings.Mode == ChatSettingsDescriptionEditor {
 		startY = 5
 	}
 	for index, item := range rows {
@@ -75,7 +73,7 @@ func buildChatSettingsLayer(model ui.ViewModel, styles renderStyles, inputView s
 		if selected {
 			style = styles.Selected
 		}
-		interactions = append(interactions, addInteractive(root, frame.Min, row.Sub(frame.Min), "chat-settings:row:"+itoa(index), zModalRow, renderEmptyBox(style, row.Dx(), 1), item.Action, app.ActionReceived{}, app.ActionReceived{}))
+		interactions = append(interactions, addInteractive(root, frame.Min, row.Sub(frame.Min), "chat-settings:row:"+itoa(index), zModalRow, renderEmptyBox(style, row.Dx(), 1), item.Action, ActionReceived{}, ActionReceived{}))
 		root.AddLayers(lipgloss.NewLayer(style.Render(ansi.Truncate(item.Label, max(1, row.Dx()-2), ""))).X(row.Min.X - frame.Min.X + 1).Y(row.Min.Y - frame.Min.Y).Z(zModalContent))
 	}
 	if settings.Loading {
@@ -96,13 +94,13 @@ func addSettingsHeader(root *lipgloss.Layer, frame image.Rectangle, y int, label
 	root.AddLayers(lipgloss.NewLayer(styles.Muted.Render(ansi.Truncate(sanitizeDisplayString(label), width, ""))).X(2).Y(y).Z(zModalContent))
 }
 
-func chatSettingsTitle(settings *app.ChatSettingsState) string {
+func chatSettingsTitle(settings *ChatSettingsState) string {
 	switch settings.Mode {
-	case app.ChatSettingsTitleEditor:
+	case ChatSettingsTitleEditor:
 		return "Edit title"
-	case app.ChatSettingsDescriptionEditor:
+	case ChatSettingsDescriptionEditor:
 		return "Edit description"
-	case app.ChatSettingsSlowModeMenu:
+	case ChatSettingsSlowModeMenu:
 		return "Slow mode"
 	default:
 		return "Chat settings"

@@ -12,11 +12,9 @@ import (
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/auth"
 	"github.com/zylen-det/telegram-tui/internal/domain"
 	"github.com/zylen-det/telegram-tui/internal/media/thumbnail"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // modalStackOverlayCase binds one registered overlay ID to the ViewModel
@@ -25,67 +23,67 @@ import (
 type modalStackOverlayCase struct {
 	id              string
 	suppressesToast bool
-	activate        func(*ui.ViewModel)
+	activate        func(*ViewModel)
 }
 
 func modalStackOverlayCases() []modalStackOverlayCase {
 	return []modalStackOverlayCase{
-		{id: "media", suppressesToast: true, activate: func(m *ui.ViewModel) {
-			m.Modal = &app.ModalState{Title: "Photo", Path: "/tmp/photo.jpg"}
+		{id: "media", suppressesToast: true, activate: func(m *ViewModel) {
+			m.Modal = &ModalState{Title: "Photo", Path: "/tmp/photo.jpg"}
 		}},
-		{id: "message-menu", suppressesToast: true, activate: func(m *ui.ViewModel) {
-			m.MessageMenu = &app.MessageActionMenu{ChatID: 2, MessageID: 7, Capabilities: domain.MessageCapabilities{Copy: true}}
+		{id: "message-menu", suppressesToast: true, activate: func(m *ViewModel) {
+			m.MessageMenu = &MessageActionMenu{ChatID: 2, MessageID: 7, Capabilities: domain.MessageCapabilities{Copy: true}}
 		}},
 		// The reaction picker is the historical dim-but-visible toast case: it
 		// dims the base and rebuilds the toast faint instead of hiding it.
-		{id: "reaction-picker", suppressesToast: false, activate: func(m *ui.ViewModel) {
-			m.ReactionPicker = &app.ReactionPicker{ChatID: 2, MessageID: 7, Selected: 1}
+		{id: "reaction-picker", suppressesToast: false, activate: func(m *ViewModel) {
+			m.ReactionPicker = &ReactionPicker{ChatID: 2, MessageID: 7, Selected: 1}
 		}},
-		{id: "forward-picker", suppressesToast: true, activate: func(m *ui.ViewModel) {
-			m.ForwardPicker = &app.ForwardPicker{SourceChatID: 2, SourceMessageID: 7}
+		{id: "forward-picker", suppressesToast: true, activate: func(m *ViewModel) {
+			m.ForwardPicker = &ForwardPicker{SourceChatID: 2, SourceMessageID: 7}
 		}},
-		{id: "sticker-picker", suppressesToast: true, activate: func(m *ui.ViewModel) {
-			m.StickerPicker = &app.StickerPickerState{RequestID: 8, ChatID: 2, Columns: 5, VisibleRows: 2}
+		{id: "sticker-picker", suppressesToast: true, activate: func(m *ViewModel) {
+			m.StickerPicker = &StickerPickerState{RequestID: 8, ChatID: 2, Columns: 5, VisibleRows: 2}
 		}},
-		{id: "photo-send", suppressesToast: true, activate: func(m *ui.ViewModel) {
-			m.PhotoSend = &app.PhotoSendState{ChatID: 2, Input: []rune("/tmp/photo.jpg")}
+		{id: "photo-send", suppressesToast: true, activate: func(m *ViewModel) {
+			m.PhotoSend = &PhotoSendState{ChatID: 2, Input: []rune("/tmp/photo.jpg")}
 		}},
-		{id: "message-search", suppressesToast: false, activate: func(m *ui.ViewModel) {
-			m.MessageSearch = &app.MessageSearchState{ChatID: 2, Input: []rune("search"), Query: "search"}
+		{id: "message-search", suppressesToast: false, activate: func(m *ViewModel) {
+			m.MessageSearch = &MessageSearchState{ChatID: 2, Input: []rune("search"), Query: "search"}
 		}},
-		{id: "chat-search", suppressesToast: true, activate: func(m *ui.ViewModel) {
-			m.ChatSearch = &app.ChatSearchState{Input: []rune("week"), Query: "week"}
+		{id: "chat-search", suppressesToast: true, activate: func(m *ViewModel) {
+			m.ChatSearch = &ChatSearchState{Input: []rune("week"), Query: "week"}
 		}},
-		{id: "chat-actions", suppressesToast: true, activate: func(m *ui.ViewModel) {
-			m.ChatActions = &app.ChatActionMenuState{ChatID: 2}
+		{id: "chat-actions", suppressesToast: true, activate: func(m *ViewModel) {
+			m.ChatActions = &ChatActionMenuState{ChatID: 2}
 		}},
-		{id: "pinned-messages", suppressesToast: true, activate: func(m *ui.ViewModel) {
-			m.PinnedMessages = &app.PinnedMessagesState{ChatID: 2, Loading: true}
+		{id: "pinned-messages", suppressesToast: true, activate: func(m *ViewModel) {
+			m.PinnedMessages = &PinnedMessagesState{ChatID: 2, Loading: true}
 		}},
-		{id: "topics", suppressesToast: false, activate: func(m *ui.ViewModel) {
-			m.Topics = &app.TopicListState{ChatID: 2, Results: []domain.ForumTopic{{ID: 1, ChatID: 2, Name: "General"}}}
+		{id: "topics", suppressesToast: false, activate: func(m *ViewModel) {
+			m.Topics = &TopicListState{ChatID: 2, Results: []domain.ForumTopic{{ID: 1, ChatID: 2, Name: "General"}}}
 		}},
-		{id: "members", suppressesToast: true, activate: func(m *ui.ViewModel) {
-			m.Members = &app.MembersState{ChatID: 2, Loading: true}
+		{id: "members", suppressesToast: true, activate: func(m *ViewModel) {
+			m.Members = &MembersState{ChatID: 2, Loading: true}
 		}},
-		{id: "invite-links", suppressesToast: true, activate: func(m *ui.ViewModel) {
-			m.InviteLinks = &app.InviteLinksState{ChatID: 2, Loading: true}
+		{id: "invite-links", suppressesToast: true, activate: func(m *ViewModel) {
+			m.InviteLinks = &InviteLinksState{ChatID: 2, Loading: true}
 		}},
-		{id: "administration", suppressesToast: true, activate: func(m *ui.ViewModel) {
-			m.Administration = &app.AdministrationState{ChatID: 2, Loading: true}
+		{id: "administration", suppressesToast: true, activate: func(m *ViewModel) {
+			m.Administration = &AdministrationState{ChatID: 2, Loading: true}
 		}},
-		{id: "chat-settings", suppressesToast: true, activate: func(m *ui.ViewModel) {
-			m.ChatSettings = &app.ChatSettingsState{ChatID: 2, Mode: app.ChatSettingsTitleEditor, TitleInput: []rune("Title")}
+		{id: "chat-settings", suppressesToast: true, activate: func(m *ViewModel) {
+			m.ChatSettings = &ChatSettingsState{ChatID: 2, Mode: ChatSettingsTitleEditor, TitleInput: []rune("Title")}
 		}},
-		{id: "authorization", suppressesToast: false, activate: func(m *ui.ViewModel) {
-			m.Prompt = &app.PromptState{Prompt: auth.Prompt{Label: "Telegram API ID"}, Input: []rune("123")}
+		{id: "authorization", suppressesToast: false, activate: func(m *ViewModel) {
+			m.Prompt = &PromptState{Prompt: auth.Prompt{Label: "Telegram API ID"}, Input: []rune("123")}
 		}},
 	}
 }
 
 // modalStackTestContext builds the per-frame overlay context a composition
 // needs: a real root layer plus the undimmed overlay styles.
-func modalStackTestContext(model ui.ViewModel) modalContext {
+func modalStackTestContext(model ViewModel) modalContext {
 	if model.Width <= 0 || model.Height <= 0 {
 		model.Width, model.Height = 100, 24
 	}
@@ -251,7 +249,7 @@ func TestModalStackComposeReplacesInteractionsAndCursor(t *testing.T) {
 		ID:    "chat:2",
 		Rect:  image.Rect(0, 0, 30, 20),
 		Z:     zRowBackground,
-		Click: app.ActionReceived{Action: app.SelectChat, ChatID: 2},
+		Click: ActionReceived{Action: SelectChat, ChatID: 2},
 	}
 	sentinel := renderCursor{X: 42, Y: 21, Visible: true}
 
@@ -305,7 +303,7 @@ func TestModalStackComposeReplacesInteractionsAndCursor(t *testing.T) {
 				// The media overlay owns the whole plane: every remaining hit is
 				// its own dismiss, never a base chat selection.
 				for _, hit := range frame.Hits {
-					if hit.Click.Action != app.Close {
+					if hit.Click.Action != Close {
 						t.Errorf("media frame kept a non-overlay hit: %+v", hit)
 					}
 				}
@@ -318,7 +316,7 @@ func TestModalStackComposeReplacesInteractionsAndCursor(t *testing.T) {
 // open alone, and disappears under the media transport overlay.
 func TestModalStackMembersHiddenUnderMedia(t *testing.T) {
 	stack := defaultModalStack()
-	members := &app.MembersState{
+	members := &MembersState{
 		ChatID: 2,
 		Results: []domain.ChatMember{
 			{User: domain.User{ID: 1, Name: "Ada"}, Role: domain.ChatMemberRoleOwner},
@@ -344,7 +342,7 @@ func TestModalStackMembersHiddenUnderMedia(t *testing.T) {
 	}
 
 	underMedia := solo
-	underMedia.Modal = &app.ModalState{Title: "Photo", Path: "/tmp/photo.jpg"}
+	underMedia.Modal = &ModalState{Title: "Photo", Path: "/tmp/photo.jpg"}
 	ctx := modalStackTestContext(underMedia)
 	if got := activeIDs(stack.activeSpecs(ctx)); len(got) != 1 || got[0] != "media" {
 		t.Fatalf("members + media active specs = %v, want [media]", got)
@@ -373,10 +371,10 @@ func TestModalStackMembersHiddenUnderMedia(t *testing.T) {
 	}
 }
 
-func countMemberHits(hits []ui.Hit) int {
+func countMemberHits(hits []Hit) int {
 	count := 0
 	for _, hit := range hits {
-		if hit.Click.Action == app.OpenMemberDetail || hit.Click.Action == app.SelectMember {
+		if hit.Click.Action == OpenMemberDetail || hit.Click.Action == SelectMember {
 			count++
 		}
 	}
@@ -389,10 +387,10 @@ func countMemberHits(hits []ui.Hit) int {
 func TestModalStackAuthorizationTopmostAndNotInteractive(t *testing.T) {
 	stack := defaultModalStack()
 	model := frameBaseModel(100, 24)
-	model.Modal = &app.ModalState{Title: "Photo", Path: "/tmp/photo.jpg"}
-	model.Members = &app.MembersState{ChatID: 2, Loading: true}
-	model.ChatSettings = &app.ChatSettingsState{ChatID: 2, Mode: app.ChatSettingsTitleEditor, TitleInput: []rune("Title")}
-	model.Prompt = &app.PromptState{Prompt: auth.Prompt{Label: "Telegram API ID"}, Input: []rune("123")}
+	model.Modal = &ModalState{Title: "Photo", Path: "/tmp/photo.jpg"}
+	model.Members = &MembersState{ChatID: 2, Loading: true}
+	model.ChatSettings = &ChatSettingsState{ChatID: 2, Mode: ChatSettingsTitleEditor, TitleInput: []rune("Title")}
+	model.Prompt = &PromptState{Prompt: auth.Prompt{Label: "Telegram API ID"}, Input: []rune("123")}
 	ctx := modalStackTestContext(model)
 
 	active := activeIDs(stack.activeSpecs(ctx))
@@ -400,7 +398,7 @@ func TestModalStackAuthorizationTopmostAndNotInteractive(t *testing.T) {
 		t.Fatalf("active specs = %v, want authorization last", active)
 	}
 	result := stack.compose(ctx, modalBase{
-		interactions: []layerInteraction{{ID: "chat:2", Rect: image.Rect(0, 0, 30, 20), Z: zRowBackground, Click: app.ActionReceived{Action: app.SelectChat, ChatID: 2}}},
+		interactions: []layerInteraction{{ID: "chat:2", Rect: image.Rect(0, 0, 30, 20), Z: zRowBackground, Click: ActionReceived{Action: SelectChat, ChatID: 2}}},
 		cursor:       renderCursor{X: 42, Y: 21, Visible: true},
 	})
 	if result.rendered[len(result.rendered)-1] != "authorization" {
@@ -421,7 +419,7 @@ func TestModalStackAuthorizationTopmostAndNotInteractive(t *testing.T) {
 	plain := model
 	plain.Prompt = nil
 	withOverlay := stack.compose(modalStackTestContext(plain), modalBase{
-		interactions: []layerInteraction{{ID: "chat:2", Rect: image.Rect(0, 0, 30, 20), Z: zRowBackground, Click: app.ActionReceived{Action: app.SelectChat, ChatID: 2}}},
+		interactions: []layerInteraction{{ID: "chat:2", Rect: image.Rect(0, 0, 30, 20), Z: zRowBackground, Click: ActionReceived{Action: SelectChat, ChatID: 2}}},
 	})
 	if len(withOverlay.interactions) == 0 {
 		t.Fatal("chat-settings overlay owned no interactions without the prompt")
@@ -462,7 +460,7 @@ func findInteraction(interactions []layerInteraction, id string) (layerInteracti
 func TestModalStackCapturesMediaTransportOverlay(t *testing.T) {
 	stack := defaultModalStack()
 	ready := frameBaseModel(100, 24)
-	ready.Modal = &app.ModalState{Title: "Photo", Path: "/tmp/photo.jpg"}
+	ready.Modal = &ModalState{Title: "Photo", Path: "/tmp/photo.jpg"}
 	ctx := modalStackTestContext(ready)
 	media, request := buildMediaModalLayer(ctx.model, ctx.styles)
 	result := stack.compose(ctx, modalBase{})
@@ -483,7 +481,7 @@ func TestModalStackCapturesMediaTransportOverlay(t *testing.T) {
 	// capture still comes from the media overlay, whose own build reports it is
 	// not ready to transport while the prompt is open.
 	guarded := ready
-	guarded.Prompt = &app.PromptState{Prompt: auth.Prompt{Label: "Telegram API ID"}, Input: []rune("123")}
+	guarded.Prompt = &PromptState{Prompt: auth.Prompt{Label: "Telegram API ID"}, Input: []rune("123")}
 	guardedCtx := modalStackTestContext(guarded)
 	guardedMedia, guardedRequest := buildMediaModalLayer(guardedCtx.model, guardedCtx.styles)
 	guardedResult := stack.compose(guardedCtx, modalBase{})
@@ -504,23 +502,23 @@ func TestModalStackCapturesMediaTransportOverlay(t *testing.T) {
 // The sticker picker replaces the conversation inline plane and clips its own
 // placements to the viewport.
 func TestModalStackStickerOwnsInlinePlaneAndClipsToViewport(t *testing.T) {
-	state := app.InitialState()
+	state := InitialState()
 	state.Width, state.Height = 100, 30
 	state.Connection = domain.ConnectionOnline
-	state.Focus = app.FocusStickerPicker
+	state.Focus = FocusStickerPicker
 	state.Chats = []domain.Chat{{ID: 9, CanSend: true}}
 	state.SelectedChat = 0
 	state.Messages[9] = []domain.Message{{ID: 77, ChatID: 9, Kind: domain.MessageSticker, Media: domain.MessageMedia{Thumbnail: domain.MediaFileRef{ID: 700}}}}
 	state.Thumbnails[9] = map[domain.MessageID]thumbnail.Block{77: {Text: "\x1b_Ga=T,f=900,i=700,c=10,r=4,q=2,s=64,v=32;conversation-kitty\x1b\\", Width: 10, Height: 4, Kitty: true, ImageID: 700}}
-	state.StickerPicker = &app.StickerPickerState{RequestID: 8, ChatID: 9, Catalog: []domain.StickerRef{{File: domain.MediaFileRef{ID: 101}}}, Columns: 5, VisibleRows: 2}
+	state.StickerPicker = &StickerPickerState{RequestID: 8, ChatID: 9, Catalog: []domain.StickerRef{{File: domain.MediaFileRef{ID: 101}}}, Columns: 5, VisibleRows: 2}
 	state.StickerThumbnails[101] = thumbnail.Block{Text: "\x1b_Ga=T,f=900,i=801,c=10,r=4,q=2,s=64,v=32;picker-kitty\x1b\\", Width: 10, Height: 4, Kitty: true, ImageID: 801}
-	model := ui.Select(state, nil)
+	model := Select(state, nil)
 
 	// Conversation inline plane while the picker is closed.
 	closedState := state
 	closedState.StickerPicker = nil
-	closedState.Focus = app.FocusConversation
-	conversationInline := composeApplication(ui.Select(closedState, nil), nil).Inline
+	closedState.Focus = FocusConversation
+	conversationInline := composeApplication(Select(closedState, nil), nil).Inline
 	if len(conversationInline) != 1 || conversationInline[0].ImageID == 801 {
 		t.Fatalf("conversation inline plane = %+v, want the message sticker placement", conversationInline)
 	}
@@ -582,7 +580,7 @@ func (f *fakeOverlay) spec() modalSpec {
 				Rect:  f.rect,
 				Interactions: []layerInteraction{{
 					ID: f.id + ":dismiss", Rect: f.rect, Z: zModalFrame,
-					Click: app.ActionReceived{Action: app.Close},
+					Click: ActionReceived{Action: Close},
 				}},
 				Cursor:  renderCursor{X: -1, Y: -1},
 				Inline:  f.inline,
@@ -705,7 +703,7 @@ func TestModalStackClipsInlineToUnionOfEveryModalFrame(t *testing.T) {
 func TestModalStackFakeSpecParticipatesWithoutTouchingComposeApplication(t *testing.T) {
 	model := frameBaseModel(100, 24)
 	model.Toast = &domain.AppError{Message: "Message copied"}
-	model.PhotoSend = &app.PhotoSendState{ChatID: 2, Input: []rune("/tmp/photo.jpg")}
+	model.PhotoSend = &PhotoSendState{ChatID: 2, Input: []rune("/tmp/photo.jpg")}
 	covered := kittyInlinePlacement(903, 12, 12, 4, 2)
 	free := kittyInlinePlacement(904, 92, 2, 2, 2)
 	fake := &fakeOverlay{
@@ -730,7 +728,7 @@ func TestModalStackFakeSpecParticipatesWithoutTouchingComposeApplication(t *test
 		t.Fatal("the fake overlay did not suppress the toast through its metadata")
 	}
 	result := withFake.compose(ctx, modalBase{
-		interactions: []layerInteraction{{ID: "chat:2", Rect: image.Rect(0, 0, 30, 20), Z: zRowBackground, Click: app.ActionReceived{Action: app.SelectChat, ChatID: 2}}},
+		interactions: []layerInteraction{{ID: "chat:2", Rect: image.Rect(0, 0, 30, 20), Z: zRowBackground, Click: ActionReceived{Action: SelectChat, ChatID: 2}}},
 		cursor:       renderCursor{X: 42, Y: 21, Visible: true},
 		inline:       []inlinePlacement{covered, free},
 	})

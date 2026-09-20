@@ -9,7 +9,6 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
 )
 
@@ -19,7 +18,7 @@ func selectorTestOptions(ids ...domain.ChatID) []selectorOption {
 		options = append(options, selectorOption{
 			ID:    "chat",
 			Label: "Chat",
-			Value: app.ActionReceived{Action: app.Activate, ChatID: id},
+			Value: ActionReceived{Action: Activate, ChatID: id},
 		})
 	}
 	return options
@@ -100,7 +99,7 @@ func TestHuhSelectorHostSynchronizesDynamicSemanticIdentity(t *testing.T) {
 	// Rebuilding an already-focused field to clear empty options must restore
 	// both focus and the reserved-key policy. Repopulation does not itself
 	// transition logical focus, so Down proves the replacement was focused.
-	_ = host.Sync(identity, nil, app.ActionReceived{}, true, 18, 2)
+	_ = host.Sync(identity, nil, ActionReceived{}, true, 18, 2)
 	_ = host.Sync(identity, refreshed, refreshed[0].Value, true, 18, 2)
 	expectedValue := refreshed[0].Value
 	expectedField := newSelectorField(&expectedValue, 18, 2)
@@ -145,9 +144,9 @@ func TestHuhSelectorHostIdentityAndAuthoritativeRefreshReset(t *testing.T) {
 	// empty transition must nevertheless clear both the bound value and the
 	// field's internal options; retaining the old field would leave stale rows.
 	emptyID := selectorIdentity{Kind: selectorForward, RequestID: 3}
-	missing := app.ActionReceived{Action: app.Activate, ChatID: 999}
+	missing := ActionReceived{Action: Activate, ChatID: 999}
 	_ = host.Sync(emptyID, nil, missing, true, 0, 0)
-	if host.Identity() != emptyID || host.Value() != (app.ActionReceived{}) || host.field.GetValue() != (app.ActionReceived{}) {
+	if host.Identity() != emptyID || host.Value() != (ActionReceived{}) || host.field.GetValue() != (ActionReceived{}) {
 		t.Fatalf("empty identity reset = id:%#v host:%#v Huh:%#v", host.Identity(), host.Value(), host.field.GetValue())
 	}
 	if len(host.Options()) != 0 || strings.Contains(host.View(), "Chat") {
@@ -160,8 +159,8 @@ func TestHuhSelectorHostIdentityAndAuthoritativeRefreshReset(t *testing.T) {
 
 func TestHuhSelectorHostExplicitAuthoritativeOverrideOnOptionChange(t *testing.T) {
 	identity := selectorIdentity{Kind: selectorMessageActions, RequestID: 7, ChatID: 9, MessageID: 2}
-	copyValue := app.ActionReceived{Action: app.CopyMessage, ChatID: 9, MessageID: 2}
-	editValue := app.ActionReceived{Action: app.EditMessage, ChatID: 9, MessageID: 2}
+	copyValue := ActionReceived{Action: CopyMessage, ChatID: 9, MessageID: 2}
+	editValue := ActionReceived{Action: EditMessage, ChatID: 9, MessageID: 2}
 	loading := []selectorOption{{ID: "copy", Label: "Copy", Value: copyValue}}
 	settled := []selectorOption{
 		{ID: "edit", Label: "Edit", Value: editValue},

@@ -8,14 +8,13 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/zylen-det/telegram-tui/internal/domain"
 	"github.com/zylen-det/telegram-tui/internal/frontend/components"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // buildToastLayer builds the floating toast notification surface. It anchors
 // the toast one cell from the bottom-right of the viewport and renders a
 // rounded panel with the message text. The layer has no interactions and no
 // cursor.
-func buildToastLayer(model ui.ViewModel, styles renderStyles) surfaceResult {
+func buildToastLayer(model ViewModel, styles renderStyles) surfaceResult {
 	bounds := image.Rect(0, 0, model.Width, model.Height)
 	if model.Toast == nil || bounds.Empty() {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}

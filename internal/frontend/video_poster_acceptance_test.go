@@ -7,7 +7,6 @@ import (
 
 	"github.com/zylen-det/telegram-tui/internal/domain"
 	"github.com/zylen-det/telegram-tui/internal/media/thumbnail"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 func TestVideoPosterAcceptance_StaticPosterCaptionAndMetadataRows(t *testing.T) {
@@ -24,7 +23,7 @@ func TestVideoPosterAcceptance_StaticPosterCaptionAndMetadataRows(t *testing.T) 
 			Duration: 125 * time.Second,
 		},
 	}
-	group := ui.RenderedMessageGroup{MessageGroup: ui.MessageGroup{Messages: []domain.Message{message}}}
+	group := RenderedMessageGroup{MessageGroup: MessageGroup{Messages: []domain.Message{message}}}
 	poster := thumbnail.Block{Text: "poster", Width: 20, Height: 2}
 
 	rows, _ := buildMessageRows(group, 100, time.UTC, messageSelection{}, map[domain.MessageID]thumbnail.Block{77: poster})
@@ -48,7 +47,7 @@ func TestVideoPosterAcceptance_MetadataFallbackOmitsEmptyFields(t *testing.T) {
 		Kind:   domain.MessageVideo,
 		Media:  domain.MessageMedia{Duration: 9 * time.Second},
 	}
-	group := ui.RenderedMessageGroup{MessageGroup: ui.MessageGroup{Messages: []domain.Message{message}}}
+	group := RenderedMessageGroup{MessageGroup: MessageGroup{Messages: []domain.Message{message}}}
 
 	rows, _ := buildMessageRows(group, 80, time.UTC, messageSelection{}, nil)
 	if len(rows) != 1 || rows[0].text != "[Video] 0:09" {

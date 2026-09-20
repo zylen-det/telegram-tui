@@ -7,7 +7,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
 )
 
 // photoSendModalCanvas composes a full-size styled Base root with the photo
@@ -233,7 +232,7 @@ func TestPhotoSendModal_ExactInteractionsEnabled(t *testing.T) {
 			if it.Z != zModalControl {
 				t.Errorf("close Z = %d, want %d", it.Z, zModalControl)
 			}
-			if it.Click.Action != app.Close {
+			if it.Click.Action != Close {
 				t.Errorf("close action = %#v, want Close", it.Click)
 			}
 			if it.Virtual {
@@ -261,7 +260,7 @@ func TestPhotoSendModal_ExactInteractionsEnabled(t *testing.T) {
 			if !it.Rect.Eq(wantCancelAbs) {
 				t.Errorf("cancel rect = %v, want %v", it.Rect, wantCancelAbs)
 			}
-			if it.Click.Action != app.Close {
+			if it.Click.Action != Close {
 				t.Errorf("cancel action = %#v, want Close", it.Click)
 			}
 		}
@@ -274,7 +273,7 @@ func TestPhotoSendModal_ExactInteractionsEnabled(t *testing.T) {
 			if !it.Rect.Eq(wantSubmitAbs) {
 				t.Errorf("submit rect = %v, want %v", it.Rect, wantSubmitAbs)
 			}
-			if it.Click.Action != app.PhotoSendSubmit {
+			if it.Click.Action != PhotoSendSubmit {
 				t.Errorf("submit action = %#v, want PhotoSendSubmit", it.Click)
 			}
 			if it.Virtual {
@@ -314,7 +313,7 @@ func TestPhotoSendModal_ExactInteractionsEnabled(t *testing.T) {
 
 	// No wheel actions.
 	for _, it := range surface.Interactions {
-		if it.WheelUp.Action != app.NoAction || it.WheelDown.Action != app.NoAction {
+		if it.WheelUp.Action != NoAction || it.WheelDown.Action != NoAction {
 			t.Errorf("interaction %q has non-zero wheel action", it.ID)
 		}
 	}

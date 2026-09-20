@@ -15,7 +15,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/blacktop/go-termimg"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/auth"
 	"github.com/zylen-det/telegram-tui/internal/buildinfo"
 	"github.com/zylen-det/telegram-tui/internal/config"
@@ -27,7 +26,6 @@ import (
 	"github.com/zylen-det/telegram-tui/internal/media/thumbnail"
 	"github.com/zylen-det/telegram-tui/internal/platform"
 	"github.com/zylen-det/telegram-tui/internal/telegram"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 func main() {
@@ -116,25 +114,16 @@ func runOwnedProductionApplication(parent context.Context, options appOptions, p
 	protocol := resolveThumbnailProtocol(paths)
 	os.Setenv("TERMIMG_BYPASS_DETECTION", thumbnailProtocolBypass(protocol))
 	handler := newProductionHandler(ctx, resolver, telegram.New, broker, avatarRenderer, options.clipboard, logger, protocol)
-	executor := app.NewExecutor(4, handler)
-	runtime, err := frontend.NewAppRuntime(ctx, executor)
+	model, err := frontend.NewAppModel(frontend.InitialState(), handler)
 	if err != nil {
 		cancel()
-		return err
-	}
-	engine := app.NewEngine(app.InitialState())
-	model, err := frontend.NewAppModel(engine, runtime)
-	if err != nil {
-		cancel()
-		runtime.Close()
-		runtime.Wait()
 		return err
 	}
 
 	images := kitty.NewManager(options.stdout)
 	cellPixels := func(int, int) image.Point { return image.Pt(1, 2) }
 	if file, ok := options.stdout.(*os.File); ok {
-		cellPixels = ui.LinuxCellPixelsForFD(file.Fd())
+		cellPixels = frontend.LinuxCellPixelsForFD(file.Fd())
 	}
 	output := frontend.NewOutputOverlay(options.stdout, images, cellPixels)
 	model.SetOutputOverlay(output)
@@ -148,14 +137,14 @@ func runOwnedProductionApplication(parent context.Context, options appOptions, p
 	signals := make(chan os.Signal, 2)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(signals)
-	return runProductionBubbleTea(parent, cancel, runtime, output, program, model, signals)
+	return runProductionBubbleTea(parent, cancel, output, program, model, signals)
 }
 
-func newProductionHandler(ctx context.Context, resolver app.RuntimeResolver, factory app.ClientFactory, broker *auth.Broker, avatars app.AvatarRenderer, clipboard platform.Clipboard, logger *slog.Logger, protocol termimg.Protocol) *app.Handler {
+func newProductionHandler(ctx context.Context, resolver frontend.RuntimeResolver, factory frontend.ClientFactory, broker *auth.Broker, avatars frontend.AvatarRenderer, clipboard platform.Clipboard, logger *slog.Logger, protocol termimg.Protocol) *frontend.Handler {
 	if clipboard == nil {
 		clipboard = platform.NewProductionClipboard()
 	}
-	handler := app.NewHandler(ctx, resolver, factory, broker, avatars, clipboard)
+	handler := frontend.NewHandler(ctx, resolver, factory, broker, avatars, clipboard)
 	handler.SetThumbnailRenderer(thumbnail.NewRenderer(protocol))
 	handler.SetLogger(logger)
 	handler.SetNotifier(platform.NewProductionNotifier())
@@ -185,11 +174,6 @@ func thumbnailProtocolBypass(protocol termimg.Protocol) string {
 	return "halfblocks"
 }
 
-type productionRuntime interface {
-	Close()
-	Wait()
-}
-
 type productionOverlay interface {
 	Clear() error
 }
@@ -203,7 +187,7 @@ type productionStatus interface {
 	ShutdownError() error
 }
 
-func runProductionBubbleTea(parent context.Context, cancel context.CancelFunc, runtime productionRuntime, overlay productionOverlay, program productionProgram, status productionStatus, signals <-chan os.Signal) (resultErr error) {
+func runProductionBubbleTea(parent context.Context, cancel context.CancelFunc, overlay productionOverlay, program productionProgram, status productionStatus, signals <-chan os.Signal) (resultErr error) {
 	stopSignals := make(chan struct{})
 	signalsDone := make(chan struct{})
 	go func() {
@@ -227,8 +211,6 @@ func runProductionBubbleTea(parent context.Context, cancel context.CancelFunc, r
 		close(stopSignals)
 		<-signalsDone
 		cancel()
-		runtime.Close()
-		runtime.Wait()
 		resultErr = errors.Join(resultErr, overlay.Clear())
 	}()
 

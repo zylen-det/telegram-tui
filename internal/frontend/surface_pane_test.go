@@ -7,7 +7,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/zylen-det/telegram-tui/internal/app"
 )
 
 func paneCanvas(size image.Point, surface surfaceResult) *lipgloss.Canvas {
@@ -20,7 +19,7 @@ func paneCanvas(size image.Point, surface surfaceResult) *lipgloss.Canvas {
 func TestPaneExactComposedBoundsAndRoundedCorners(t *testing.T) {
 	styles := newRenderStyles(false)
 	rect := image.Rect(2, 3, 22, 9)
-	surface := buildPane(rect, "Chats", true, "chats", app.FocusChats, styles)
+	surface := buildPane(rect, "Chats", true, "chats", FocusChats, styles)
 	if surface.Layer == nil {
 		t.Fatal("pane layer is nil")
 	}
@@ -73,7 +72,7 @@ func TestPaneExactComposedBoundsAndRoundedCorners(t *testing.T) {
 func TestPaneTitleCellsStyledAndBorderPreserved(t *testing.T) {
 	styles := newRenderStyles(false)
 	rect := image.Rect(0, 0, 20, 5)
-	surface := buildPane(rect, "Chats", true, "chats", app.FocusChats, styles)
+	surface := buildPane(rect, "Chats", true, "chats", FocusChats, styles)
 	canvas := paneCanvas(image.Pt(20, 5), surface)
 
 	// Title begins at local (2,0) absolute (2,0).
@@ -100,13 +99,13 @@ func TestPaneFocusedUnfocusedBorderColors(t *testing.T) {
 	styles := newRenderStyles(false)
 	rect := image.Rect(0, 0, 12, 4)
 
-	focused := buildPane(rect, "", true, "f", app.FocusChats, styles)
+	focused := buildPane(rect, "", true, "f", FocusChats, styles)
 	fCanvas := paneCanvas(image.Pt(12, 4), focused)
 	if got := colorOf(fCanvas.CellAt(0, 0).Style.Fg); got != rgba(focusedBorderColor) {
 		t.Errorf("focused border foreground = %v, want %v", got, rgba(focusedBorderColor))
 	}
 
-	unfocused := buildPane(rect, "", false, "u", app.FocusChats, styles)
+	unfocused := buildPane(rect, "", false, "u", FocusChats, styles)
 	uCanvas := paneCanvas(image.Pt(12, 4), unfocused)
 	if got := colorOf(uCanvas.CellAt(0, 0).Style.Fg); got != rgba(borderColor) {
 		t.Errorf("unfocused border foreground = %v, want %v", got, rgba(borderColor))
@@ -116,7 +115,7 @@ func TestPaneFocusedUnfocusedBorderColors(t *testing.T) {
 func TestPaneHitIDBoundsMatchInteraction(t *testing.T) {
 	styles := newRenderStyles(false)
 	rect := image.Rect(3, 2, 18, 8)
-	surface := buildPane(rect, "Chats", true, "pane-chats", app.FocusChats, styles)
+	surface := buildPane(rect, "Chats", true, "pane-chats", FocusChats, styles)
 	if len(surface.Interactions) != 1 {
 		t.Fatalf("interactions = %d, want 1", len(surface.Interactions))
 	}
@@ -130,7 +129,7 @@ func TestPaneHitIDBoundsMatchInteraction(t *testing.T) {
 	if interaction.Z != zPane {
 		t.Errorf("interaction Z = %d, want %d", interaction.Z, zPane)
 	}
-	if interaction.Click.Action != app.FocusPane || interaction.Click.TargetFocus != app.FocusChats {
+	if interaction.Click.Action != FocusPane || interaction.Click.TargetFocus != FocusChats {
 		t.Errorf("interaction click = %#v, want FocusPane/FocusChats", interaction.Click)
 	}
 
@@ -151,7 +150,7 @@ func TestPaneHitIDBoundsMatchInteraction(t *testing.T) {
 func TestPaneEmptyIDNoInteraction(t *testing.T) {
 	styles := newRenderStyles(false)
 	rect := image.Rect(0, 0, 20, 5)
-	surface := buildPane(rect, "Chats", true, "", app.FocusChats, styles)
+	surface := buildPane(rect, "Chats", true, "", FocusChats, styles)
 	if surface.Layer == nil {
 		t.Fatal("pane layer is nil")
 	}
@@ -172,7 +171,7 @@ func TestPaneTinyRectSafe(t *testing.T) {
 		{Min: image.Pt(0, 0), Max: image.Pt(0, 0)},
 		{Min: image.Pt(5, 5), Max: image.Pt(5, 5)},
 	} {
-		surface := buildPane(rect, "Chats", true, "tiny", app.FocusChats, styles)
+		surface := buildPane(rect, "Chats", true, "tiny", FocusChats, styles)
 		if surface.Layer != nil {
 			t.Errorf("%v: tiny rect should have no layer, got %v", rect, surface.Layer)
 		}
@@ -188,7 +187,7 @@ func TestPaneTinyRectSafe(t *testing.T) {
 func TestPaneTitleClippedWithinAvailableWidth(t *testing.T) {
 	styles := newRenderStyles(false)
 	rect := image.Rect(0, 0, 10, 5)
-	surface := buildPane(rect, "ThisIsALongTitle", true, "p", app.FocusChats, styles)
+	surface := buildPane(rect, "ThisIsALongTitle", true, "p", FocusChats, styles)
 	canvas := paneCanvas(image.Pt(10, 5), surface)
 	// Available title width is rect.Dx()-3 = 7. The clipped title must not
 	// overwrite the top-right corner at x=9.

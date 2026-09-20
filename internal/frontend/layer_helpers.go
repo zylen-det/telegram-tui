@@ -7,7 +7,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
 )
 
 // displayWidth returns the display width in cells of s, treating the text as a
@@ -147,7 +146,7 @@ func addInteractive(
 	id string,
 	z int,
 	content string,
-	click, wheelUp, wheelDown app.ActionReceived,
+	click, wheelUp, wheelDown ActionReceived,
 ) layerInteraction {
 	width := local.Dx()
 	height := local.Dy()

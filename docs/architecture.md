@@ -4,44 +4,40 @@ This document describes the production flow, package boundaries, and key invaria
 
 ## Production flow
 
+Bubble Tea is the application's only Elm-style state loop:
+
 ```text
-keyboard / mouse / resize       TDLib updates / command results
+keyboard / mouse / resize       TDLib updates / effect results
              \                         /
               frontend.AppModel.Update
-                         |
-                  app.Engine.Apply
-                         |
-                 Reduce(State, Event)
-                  /               \
-          []app.Command       app.State
-                |                 |
-        frontend.AppRuntime   Engine.Snapshot
-                |                 |
-          app.Executor          ui.Select
-                |                 |
-            app.Handler       ui.ViewModel
-                |                 |
- Telegram / media / platform   frontend surfaces
-                                  |
-                       modalStack registry
-                                  |
-                         one Lipgloss Compositor
-                                  |
-                    tea.View + hits + cursor
+                   /             \
+          frontend.State       tea.Cmd
+                 |                 |
+          frontend.View       frontend.Handler
+                 |                 |
+       render-data selection   Telegram / media / platform
+                 |
+         frontend surfaces
+                 |
+      modalStack registry
+                 |
+       one Lipgloss Compositor
+                 |
+        tea.View + hits + cursor
+```
+
+`AppModel.Update` owns the authoritative state transition. Its private feature helpers keep large workflows in separate files, but there is no second Engine, public reducer, executor, or alternate UI event loop. Effect work is scheduled as `tea.Cmd` by Bubble Tea. The Telegram update and authorization prompt streams are each a single subscription: one outstanding wait command at a time, re-armed by `Update` after each stream item. A `Handler` owns the client pump that feeds the update stream.
 
 Kitty image emission and cleanup is a separate overlay lifecycle.
-```
 
 ## Package ownership
 
 | Package | Responsibility |
 |---|---|
 | `cmd/telegram-tui` | Bootstrap, dependencies, process ownership, signals, exit code |
-| `internal/app` | Authoritative state, actions/events/commands, reducer, engine, executor, handler |
 | `internal/domain` | Telegram-independent chat, message, user, media, and error models |
-| `internal/frontend` | Production Bubble Tea v2 update/view path, Huh hosts, Lipgloss surfaces/compositor, input, hits, cursor, Kitty coordination |
+| `internal/frontend` | Bubble Tea model/state/update, effect adaptation, Huh hosts, render-data selection, grouping/layout/hit maps, Lipgloss surfaces/compositor, cursor, and Kitty coordination |
 | `internal/frontend/components` | Reusable Lipgloss frontend components |
-| `internal/ui` | Immutable view-model projection, grouping, layout data, hit map, cell metrics; its old gotui renderer is not a production extension point |
 | `internal/telegram` | Domain-facing client, TDLib adapter, update normalization, safe errors; only this package imports generated TDLib types |
 | `internal/media/*` | Avatar, thumbnail, pixel, and Kitty rendering/transport |
 | `internal/auth` | Authorization state machine |
@@ -49,18 +45,18 @@ Kitty image emission and cleanup is a separate overlay lifecycle.
 | `internal/platform` | Clipboard, external file opening, single-instance locking |
 | `internal/logging` | Allow-listed rotating logs |
 
-Not listed: `internal/testutil` and `internal/buildinfo` provide test and build support; neither is a production entry point.
+`internal/buildinfo` remains build support rather than a production entry point.
 
 ## Invariants
 
-- Production UI changes target `internal/frontend`, not legacy `ui.Root` or `ui.Runner`.
-- UI never calls TDLib directly. Effects go through app commands, `app.Handler`, and the domain-facing `telegram.Client` in `internal/telegram/client.go`.
-- TDLib-generated types never leave `internal/telegram`.
-- The reducer performs no I/O. Background work returns `app.Event` values; authoritative state changes through `Engine.Apply` on the Bubble Tea update path.
-- `AppModel.View` takes one snapshot, `ui.Select` builds an immutable view model, and frontend surfaces compose one full-size Lipgloss frame.
+- Bubble Tea's `AppModel.Update` is the sole application state loop. Do not add another Engine, reducer facade, event bus, command executor, or store around it.
+- Each external stream has exactly one outstanding subscription command, re-armed from `Update` after each item. Never issue a fresh wait on every update; do not derive a quit from stream closure while a deliberate shutdown is in progress.
+- UI never calls generated TDLib APIs. Effects use the domain-facing `telegram.Client` in `internal/telegram/client.go`; generated TDLib types never leave `internal/telegram`.
+- Effect work performs no model mutation. Results and external updates return to `AppModel.Update` as ordinary `tea.Msg` values.
+- `AppModel.View` takes one `AppModel.Snapshot`, derives render data with `Select`, and composes one full-size Lipgloss frame.
 - Kitty image transport remains outside text composition. The frame describes desired placements; overlay code emits and cleans terminal images.
 - Async request results use request and entity identity. Stale results must not overwrite a newer active operation.
-- Huh components may own transient editing/selection mechanics; `app.State` owns durable and business state.
+- Huh components may own transient editing/selection mechanics; `frontend.State` owns durable and business state.
 - List modals use exactly one paint path: the shared Huh selector overlay or manual row paint, never both. `listModalController` derives selector options, authoritative selection, and geometry from the exact displayed/windowed `modalRowSpec` rows; feature-specific parallel option compilers are forbidden. Section headers and other informational rows exist only in manual paint; chat search therefore remains manual.
 - Modal composition extends through `defaultModalStack` in `internal/frontend/modal_stack.go`. A modal spec owns activation, toast suppression, rendering adaptation, cursor policy, interactions, and Kitty-inline ownership. `composeApplication` must not grow concrete modal branches.
 - Ordinary list keyboard behavior extends through the shared list-focus classification in `internal/frontend/input.go`; do not duplicate close/previous/next/activate switch bodies for each list focus.
@@ -69,8 +65,8 @@ Not listed: `internal/testutil` and `internal/buildinfo` provide test and build 
 
 ## Useful entry points
 
-- State and effects: `internal/app/state.go`, `event.go`, `command.go`, `reducer.go`, `handler.go`
+- Bubble Tea model/update: `internal/frontend/app_model.go`, `model_state.go`, `update_state.go`, `update_*.go`
+- Effects and asynchronous messages: `internal/frontend/effects.go`, `effect_requests.go`, `messages.go`
+- Rendering: `internal/frontend/viewmodel.go`, `viewmodel_group.go`, `viewmodel_layout.go`, `render_frame.go`, `modal_stack.go`, `surface_*.go`
 - Telegram boundary: `internal/telegram/client.go`, `adapter_tdlib.go`, `normalize_tdlib.go`, `fake.go`
-- Production UI: `internal/frontend/app_model.go`, `render_frame.go`, `modal_stack.go`, `list_modal_controller.go`, `surface_*.go`
-- Projection/layout: `internal/ui/`
 - Product behavior and canonical gates: `README.md`

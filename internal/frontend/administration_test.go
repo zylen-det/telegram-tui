@@ -5,10 +5,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
 	"github.com/zylen-det/telegram-tui/internal/telegram"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 func TestGroupPermissionsInfoActionKeepsDynamicOrder(t *testing.T) {
@@ -18,7 +16,7 @@ func TestGroupPermissionsInfoActionKeepsDynamicOrder(t *testing.T) {
 	permissions := false
 	invite := false
 	for _, hit := range buildDetailsLayer(model, newRenderStyles(false)).Interactions {
-		if hit.ID == "details:group-permissions" && hit.Click.Action == app.OpenGroupPermissions {
+		if hit.ID == "details:group-permissions" && hit.Click.Action == OpenGroupPermissions {
 			permissions = true
 		}
 		if hit.ID == "details:invite-links" {
@@ -43,19 +41,19 @@ func TestGroupPermissionsInfoActionKeepsDynamicOrder(t *testing.T) {
 }
 
 func TestAdministrationModalHasKeyboardMouseParityAndManualRows(t *testing.T) {
-	for key, want := range map[tea.Key]app.Action{
-		{Code: tea.KeyDown}:   app.SelectNext,
-		{Code: tea.KeyUp}:     app.SelectPrevious,
-		{Code: tea.KeyEnter}:  app.Activate,
-		{Code: tea.KeyEscape}: app.Close,
+	for key, want := range map[tea.Key]Action{
+		{Code: tea.KeyDown}:   SelectNext,
+		{Code: tea.KeyUp}:     SelectPrevious,
+		{Code: tea.KeyEnter}:  Activate,
+		{Code: tea.KeyEscape}: Close,
 	} {
-		if got, ok := mapKeyPress(app.FocusAdministration, tea.KeyPressMsg(key)); !ok || got.Action != want {
+		if got, ok := mapKeyPress(FocusAdministration, tea.KeyPressMsg(key)); !ok || got.Action != want {
 			t.Fatalf("administration key %#v = (%#v,%t), want %v", key, got, ok, want)
 		}
 	}
-	model := ui.ViewModel{
-		Width: 100, Height: 30, Layout: ui.Layout{Mode: app.LayoutWide}, Focus: app.FocusAdministration,
-		Administration: &app.AdministrationState{ChatID: 9, Mode: app.AdministrationDefaultPermissions,
+	model := ViewModel{
+		Width: 100, Height: 30, Layout: ViewLayout{Mode: LayoutWide}, Focus: FocusAdministration,
+		Administration: &AdministrationState{ChatID: 9, Mode: AdministrationDefaultPermissions,
 			Snapshot:          &telegram.AdministrationSnapshot{Kind: domain.ChatSupergroup},
 			EditedPermissions: telegram.ChatPermissions{CanSendBasicMessages: true}},
 	}
@@ -69,14 +67,14 @@ func TestAdministrationModalHasKeyboardMouseParityAndManualRows(t *testing.T) {
 	}
 	toggle := false
 	for _, hit := range layer.Interactions {
-		if hit.Click.Action == app.ToggleAdministrationItem && hit.Click.AdminIndex == 0 && hit.Click.ChatID == 9 {
+		if hit.Click.Action == ToggleAdministrationItem && hit.Click.AdminIndex == 0 && hit.Click.ChatID == 9 {
 			toggle = true
 		}
 	}
 	if !toggle {
 		t.Fatal("mouse toggle lacks field/chat identity")
 	}
-	model.Administration.Mode = app.AdministrationConfirmation
+	model.Administration.Mode = AdministrationConfirmation
 	model.Administration.PendingAction = telegram.MemberAdministrationBan
 	model.Administration.UserID = 1
 	layer = buildAdministrationLayer(model, newRenderStyles(true))
@@ -87,20 +85,20 @@ func TestAdministrationModalHasKeyboardMouseParityAndManualRows(t *testing.T) {
 }
 
 func TestMemberDetailShowsManageActionOnlyWhenEnabled(t *testing.T) {
-	members := &app.MembersState{ChatID: 9, Detail: &app.MemberDetail{UserID: 1, Name: "Ada"}}
+	members := &MembersState{ChatID: 9, Detail: &MemberDetail{UserID: 1, Name: "Ada"}}
 	detailOptions := func() []selectorOption {
 		rows, _ := memberDetailRows(members, nil)
 		return selectorOptionsFromRows(rows)
 	}
 	for _, option := range detailOptions() {
-		if option.Value.Action == app.OpenMemberAdministration {
+		if option.Value.Action == OpenMemberAdministration {
 			t.Fatal("management option shown without capability")
 		}
 	}
 	members.Detail.CanManageInChat = true
 	found := false
 	for _, option := range detailOptions() {
-		if option.Value.Action == app.OpenMemberAdministration && option.Value.UserID == 1 && option.Value.ChatID == 9 {
+		if option.Value.Action == OpenMemberAdministration && option.Value.UserID == 1 && option.Value.ChatID == 9 {
 			found = true
 		}
 	}

@@ -6,13 +6,11 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // buildCommandMenuLayer renders a non-modal completion list over the bottom of
 // the conversation history, immediately above the composer.
-func buildCommandMenuLayer(model ui.ViewModel, historyRect, composerRect image.Rectangle, styles renderStyles) surfaceResult {
+func buildCommandMenuLayer(model ViewModel, historyRect, composerRect image.Rectangle, styles renderStyles) surfaceResult {
 	menu := model.CommandMenu
 	if menu == nil || historyRect.Empty() || composerRect.Empty() {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
@@ -25,7 +23,7 @@ func buildCommandMenuLayer(model ui.ViewModel, historyRect, composerRect image.R
 	if rowCount == 0 {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
-	visibleRows := min(app.CommandMenuVisibleRows, rowCount, max(0, historyRect.Dy()-2))
+	visibleRows := min(CommandMenuVisibleRows, rowCount, max(0, historyRect.Dy()-2))
 	if visibleRows < 1 {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
@@ -50,12 +48,12 @@ func buildCommandMenuLayer(model ui.ViewModel, historyRect, composerRect image.R
 		root.AddLayers(lipgloss.NewLayer(styles.Title.Render(title)).X(2).Y(0).Z(zCommandMenuText))
 	}
 
-	request := func(action app.Action) app.ActionReceived {
-		return app.ActionReceived{Action: action}
+	request := func(action Action) ActionReceived {
+		return ActionReceived{Action: action}
 	}
 	interactions := []layerInteraction{{
 		ID: "command-menu", Rect: frame, Z: zCommandMenuFrame, Virtual: true,
-		WheelUp: request(app.CommandMenuPrevious), WheelDown: request(app.CommandMenuNext),
+		WheelUp: request(CommandMenuPrevious), WheelDown: request(CommandMenuNext),
 	}}
 	innerWidth := max(0, frame.Dx()-2)
 	if menu.Loading {
@@ -91,10 +89,10 @@ func buildCommandMenuLayer(model ui.ViewModel, historyRect, composerRect image.R
 		}
 		text := renderLine(style, prefix+label, innerWidth)
 		local := image.Rect(1, row, frame.Dx()-1, row+1)
-		action := app.ActionReceived{Action: app.CommandMenuActivate, ChatID: menu.ChatID, CommandIndex: index}
+		action := ActionReceived{Action: CommandMenuActivate, ChatID: menu.ChatID, CommandIndex: index}
 		interactions = append(interactions, addInteractive(root, frame.Min, local,
 			fmt.Sprintf("command-menu:%d", index), zCommandMenuRow, text, action,
-			request(app.CommandMenuPrevious), request(app.CommandMenuNext)))
+			request(CommandMenuPrevious), request(CommandMenuNext)))
 	}
 
 	return surfaceResult{Layer: root, Rect: frame, Interactions: interactions, Cursor: renderCursor{X: -1, Y: -1}}

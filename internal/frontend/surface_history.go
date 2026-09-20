@@ -5,10 +5,8 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
 	"github.com/zylen-det/telegram-tui/internal/media/thumbnail"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // buildHistoryLayer builds the conversation history surface: a pane background
@@ -20,7 +18,7 @@ import (
 // Rect is the absolute history viewport rectangle. An empty intersection
 // returns a zero surface with a hidden cursor.
 func buildHistoryLayer(
-	model ui.ViewModel,
+	model ViewModel,
 	rect image.Rectangle, // absolute history viewport
 	location *time.Location,
 	styles renderStyles,
@@ -39,9 +37,9 @@ func buildHistoryLayer(
 		ID:        "conversation:history",
 		Rect:      rect,
 		Z:         zPaneBackground,
-		Click:     app.ActionReceived{Action: app.FocusPane, TargetFocus: app.FocusConversation},
-		WheelUp:   app.ActionReceived{Action: app.PageUp},
-		WheelDown: app.ActionReceived{Action: app.PageDown},
+		Click:     ActionReceived{Action: FocusPane, TargetFocus: FocusConversation},
+		WheelUp:   ActionReceived{Action: PageUp},
+		WheelDown: ActionReceived{Action: PageDown},
 	}}
 
 	// Content rect is a mutable copy; each consumed state row shrinks it.
@@ -53,7 +51,7 @@ func buildHistoryLayer(
 		errLocal := image.Rect(0, 0, width, 1)
 		interactions = append(interactions, addInteractive(root, rect.Min, errLocal, "conversation:history-retry", zControl,
 			renderLine(styles.Error, model.HistoryError.Message+"  Retry", width),
-			app.ActionReceived{Action: app.Retry}, app.ActionReceived{}, app.ActionReceived{}))
+			ActionReceived{Action: Retry}, ActionReceived{}, ActionReceived{}))
 		content.Min.Y++
 		if content.Empty() {
 			return surfaceResult{Layer: root, Rect: rect, Interactions: interactions, Cursor: renderCursor{X: -1, Y: -1}}
@@ -106,7 +104,7 @@ func buildHistoryLayer(
 	}
 
 	selection := messageSelection{ChatID: model.SelectedMessageChat, MessageID: model.SelectedMessage}
-	buildGroup := func(group ui.RenderedMessageGroup) messageGroupResult {
+	buildGroup := func(group RenderedMessageGroup) messageGroupResult {
 		return buildMessageGroupLayer(group, width, location, selection, inlineThumbnailsByID, styles)
 	}
 	results := buildVisibleHistoryResults(groups, content.Dy(), model.HistoryFollowSelection, selection, buildGroup)
@@ -185,11 +183,11 @@ func buildHistoryLayer(
 // following keyboard selection, the selected group is surrounded by enough
 // older and newer content to preserve centered placement and edge clamping.
 func buildVisibleHistoryResults(
-	groups []ui.RenderedMessageGroup,
+	groups []RenderedMessageGroup,
 	viewportHeight int,
 	followSelection bool,
 	selection messageSelection,
-	build func(ui.RenderedMessageGroup) messageGroupResult,
+	build func(RenderedMessageGroup) messageGroupResult,
 ) []messageGroupResult {
 	if len(groups) == 0 || viewportHeight <= 0 {
 		return nil
@@ -256,9 +254,9 @@ func buildVisibleHistoryResults(
 }
 
 func buildHistoryTailResults(
-	groups []ui.RenderedMessageGroup,
+	groups []RenderedMessageGroup,
 	viewportHeight int,
-	build func(ui.RenderedMessageGroup) messageGroupResult,
+	build func(RenderedMessageGroup) messageGroupResult,
 ) []messageGroupResult {
 	var reverse []messageGroupResult
 	extent := 0
@@ -277,7 +275,7 @@ func buildHistoryTailResults(
 	return results
 }
 
-func selectedHistoryGroupIndex(groups []ui.RenderedMessageGroup, selection messageSelection) int {
+func selectedHistoryGroupIndex(groups []RenderedMessageGroup, selection messageSelection) int {
 	for groupIndex, group := range groups {
 		for _, message := range group.Messages {
 			if message.ChatID == selection.ChatID && message.ID == selection.MessageID {

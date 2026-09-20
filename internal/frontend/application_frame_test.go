@@ -10,18 +10,16 @@ import (
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/auth"
 	"github.com/zylen-det/telegram-tui/internal/domain"
 	"github.com/zylen-det/telegram-tui/internal/frontend/components"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
-func frameBaseModel(width, height int) ui.ViewModel {
-	state := app.InitialState()
+func frameBaseModel(width, height int) ViewModel {
+	state := InitialState()
 	state.Width = width
 	state.Height = height
-	state.Focus = app.FocusConversation
+	state.Focus = FocusConversation
 	state.Connection = domain.ConnectionOnline
 	state.ChatsLoaded = true
 	state.Chats = []domain.Chat{
@@ -33,7 +31,7 @@ func frameBaseModel(width, height int) ui.ViewModel {
 		ID: 7, ChatID: 2, SenderName: "Iris", SentAt: time.Date(2026, time.July, 20, 14, 30, 0, 0, time.Local), Kind: domain.MessageText, Text: "Hello from the group",
 	}}
 	state.Drafts[2] = "draft reply"
-	return ui.Select(state, time.Local)
+	return Select(state, time.Local)
 }
 
 // 1 & 8: composeApplication output equals its compositor render and is a full
@@ -62,7 +60,7 @@ func TestApplicationFrameContentEqualsCompositorAndFullViewport(t *testing.T) {
 		}
 	}
 
-	zero := composeApplication(ui.ViewModel{}, time.Local)
+	zero := composeApplication(ViewModel{}, time.Local)
 	if zero.Compositor != nil || zero.Content != "" || zero.Hits != nil || zero.Cursor.Visible || zero.Overlay.Ready {
 		t.Fatalf("zero frame not safe-empty: %+v", zero)
 	}
@@ -82,11 +80,11 @@ func TestApplicationFrameBaseSurfacesProduceSemanticHits(t *testing.T) {
 	var selectChat, focusPane, composerSubmit bool
 	for _, hit := range frame.Hits {
 		switch {
-		case hit.Click.Action == app.SelectChat && hit.Click.ChatID == 1:
+		case hit.Click.Action == SelectChat && hit.Click.ChatID == 1:
 			selectChat = true
-		case hit.Click.Action == app.FocusPane:
+		case hit.Click.Action == FocusPane:
 			focusPane = true
-		case hit.Click.Action == app.ComposerSubmit:
+		case hit.Click.Action == ComposerSubmit:
 			composerSubmit = true
 		}
 	}
@@ -99,32 +97,32 @@ func TestApplicationFrameBaseSurfacesProduceSemanticHits(t *testing.T) {
 func TestApplicationFrameOverlaysSuppressUnderlyingHits(t *testing.T) {
 	tops := []struct {
 		name  string
-		apply func(*ui.ViewModel)
+		apply func(*ViewModel)
 		auth  bool
 	}{
-		{"media modal", func(m *ui.ViewModel) { m.Modal = &app.ModalState{Title: "Img", Loading: true} }, false},
-		{"action menu", func(m *ui.ViewModel) {
-			m.MessageMenu = &app.MessageActionMenu{ChatID: 2, MessageID: 7, Capabilities: domain.MessageCapabilities{Copy: true}}
+		{"media modal", func(m *ViewModel) { m.Modal = &ModalState{Title: "Img", Loading: true} }, false},
+		{"action menu", func(m *ViewModel) {
+			m.MessageMenu = &MessageActionMenu{ChatID: 2, MessageID: 7, Capabilities: domain.MessageCapabilities{Copy: true}}
 		}, false},
-		{"reaction picker", func(m *ui.ViewModel) { m.ReactionPicker = &app.ReactionPicker{ChatID: 2, MessageID: 7, Selected: 1} }, false},
-		{"forward picker", func(m *ui.ViewModel) {
-			m.ForwardPicker = &app.ForwardPicker{SourceChatID: 2, SourceMessageID: 7, SelectedChat: 0}
+		{"reaction picker", func(m *ViewModel) { m.ReactionPicker = &ReactionPicker{ChatID: 2, MessageID: 7, Selected: 1} }, false},
+		{"forward picker", func(m *ViewModel) {
+			m.ForwardPicker = &ForwardPicker{SourceChatID: 2, SourceMessageID: 7, SelectedChat: 0}
 		}, false},
-		{"photo send", func(m *ui.ViewModel) {
-			m.PhotoSend = &app.PhotoSendState{ChatID: 2, Input: []rune("/tmp/photo.jpg")}
+		{"photo send", func(m *ViewModel) {
+			m.PhotoSend = &PhotoSendState{ChatID: 2, Input: []rune("/tmp/photo.jpg")}
 		}, false},
-		{"in-app prompt", func(*ui.ViewModel) {}, true},
+		{"in-app prompt", func(*ViewModel) {}, true},
 	}
 	for _, tc := range tops {
 		t.Run(tc.name, func(t *testing.T) {
 			model := frameBaseModel(100, 24)
 			tc.apply(&model)
 			if tc.auth {
-				model.Focus = app.FocusAuth
+				model.Focus = FocusAuth
 			}
 			frame := composeApplication(model, time.Local)
 			for _, hit := range frame.Hits {
-				if hit.Click.Action == app.SelectChat || hit.Click.Action == app.FocusPane || hit.Click.Action == app.ComposerSubmit {
+				if hit.Click.Action == SelectChat || hit.Click.Action == FocusPane || hit.Click.Action == ComposerSubmit {
 					t.Errorf("overlay %q retained underlying hit: %#v", tc.name, hit)
 				}
 			}
@@ -140,7 +138,7 @@ func TestApplicationFrameVisualIDsMatchCompositorHit(t *testing.T) {
 	// Action menu overlay: a known topology with one visual interactive row
 	// (Reply) plus the modal close control.
 	model := frameBaseModel(100, 24)
-	model.MessageMenu = &app.MessageActionMenu{
+	model.MessageMenu = &MessageActionMenu{
 		ChatID: 2, MessageID: 7, Selected: 0,
 		Capabilities: domain.MessageCapabilities{Reply: true, Copy: true},
 	}
@@ -169,7 +167,7 @@ func TestApplicationFrameVisualIDsMatchCompositorHit(t *testing.T) {
 	// in frame.Hits with their exact rect/action, while no visual Layer with
 	// that ID is returned by Compositor.Hit at an interior point.
 	modal := frameBaseModel(100, 24)
-	modal.Modal = &app.ModalState{Title: "Img", Loading: true}
+	modal.Modal = &ModalState{Title: "Img", Loading: true}
 	mframe := composeApplication(modal, time.Local)
 	mediaSurface, _ := buildMediaModalLayer(modal, newRenderStyles(false))
 
@@ -198,21 +196,21 @@ func TestApplicationFrameVisualIDsMatchCompositorHit(t *testing.T) {
 // its terminal cursor until that separate input cut-over.
 func TestApplicationFrameCursorTopology(t *testing.T) {
 	composer := frameBaseModel(100, 24)
-	composer.Focus = app.FocusComposer
+	composer.Focus = FocusComposer
 	cframe := composeApplication(composer, time.Local)
 	if cframe.Cursor.Visible || cframe.Cursor.X != -1 || cframe.Cursor.Y != -1 {
 		t.Fatalf("composer terminal cursor visible after Huh cut-over: %+v", cframe.Cursor)
 	}
 
 	modal := frameBaseModel(100, 24)
-	modal.Modal = &app.ModalState{Title: "Img", Loading: true}
+	modal.Modal = &ModalState{Title: "Img", Loading: true}
 	if f := composeApplication(modal, time.Local); f.Cursor.Visible {
 		t.Fatal("media modal cursor visible, want hidden")
 	}
 
 	authModel := frameBaseModel(100, 24)
-	authModel.Focus = app.FocusAuth
-	authModel.Prompt = &app.PromptState{Prompt: auth.Prompt{Label: "Telegram API ID"}, Input: []rune("ab")}
+	authModel.Focus = FocusAuth
+	authModel.Prompt = &PromptState{Prompt: auth.Prompt{Label: "Telegram API ID"}, Input: []rune("ab")}
 	aframe := composeApplication(authModel, time.Local)
 	if !aframe.Cursor.Visible {
 		t.Fatal("in-app auth cursor hidden")
@@ -232,8 +230,8 @@ func TestApplicationFrameAuthCursorGraphemeSafe(t *testing.T) {
 	inputY := (bounds.Dy()-min(9, bounds.Dy()))/2 + 4
 
 	model := frameBaseModel(100, 24)
-	model.Focus = app.FocusAuth
-	model.Prompt = &app.PromptState{Prompt: auth.Prompt{Label: "Telegram API ID"}, Input: []rune("a界")}
+	model.Focus = FocusAuth
+	model.Prompt = &PromptState{Prompt: auth.Prompt{Label: "Telegram API ID"}, Input: []rune("a界")}
 	frame := composeApplication(model, time.Local)
 	if !frame.Cursor.Visible {
 		t.Fatal("in-app auth cursor hidden with CJK input")
@@ -259,14 +257,14 @@ func TestApplicationFrameToastConditionAndDim(t *testing.T) {
 	}
 
 	modal := base
-	modal.Modal = &app.ModalState{Title: "Img", Loading: true}
+	modal.Modal = &ModalState{Title: "Img", Loading: true}
 	if plain := ansi.Strip(composeApplication(modal, time.Local).Content); strings.Contains(plain, "Message copied") {
 		t.Fatal("toast leaked under media modal")
 	}
 
 	reaction := base
-	reaction.ReactionPicker = &app.ReactionPicker{ChatID: 2, MessageID: 7, Selected: 1}
-	reaction.Focus = app.FocusReactionPicker
+	reaction.ReactionPicker = &ReactionPicker{ChatID: 2, MessageID: 7, Selected: 1}
+	reaction.Focus = FocusReactionPicker
 	rframe := composeApplication(reaction, time.Local)
 	plain := ansi.Strip(rframe.Content)
 	if !strings.Contains(plain, "Message copied") {
@@ -305,7 +303,7 @@ func TestApplicationFrameToastConditionAndDim(t *testing.T) {
 
 // hitsContainRectAction reports whether hits contains a hit with the exact
 // rect and click payload (test helper; no production changes).
-func hitsContainRectAction(hits ui.HitMap, rect image.Rectangle, click app.ActionReceived) bool {
+func hitsContainRectAction(hits HitMap, rect image.Rectangle, click ActionReceived) bool {
 	for _, hit := range hits {
 		if hit.Rect.Eq(rect) && hit.Click == click {
 			return true
@@ -322,7 +320,7 @@ func TestApplicationFrameReactionPickerSelectionGeometryStable(t *testing.T) {
 	// The production palette must actually contain the three required emoji.
 	for _, want := range []string{"👍", "❤️", "🔥"} {
 		found := false
-		for _, emoji := range app.ReactionPalette {
+		for _, emoji := range ReactionPalette {
 			if emoji == want {
 				found = true
 				break
@@ -336,10 +334,10 @@ func TestApplicationFrameReactionPickerSelectionGeometryStable(t *testing.T) {
 	width, height := 100, 24
 	var baseline map[string]image.Rectangle
 
-	for selected := 0; selected < len(app.ReactionPalette); selected++ {
+	for selected := 0; selected < len(ReactionPalette); selected++ {
 		model := frameBaseModel(width, height)
-		model.ReactionPicker = &app.ReactionPicker{ChatID: 2, MessageID: 7, Selected: selected}
-		model.Focus = app.FocusReactionPicker
+		model.ReactionPicker = &ReactionPicker{ChatID: 2, MessageID: 7, Selected: selected}
+		model.Focus = FocusReactionPicker
 
 		frame := composeApplication(model, time.Local)
 
@@ -397,7 +395,7 @@ func TestApplicationFrameReactionPickerSelectionGeometryStable(t *testing.T) {
 
 		// Underlying SelectChat/FocusPane hits must remain absent.
 		for _, hit := range frame.Hits {
-			if hit.Click.Action == app.SelectChat || hit.Click.Action == app.FocusPane {
+			if hit.Click.Action == SelectChat || hit.Click.Action == FocusPane {
 				t.Errorf("selection %d retained underlying hit: %#v", selected, hit)
 			}
 		}
@@ -417,16 +415,16 @@ func assertFrameContentEqualsCompositor(t *testing.T, frame frameResult) {
 // 9: AppModel.View publishes exactly the frame hits and mirrors the frame's
 // overlay request into the Kitty binder without recomputing modal geometry.
 func TestAppModelViewPublishesFrameHitsAndOverlay(t *testing.T) {
-	state := app.InitialState()
+	state := InitialState()
 	state.Width, state.Height = 100, 24
-	state.Focus = app.FocusModal
+	state.Focus = FocusModal
 	path := writeOverlayPNG(t, "frame-modal.png", 76, 30)
-	state.Modal = &app.ModalState{Title: "Image", Path: path, PreviousFocus: app.FocusConversation}
+	state.Modal = &ModalState{Title: "Image", Path: path, PreviousFocus: FocusConversation}
 	state.ChatsLoaded = true
-	state.Focus = app.FocusConversation
+	state.Focus = FocusConversation
 	state.SelectedChat = 0
 	state.Chats = []domain.Chat{{ID: 11}, {ID: 22}}
-	model := newAppModelForTest(t, app.NewEngine(state), newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, state, newTestSession(t))
 	images := &overlayImages{}
 	var rendered bytes.Buffer
 	overlay := NewOutputOverlay(&rendered, images, func(int, int) image.Point { return image.Pt(1, 2) })
@@ -437,7 +435,7 @@ func TestAppModelViewPublishesFrameHitsAndOverlay(t *testing.T) {
 
 	// Publish exactly the Kitty request reflected by the frame's Overlay: the
 	// reserved modal content rectangle, full columns/rows, and selected chat.
-	model2 := ui.Select(model.engine.Snapshot(), time.Local)
+	model2 := Select(model.Snapshot(), time.Local)
 	frame := composeApplication(model2, time.Local)
 	if images.shows != 1 {
 		t.Fatalf("Kitty shows = %d, want 1", images.shows)
@@ -482,17 +480,17 @@ func TestAppModelViewPublishesFrameHitsAndOverlay(t *testing.T) {
 
 // 9b: a prompt/FocusAuth media overlay is never Ready and View clears it.
 func TestAppModelViewAuthOverlayNotReady(t *testing.T) {
-	state := app.InitialState()
+	state := InitialState()
 	state.Width, state.Height = 100, 24
-	state.Focus = app.FocusAuth
-	state.Prompt = &app.PromptState{Prompt: auth.Prompt{Label: "Telegram API ID"}}
+	state.Focus = FocusAuth
+	state.Prompt = &PromptState{Prompt: auth.Prompt{Label: "Telegram API ID"}}
 	state.ChatsLoaded = true
-	model := newAppModelForTest(t, app.NewEngine(state), newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, state, newTestSession(t))
 	images := &overlayImages{}
 	overlay := NewOutputOverlay(&bytes.Buffer{}, images, nil)
 	model.SetOutputOverlay(overlay)
 
-	frame := composeApplication(ui.Select(model.engine.Snapshot(), time.Local), time.Local)
+	frame := composeApplication(Select(model.Snapshot(), time.Local), time.Local)
 	if frame.Overlay.Ready {
 		t.Fatal("auth/prompt overlay unexpectedly Ready")
 	}
@@ -508,10 +506,10 @@ func TestAppModelViewAuthOverlayNotReady(t *testing.T) {
 func TestApplicationFramePhotoSend(t *testing.T) {
 	// Base model with PhotoSend active.
 	basePhoto := frameBaseModel(100, 24)
-	basePhoto.PhotoSend = &app.PhotoSendState{
+	basePhoto.PhotoSend = &PhotoSendState{
 		ChatID:        2,
 		Input:         []rune("/tmp/photo.jpg"),
-		PreviousFocus: app.FocusConversation,
+		PreviousFocus: FocusConversation,
 	}
 
 	// 1: Visible [Photo] in composer and [Send] photoSendSubmit.
@@ -549,7 +547,7 @@ func TestApplicationFramePhotoSend(t *testing.T) {
 		if !strings.Contains(basePlain, "toast") {
 			t.Fatal("toast visible under clean overlay")
 		}
-		toastModel.PhotoSend = &app.PhotoSendState{ChatID: 2, Input: []rune("/tmp/x")}
+		toastModel.PhotoSend = &PhotoSendState{ChatID: 2, Input: []rune("/tmp/x")}
 		framePlain := ansi.Strip(composeApplication(toastModel, time.Local).Content)
 		if strings.Contains(framePlain, "toast") {
 			t.Fatal("toast leaked under PhotoSend overlay")
@@ -561,7 +559,7 @@ func TestApplicationFramePhotoSend(t *testing.T) {
 		frame := composeApplication(basePhoto, time.Local)
 		for _, hit := range frame.Hits {
 			switch hit.Click.Action {
-			case app.SelectChat, app.FocusPane, app.ComposerSubmit, app.OpenPhotoSend:
+			case SelectChat, FocusPane, ComposerSubmit, OpenPhotoSend:
 				t.Errorf("underlying hit leaked: %#v", hit)
 			}
 		}
@@ -571,13 +569,13 @@ func TestApplicationFramePhotoSend(t *testing.T) {
 		hasCancel := false
 		for _, hit := range frame.Hits {
 			switch hit.Click.Action {
-			case app.PhotoSendSubmit:
+			case PhotoSendSubmit:
 				hasSubmit = true
-			case app.Close:
+			case Close:
 				hasClose = true
 			}
 			// Cancel hit is detected via Close action in modal.
-			if hit.Click.Action == app.Close {
+			if hit.Click.Action == Close {
 				hasCancel = true
 			}
 		}
@@ -618,10 +616,10 @@ func TestApplicationFramePhotoSend(t *testing.T) {
 	// 5: Blank path no submit hit.
 	t.Run("blankNoSubmit", func(t *testing.T) {
 		empty := basePhoto
-		empty.PhotoSend = &app.PhotoSendState{ChatID: 2, Input: []rune("")}
+		empty.PhotoSend = &PhotoSendState{ChatID: 2, Input: []rune("")}
 		frame := composeApplication(empty, time.Local)
 		for _, hit := range frame.Hits {
-			if hit.Click.Action == app.PhotoSendSubmit {
+			if hit.Click.Action == PhotoSendSubmit {
 				t.Errorf("blank path has submit hit: %#v", hit)
 			}
 		}
@@ -694,13 +692,13 @@ func TestApplicationFramePhotoSend(t *testing.T) {
 	// 10: Impossible auth+PhotoSend: auth precedence.
 	t.Run("authPrecedence", func(t *testing.T) {
 		authModel := frameBaseModel(100, 24)
-		authModel.PhotoSend = &app.PhotoSendState{ChatID: 2, Input: []rune("/tmp/x")}
-		authModel.Focus = app.FocusAuth
-		authModel.Prompt = &app.PromptState{Prompt: auth.Prompt{Label: "Auth"}}
+		authModel.PhotoSend = &PhotoSendState{ChatID: 2, Input: []rune("/tmp/x")}
+		authModel.Focus = FocusAuth
+		authModel.Prompt = &PromptState{Prompt: auth.Prompt{Label: "Auth"}}
 		frame := composeApplication(authModel, time.Local)
 		// Auth should override PhotoSend; only auth hits present.
 		for _, hit := range frame.Hits {
-			if hit.Click.Action == app.PhotoSendSubmit || hit.Click.Action == app.OpenPhotoSend {
+			if hit.Click.Action == PhotoSendSubmit || hit.Click.Action == OpenPhotoSend {
 				t.Errorf("PhotoSend hit leaked under auth: %#v", hit)
 			}
 		}

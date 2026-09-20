@@ -9,7 +9,6 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 const chatRowHeight = 4
@@ -51,13 +50,13 @@ func chatMetadataSurface(timestamp int64, unread, mentions int, muted bool, loca
 }
 
 // activeChatSurfaceRow returns the ChatRow for the active chat, or a zero row.
-func activeChatSurfaceRow(model ui.ViewModel) ui.ChatRow {
+func activeChatSurfaceRow(model ViewModel) ChatRow {
 	for _, row := range model.Chats {
 		if row.Chat.ID == model.ActiveChat.ID {
 			return row
 		}
 	}
-	return ui.ChatRow{}
+	return ChatRow{}
 }
 
 // avatarSurfaceInitials returns up to two uppercase initials from name.
@@ -96,11 +95,11 @@ func clipSurfaceLine(value string, width int) string {
 // groupsBeforeSurfaceOffset returns a copy of groups with the trailing message
 // groups trimmed until exactly offset messages have been removed. A nonpositive
 // offset returns the original slice unchanged.
-func groupsBeforeSurfaceOffset(groups []ui.RenderedMessageGroup, offset int) []ui.RenderedMessageGroup {
+func groupsBeforeSurfaceOffset(groups []RenderedMessageGroup, offset int) []RenderedMessageGroup {
 	if offset <= 0 {
 		return groups
 	}
-	result := append([]ui.RenderedMessageGroup(nil), groups...)
+	result := append([]RenderedMessageGroup(nil), groups...)
 	remaining := offset
 	for index := len(result) - 1; index >= 0 && remaining > 0; index-- {
 		count := len(result[index].Messages)

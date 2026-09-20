@@ -8,21 +8,19 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // buildChatsLayer builds the chats pane surface: a rounded pane root with an
 // intrinsic title, an optional error/loading/empty state line, and a windowed
 // list of chat rows nested pane-locally. Interactions are absolute. An empty
 // viewport intersection returns a zero surface.
-func buildChatsLayer(model ui.ViewModel, location *time.Location, styles renderStyles) surfaceResult {
+func buildChatsLayer(model ViewModel, location *time.Location, styles renderStyles) surfaceResult {
 	rect := model.Layout.Chats.Intersect(image.Rect(0, 0, model.Width, model.Height))
 	if rect.Empty() {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
 
-	pane := buildPane(rect, "Chats", model.Focus == app.FocusChats, "pane:chats", app.FocusChats, styles)
+	pane := buildPane(rect, "Chats", model.Focus == FocusChats, "pane:chats", FocusChats, styles)
 	if pane.Layer == nil {
 		return pane
 	}
@@ -95,7 +93,7 @@ func buildChatsLayer(model ui.ViewModel, location *time.Location, styles renderS
 // root is a fixed full-row background with the chat ID; children (avatar and
 // text lines) are positioned locally inside the row. Interactions are absolute.
 // An empty rect returns a zero surface with a hidden cursor.
-func buildChatRowLayer(row ui.ChatRow, rect image.Rectangle, location *time.Location, styles renderStyles) surfaceResult {
+func buildChatRowLayer(row ChatRow, rect image.Rectangle, location *time.Location, styles renderStyles) surfaceResult {
 	if rect.Empty() {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
@@ -113,9 +111,9 @@ func buildChatRowLayer(row ui.ChatRow, rect image.Rectangle, location *time.Loca
 		ID:        fmt.Sprintf("chat:%d", row.Chat.ID),
 		Rect:      rect,
 		Z:         zRowBackground,
-		Click:     app.ActionReceived{Action: app.SelectChat, ChatID: row.Chat.ID},
-		WheelUp:   app.ActionReceived{Action: app.SelectPrevious},
-		WheelDown: app.ActionReceived{Action: app.SelectNext},
+		Click:     ActionReceived{Action: SelectChat, ChatID: row.Chat.ID},
+		WheelUp:   ActionReceived{Action: SelectPrevious},
+		WheelDown: ActionReceived{Action: SelectNext},
 	}}
 
 	avatarLocal := image.Rect(0, 0, min(rect.Dx(), 6), min(rect.Dy(), 3))
@@ -181,7 +179,7 @@ func buildChatRowLayer(row ui.ChatRow, rect image.Rectangle, location *time.Loca
 			ID:    fmt.Sprintf("chat-avatar-retry:%d", row.Chat.ID),
 			Rect:  avatarLocal.Add(rect.Min),
 			Z:     zControl,
-			Click: app.ActionReceived{Action: app.Retry, AvatarKey: row.AvatarKey},
+			Click: ActionReceived{Action: Retry, AvatarKey: row.AvatarKey},
 		})
 	}
 

@@ -6,10 +6,8 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
 	"github.com/zylen-det/telegram-tui/internal/media/pixel"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // memberDetailAvatarWidth/Height is the sampled avatar geometry inside the
@@ -28,7 +26,7 @@ func membersFrame(bounds image.Rectangle) image.Rectangle {
 	return centeredSurfaceRectangle(bounds, width, height).Intersect(bounds)
 }
 
-func membersTitle(members *app.MembersState) string {
+func membersTitle(members *MembersState) string {
 	if members != nil && members.Notice != "" {
 		return "Members · " + sanitizeDisplayString(members.Notice)
 	}
@@ -42,7 +40,7 @@ func membersTitle(members *app.MembersState) string {
 	return "Members"
 }
 
-func buildMembersLayer(model ui.ViewModel, styles renderStyles, selectorView string) surfaceResult {
+func buildMembersLayer(model ViewModel, styles renderStyles, selectorView string) surfaceResult {
 	if model.Members == nil {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
@@ -60,7 +58,7 @@ func buildMembersLayer(model ui.ViewModel, styles renderStyles, selectorView str
 // reducer-ordered actions, each reduced to the window that reaches the frame.
 // dim matches the renderer's avatar faint flag so the painted header rows are
 // identical wherever the rows are drawn.
-func displayedMembersRows(model ui.ViewModel, dim bool) []modalRowSpec {
+func displayedMembersRows(model ViewModel, dim bool) []modalRowSpec {
 	if model.Members == nil {
 		return nil
 	}
@@ -82,7 +80,7 @@ func displayedMembersRows(model ui.ViewModel, dim bool) []modalRowSpec {
 // memberDetailChromeRows counts the non-navigable detail rows the selector
 // geometry must account for: avatar rows, info headers, and the Working
 // status row. Navigable options (Back plus actions) are counted separately.
-func memberDetailChromeRows(detail *app.MemberDetail, hasAvatar bool) int {
+func memberDetailChromeRows(detail *MemberDetail, hasAvatar bool) int {
 	if detail == nil {
 		return 0
 	}
@@ -131,7 +129,7 @@ func memberAvatarLabels(avatar pixel.Avatar, labelWidth int, dim bool) []string 
 	return rows
 }
 
-func membersRows(members *app.MembersState) []modalRowSpec {
+func membersRows(members *MembersState) []modalRowSpec {
 	if members == nil {
 		return nil
 	}
@@ -141,8 +139,8 @@ func membersRows(members *app.MembersState) []modalRowSpec {
 			ID:       fmt.Sprintf("member:%d", member.User.ID),
 			Label:    memberResultLabel(member),
 			Selected: index == members.Selected,
-			Action: app.ActionReceived{
-				Action: app.OpenMemberDetail,
+			Action: ActionReceived{
+				Action: OpenMemberDetail,
 				ChatID: members.ChatID,
 				UserID: member.User.ID,
 			},
@@ -163,7 +161,7 @@ func membersRows(members *app.MembersState) []modalRowSpec {
 // user info header rows, a Back row, then the action rows in reducer order.
 // It also returns the leading non-navigable header count so windowing can
 // offset the detail selection index.
-func memberDetailRows(members *app.MembersState, avatar []string) ([]modalRowSpec, int) {
+func memberDetailRows(members *MembersState, avatar []string) ([]modalRowSpec, int) {
 	if members == nil || members.Detail == nil {
 		return nil, 0
 	}
@@ -188,39 +186,39 @@ func memberDetailRows(members *app.MembersState, avatar []string) ([]modalRowSpe
 		ID:       "member:back",
 		Label:    "‹ Back",
 		Selected: detail.Selected == 0,
-		Action:   app.ActionReceived{Action: app.CloseMemberDetail, ChatID: members.ChatID},
+		Action:   ActionReceived{Action: CloseMemberDetail, ChatID: members.ChatID},
 	})
-	for index, item := range app.MemberDetailActions(detail) {
+	for index, item := range MemberDetailActions(detail) {
 		spec := modalRowSpec{Selected: detail.Selected == index+1}
 		switch item {
-		case app.ViewMemberAvatar:
+		case ViewMemberAvatar:
 			spec.ID = "member-action:view-avatar"
 			spec.Label = "View avatar"
-			spec.Action = app.ActionReceived{Action: app.ViewMemberAvatar, ChatID: members.ChatID, UserID: detail.UserID}
-		case app.CopyMemberUsername:
+			spec.Action = ActionReceived{Action: ViewMemberAvatar, ChatID: members.ChatID, UserID: detail.UserID}
+		case CopyMemberUsername:
 			spec.ID = "member-action:copy-username"
 			spec.Label = "Copy username"
-			spec.Action = app.ActionReceived{Action: app.CopyMemberUsername, ChatID: members.ChatID, UserID: detail.UserID}
-		case app.AddMemberContact:
+			spec.Action = ActionReceived{Action: CopyMemberUsername, ChatID: members.ChatID, UserID: detail.UserID}
+		case AddMemberContact:
 			spec.ID = "member-action:add-contact"
 			spec.Label = "Add to contacts"
-			spec.Action = app.ActionReceived{Action: app.AddMemberContact, ChatID: members.ChatID, UserID: detail.UserID}
-		case app.RemoveMemberContact:
+			spec.Action = ActionReceived{Action: AddMemberContact, ChatID: members.ChatID, UserID: detail.UserID}
+		case RemoveMemberContact:
 			spec.ID = "member-action:remove-contact"
 			spec.Label = "Remove from contacts"
-			spec.Action = app.ActionReceived{Action: app.RemoveMemberContact, ChatID: members.ChatID, UserID: detail.UserID}
-		case app.BlockMember:
+			spec.Action = ActionReceived{Action: RemoveMemberContact, ChatID: members.ChatID, UserID: detail.UserID}
+		case BlockMember:
 			spec.ID = "member-action:block"
 			spec.Label = "Block user"
-			spec.Action = app.ActionReceived{Action: app.BlockMember, ChatID: members.ChatID, UserID: detail.UserID}
-		case app.UnblockMember:
+			spec.Action = ActionReceived{Action: BlockMember, ChatID: members.ChatID, UserID: detail.UserID}
+		case UnblockMember:
 			spec.ID = "member-action:unblock"
 			spec.Label = "Unblock user"
-			spec.Action = app.ActionReceived{Action: app.UnblockMember, ChatID: members.ChatID, UserID: detail.UserID}
-		case app.OpenMemberAdministration:
+			spec.Action = ActionReceived{Action: UnblockMember, ChatID: members.ChatID, UserID: detail.UserID}
+		case OpenMemberAdministration:
 			spec.ID = "member-action:manage-in-chat"
 			spec.Label = "Manage in chat"
-			spec.Action = app.ActionReceived{Action: app.OpenMemberAdministration, ChatID: members.ChatID, UserID: detail.UserID}
+			spec.Action = ActionReceived{Action: OpenMemberAdministration, ChatID: members.ChatID, UserID: detail.UserID}
 		default:
 			continue
 		}

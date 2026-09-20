@@ -6,17 +6,15 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/media/thumbnail"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
-func buildStickerPickerLayer(model ui.ViewModel, styles renderStyles) surfaceResult {
+func buildStickerPickerLayer(model ViewModel, styles renderStyles) surfaceResult {
 	picker := model.StickerPicker
 	if picker == nil || model.Width <= 0 || model.Height <= 0 {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
-	modalW, modalH, columns, rows := app.StickerGridGeometry(model.Width, model.Height)
+	modalW, modalH, columns, rows := StickerGridGeometry(model.Width, model.Height)
 	bounds := image.Rect(0, 0, model.Width, model.Height)
 	frame := image.Rect((model.Width-modalW)/2, (model.Height-modalH)/2, (model.Width-modalW)/2+modalW, (model.Height-modalH)/2+modalH).Intersect(bounds)
 	if frame.Empty() {
@@ -29,12 +27,12 @@ func buildStickerPickerLayer(model ui.ViewModel, styles renderStyles) surfaceRes
 		Width(frame.Dx()).Height(frame.Dy()).Render("")
 	root := lipgloss.NewLayer(rootContent).X(frame.Min.X).Y(frame.Min.Y).Z(zModalFrame)
 
-	request := func(action app.Action) app.ActionReceived {
-		return app.ActionReceived{Action: action, RequestID: picker.RequestID}
+	request := func(action Action) ActionReceived {
+		return ActionReceived{Action: action, RequestID: picker.RequestID}
 	}
 	interactions := []layerInteraction{{
 		ID: "sticker-picker:modal", Rect: bounds, Z: zModalFrame - 1, Virtual: true,
-		WheelUp: request(app.StickerMoveUp), WheelDown: request(app.StickerMoveDown),
+		WheelUp: request(StickerMoveUp), WheelDown: request(StickerMoveDown),
 	}}
 	if title := ansi.Truncate("Stickers", max(0, frame.Dx()-6), ""); title != "" {
 		root.AddLayers(lipgloss.NewLayer(styles.Title.Render(title)).X(2).Y(0).Z(zModalContent))
@@ -42,7 +40,7 @@ func buildStickerPickerLayer(model ui.ViewModel, styles renderStyles) surfaceRes
 	closeLocal := image.Rect(frame.Dx()-3, 0, frame.Dx()-2, 1).Intersect(image.Rect(0, 0, frame.Dx(), frame.Dy()))
 	if !closeLocal.Empty() {
 		interactions = append(interactions, addInteractive(root, frame.Min, closeLocal, "sticker-picker:close", zModalControl,
-			renderLine(styles.Accent, "×", closeLocal.Dx()), request(app.Close), app.ActionReceived{}, app.ActionReceived{}))
+			renderLine(styles.Accent, "×", closeLocal.Dx()), request(Close), ActionReceived{}, ActionReceived{}))
 	}
 
 	if picker.Loading {
@@ -68,8 +66,8 @@ func buildStickerPickerLayer(model ui.ViewModel, styles renderStyles) surfaceRes
 	for index := first; index < last; index++ {
 		visible := index - first
 		row, column := visible/columns, visible%columns
-		local := image.Rect(1+column*app.StickerTileWidth, 2+row*app.StickerTileHeight,
-			1+(column+1)*app.StickerTileWidth, 2+(row+1)*app.StickerTileHeight).
+		local := image.Rect(1+column*StickerTileWidth, 2+row*StickerTileHeight,
+			1+(column+1)*StickerTileWidth, 2+(row+1)*StickerTileHeight).
 			Intersect(image.Rect(1, 1, frame.Dx()-1, frame.Dy()-1))
 		if local.Empty() {
 			continue
@@ -81,9 +79,9 @@ func buildStickerPickerLayer(model ui.ViewModel, styles renderStyles) surfaceRes
 		}
 		tileText := style.Width(local.Dx()).Height(local.Dy()).Render("")
 		id := fmt.Sprintf("sticker:%d", sticker.File.ID)
-		click := app.ActionReceived{Action: app.StickerActivate, RequestID: picker.RequestID, StickerFileID: sticker.File.ID}
+		click := ActionReceived{Action: StickerActivate, RequestID: picker.RequestID, StickerFileID: sticker.File.ID}
 		interactions = append(interactions, addInteractive(root, frame.Min, local, id, zModalRow, tileText,
-			click, request(app.StickerMoveUp), request(app.StickerMoveDown)))
+			click, request(StickerMoveUp), request(StickerMoveDown)))
 
 		block := blocks[sticker.File.ID]
 		if block.Width > 0 && block.Height > 0 {

@@ -11,18 +11,16 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // selectorSyncState is a loading message action menu that also asks for the
 // bounded PreferEdit override, used by the selector route tests.
-func selectorSyncState() app.State {
-	state := app.InitialState()
+func selectorSyncState() State {
+	state := InitialState()
 	state.Width, state.Height = 80, 24
-	state.Focus = app.FocusModal
-	state.MessageMenu = &app.MessageActionMenu{
+	state.Focus = FocusModal
+	state.MessageMenu = &MessageActionMenu{
 		RequestID:    7,
 		ChatID:       9,
 		MessageID:    2,
@@ -34,7 +32,7 @@ func selectorSyncState() app.State {
 }
 
 func TestListModalControllerOwnsPersistentHost(t *testing.T) {
-	model := newAppModelForTest(t, app.NewEngine(app.InitialState()), newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, InitialState(), newTestSession(t))
 	if model.listModals.host == nil || model.listModals.host.field == nil {
 		t.Fatal("NewAppModel selector host is nil")
 	}
@@ -42,7 +40,7 @@ func TestListModalControllerOwnsPersistentHost(t *testing.T) {
 	if copied.listModals.host != model.listModals.host {
 		t.Fatal("AppModel value copy replaced persistent selector host")
 	}
-	other := newAppModelForTest(t, app.NewEngine(app.InitialState()), newBoundedAppRuntimeForModelTest(t))
+	other := newAppModelForTest(t, InitialState(), newTestSession(t))
 	if other.listModals.host == model.listModals.host {
 		t.Fatal("independent AppModels share selector host")
 	}
@@ -50,8 +48,7 @@ func TestListModalControllerOwnsPersistentHost(t *testing.T) {
 
 func TestListModalControllerSynchronizesMessageLifecycleAndPreferEdit(t *testing.T) {
 	state := selectorSyncState()
-	engine := app.NewEngine(state)
-	model := newAppModelForTest(t, engine, newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, state, newTestSession(t))
 	_ = model.syncListModalController()
 
 	loadingOptions := selectorOptionsFromRows(messageActionRows(state.MessageMenu))
@@ -67,15 +64,15 @@ func TestListModalControllerSynchronizesMessageLifecycleAndPreferEdit(t *testing
 	// The async properties result introduces Edit while Copy remains present.
 	// PreferEdit must intentionally override the generic reorder-preservation
 	// policy exactly for this transition.
-	model, _ = updateAppModel(t, model, appEventMsg{event: app.MessagePropertiesLoaded{
+	model, _ = updateAppModel(t, model, MessagePropertiesLoaded{
 		RequestID:    7,
 		ChatID:       9,
 		MessageID:    2,
 		Capabilities: domain.MessageCapabilities{Copy: true, Edit: true},
-	}})
-	settled := engine.Snapshot()
+	})
+	settled := model.Snapshot()
 	settledOptions := selectorOptionsFromRows(messageActionRows(settled.MessageMenu))
-	edit := app.ActionReceived{Action: app.EditMessage, ChatID: 9, MessageID: 2}
+	edit := ActionReceived{Action: EditMessage, ChatID: 9, MessageID: 2}
 	if model.listModals.host.Value() != edit || selectorOptionIndex(settledOptions, edit) < 0 {
 		t.Fatalf("PreferEdit properties transition selected %#v, want Edit", model.listModals.host.Value())
 	}
@@ -83,9 +80,9 @@ func TestListModalControllerSynchronizesMessageLifecycleAndPreferEdit(t *testing
 	// PreferEdit is not a permanent force mode. Once Edit is already present,
 	// an option-order change with a stale legacy index must preserve the user's
 	// current semantic Copy selection.
-	copyValue := app.ActionReceived{Action: app.CopyMessage, ChatID: 9, MessageID: 2}
+	copyValue := ActionReceived{Action: CopyMessage, ChatID: 9, MessageID: 2}
 	settled.MessageMenu.Selected = selectorOptionIndex(settledOptions, copyValue)
-	model.engine = app.NewEngine(settled)
+	model.state = &settled
 	_ = model.syncListModalController()
 	if model.listModals.host.Value() != copyValue {
 		t.Fatalf("unchanged settled selector ignored authoritative Copy: %#v", model.listModals.host.Value())
@@ -93,7 +90,7 @@ func TestListModalControllerSynchronizesMessageLifecycleAndPreferEdit(t *testing
 	settled.MessageMenu.MediaFile = domain.MediaFileRef{ID: 44, CanDownload: true}
 	// Selected remains the old Copy index and now points at Edit after View image
 	// is inserted. Semantic Copy is still present and must survive.
-	model.engine = app.NewEngine(settled)
+	model.state = &settled
 	_ = model.syncListModalController()
 	if model.listModals.host.Value() != copyValue {
 		t.Fatalf("PreferEdit permanently forced stale reordered index: %#v", model.listModals.host.Value())
@@ -101,22 +98,22 @@ func TestListModalControllerSynchronizesMessageLifecycleAndPreferEdit(t *testing
 }
 
 func TestListModalControllerSynchronizesReactionForwardReorderAndClose(t *testing.T) {
-	state := app.InitialState()
+	state := InitialState()
 	state.Width, state.Height = 80, 24
-	state.Focus = app.FocusReactionPicker
-	state.ReactionPicker = &app.ReactionPicker{RequestID: 8, ChatID: 9, MessageID: 2, Selected: 2}
-	model := newAppModelForTest(t, app.NewEngine(state), newBoundedAppRuntimeForModelTest(t))
+	state.Focus = FocusReactionPicker
+	state.ReactionPicker = &ReactionPicker{RequestID: 8, ChatID: 9, MessageID: 2, Selected: 2}
+	model := newAppModelForTest(t, state, newTestSession(t))
 	_ = model.syncListModalController()
 	reactionOptions := selectorOptionsFromRows(reactionRows(state.ReactionPicker))
 	if model.listModals.host.Identity() != (selectorIdentity{Kind: selectorReaction, RequestID: 8, ChatID: 9, MessageID: 2}) || model.listModals.host.Value() != reactionOptions[2].Value {
 		t.Fatalf("reaction selector = id:%#v value:%#v", model.listModals.host.Identity(), model.listModals.host.Value())
 	}
 
-	state.Focus = app.FocusForwardPicker
+	state.Focus = FocusForwardPicker
 	state.ReactionPicker = nil
-	state.ForwardPicker = &app.ForwardPicker{RequestID: 9, SourceChatID: 9, SourceMessageID: 2, SelectedChat: 1}
+	state.ForwardPicker = &ForwardPicker{RequestID: 9, SourceChatID: 9, SourceMessageID: 2, SelectedChat: 1}
 	state.Chats = []domain.Chat{{ID: 11, Title: "A"}, {ID: 22, Title: "B"}}
-	model.engine = app.NewEngine(state)
+	model.state = &state
 	_ = model.syncListModalController()
 	if model.listModals.host.Identity() != (selectorIdentity{Kind: selectorForward, RequestID: 9, ChatID: 9, MessageID: 2}) || model.listModals.host.Value().ChatID != 22 {
 		t.Fatalf("forward selector = id:%#v value:%#v", model.listModals.host.Identity(), model.listModals.host.Value())
@@ -124,27 +121,27 @@ func TestListModalControllerSynchronizesReactionForwardReorderAndClose(t *testin
 
 	state.Chats = []domain.Chat{{ID: 22, Title: "B"}, {ID: 11, Title: "A"}}
 	// Legacy SelectedChat=1 is stale after reorder; semantic destination 22 wins.
-	model.engine = app.NewEngine(state)
+	model.state = &state
 	_ = model.syncListModalController()
 	if model.listModals.host.Value().ChatID != 22 {
 		t.Fatalf("forward reorder lost semantic ChatID: %#v", model.listModals.host.Value())
 	}
 
-	state.Focus = app.FocusConversation
+	state.Focus = FocusConversation
 	state.ForwardPicker = nil
-	model.engine = app.NewEngine(state)
+	model.state = &state
 	_ = model.syncListModalController()
-	if model.listModals.host.Identity() != (selectorIdentity{}) || model.listModals.host.Value() != (app.ActionReceived{}) || len(model.listModals.host.Options()) != 0 || model.listModals.host.focused {
+	if model.listModals.host.Identity() != (selectorIdentity{}) || model.listModals.host.Value() != (ActionReceived{}) || len(model.listModals.host.Options()) != 0 || model.listModals.host.focused {
 		t.Fatalf("closed selector retained state: id:%#v value:%#v options:%#v focus:%t", model.listModals.host.Identity(), model.listModals.host.Value(), model.listModals.host.Options(), model.listModals.host.focused)
 	}
 }
 
 func TestAppModelSyncsListModalControllerOnEveryPostEngineBatch(t *testing.T) {
-	state := app.InitialState()
+	state := InitialState()
 	state.Width, state.Height = 80, 24
-	state.Focus = app.FocusReactionPicker
-	state.ReactionPicker = &app.ReactionPicker{RequestID: 12, ChatID: 9, MessageID: 2, Selected: 1}
-	model := newAppModelForTest(t, app.NewEngine(state), newBoundedAppRuntimeForModelTest(t))
+	state.Focus = FocusReactionPicker
+	state.ReactionPicker = &ReactionPicker{RequestID: 12, ChatID: 9, MessageID: 2, Selected: 1}
+	model := newAppModelForTest(t, state, newTestSession(t))
 	model, _ = updateAppModel(t, model, tea.WindowSizeMsg{Width: 100, Height: 30})
 	if model.listModals.host.Identity().Kind != selectorReaction || model.listModals.host.Value() != selectorOptionsFromRows(reactionRows(state.ReactionPicker))[1].Value {
 		t.Fatalf("WindowSize did not synchronize selector: id=%#v value=%#v", model.listModals.host.Identity(), model.listModals.host.Value())
@@ -173,37 +170,37 @@ func TestAppModelSyncsListModalControllerOnEveryPostEngineBatch(t *testing.T) {
 // must resolve from it.
 type listModalDescriptorCase struct {
 	name        string
-	model       ui.ViewModel
+	model       ViewModel
 	wantKind    selectorKind
 	wantFocused bool
 	wantIDs     []string
 	wantLabels  []string
-	wantValue   app.ActionReceived
+	wantValue   ActionReceived
 }
 
 func TestListModalControllerDescriptorCoversEverySupportedSurface(t *testing.T) {
 	tests := []listModalDescriptorCase{
 		{
 			name: "chat actions",
-			model: ui.ViewModel{
-				Width: 100, Height: 24, Layout: ui.Layout{Mode: app.LayoutWide},
-				Focus:      app.FocusChatActions,
+			model: ViewModel{
+				Width: 100, Height: 24, Layout: ViewLayout{Mode: LayoutWide},
+				Focus:      FocusChatActions,
 				ActiveChat: domain.Chat{ID: 9, Title: "Team", Kind: domain.ChatSupergroup, IsMember: true},
-				ChatActions: &app.ChatActionMenuState{
+				ChatActions: &ChatActionMenuState{
 					RequestID: 4, ChatID: 9, Selected: 1, Working: true,
 				},
 			},
 			wantKind:    selectorChatActions,
 			wantFocused: true,
 			wantLabels:  []string{"Open chat"},
-			wantValue:   app.ActionReceived{Action: app.ViewChatInfo, ChatID: 9},
+			wantValue:   ActionReceived{Action: ViewChatInfo, ChatID: 9},
 		},
 		{
 			name: "message actions",
-			model: ui.ViewModel{
-				Width: 100, Height: 24, Layout: ui.Layout{Mode: app.LayoutWide},
-				Focus: app.FocusModal,
-				MessageMenu: &app.MessageActionMenu{
+			model: ViewModel{
+				Width: 100, Height: 24, Layout: ViewLayout{Mode: LayoutWide},
+				Focus: FocusModal,
+				MessageMenu: &MessageActionMenu{
 					RequestID: 7, ChatID: 9, MessageID: 2, Loading: true,
 					Capabilities: domain.MessageCapabilities{Reply: true, Copy: true},
 					Selected:     1,
@@ -212,27 +209,27 @@ func TestListModalControllerDescriptorCoversEverySupportedSurface(t *testing.T) 
 			wantKind:    selectorMessageActions,
 			wantFocused: true,
 			wantIDs:     []string{"action:reply", "action:copy"},
-			wantValue:   app.ActionReceived{Action: app.CopyMessage, ChatID: 9, MessageID: 2},
+			wantValue:   ActionReceived{Action: CopyMessage, ChatID: 9, MessageID: 2},
 		},
 		{
 			name: "reaction picker",
-			model: ui.ViewModel{
-				Width: 100, Height: 24, Layout: ui.Layout{Mode: app.LayoutWide},
-				Focus:          app.FocusReactionPicker,
-				ReactionPicker: &app.ReactionPicker{RequestID: 8, ChatID: 9, MessageID: 2, Selected: 2},
+			model: ViewModel{
+				Width: 100, Height: 24, Layout: ViewLayout{Mode: LayoutWide},
+				Focus:          FocusReactionPicker,
+				ReactionPicker: &ReactionPicker{RequestID: 8, ChatID: 9, MessageID: 2, Selected: 2},
 			},
 			wantKind:    selectorReaction,
 			wantFocused: true,
 			wantIDs:     reactionOptionIDs(),
-			wantValue:   app.ActionReceived{Action: app.Activate, ChatID: 9, MessageID: 2, Rune: rune(2 + 0x10000)},
+			wantValue:   ActionReceived{Action: Activate, ChatID: 9, MessageID: 2, Rune: rune(2 + 0x10000)},
 		},
 		{
 			name: "forward picker",
-			model: ui.ViewModel{
-				Width: 100, Height: 24, Layout: ui.Layout{Mode: app.LayoutWide},
-				Focus:         app.FocusForwardPicker,
-				ForwardPicker: &app.ForwardPicker{RequestID: 9, SourceChatID: 9, SourceMessageID: 2, SelectedChat: 1},
-				Chats: []ui.ChatRow{
+			model: ViewModel{
+				Width: 100, Height: 24, Layout: ViewLayout{Mode: LayoutWide},
+				Focus:         FocusForwardPicker,
+				ForwardPicker: &ForwardPicker{RequestID: 9, SourceChatID: 9, SourceMessageID: 2, SelectedChat: 1},
+				Chats: []ChatRow{
 					{Chat: domain.Chat{ID: 11, Title: "A"}},
 					{Chat: domain.Chat{ID: 22, Title: "B"}},
 				},
@@ -240,7 +237,7 @@ func TestListModalControllerDescriptorCoversEverySupportedSurface(t *testing.T) 
 			wantKind:    selectorForward,
 			wantFocused: true,
 			wantIDs:     []string{"forward:0:11", "forward:1:22"},
-			wantValue:   app.ActionReceived{Action: app.Activate, ChatID: 22},
+			wantValue:   ActionReceived{Action: Activate, ChatID: 22},
 		},
 		{
 			name:        "message search results",
@@ -248,7 +245,7 @@ func TestListModalControllerDescriptorCoversEverySupportedSurface(t *testing.T) 
 			wantKind:    selectorMessageSearch,
 			wantFocused: true,
 			wantIDs:     []string{"search:30", "search:20"},
-			wantValue:   app.ActionReceived{Action: app.SelectMessage, ChatID: 9, MessageID: 20},
+			wantValue:   ActionReceived{Action: SelectMessage, ChatID: 9, MessageID: 20},
 		},
 		{
 			name:        "members list",
@@ -256,7 +253,7 @@ func TestListModalControllerDescriptorCoversEverySupportedSurface(t *testing.T) 
 			wantKind:    selectorMembers,
 			wantFocused: true,
 			wantIDs:     []string{"member:1", "member:2"},
-			wantValue:   app.ActionReceived{Action: app.OpenMemberDetail, ChatID: 9, UserID: 2},
+			wantValue:   ActionReceived{Action: OpenMemberDetail, ChatID: 9, UserID: 2},
 		},
 		{
 			name:        "members detail",
@@ -265,7 +262,7 @@ func TestListModalControllerDescriptorCoversEverySupportedSurface(t *testing.T) 
 			wantFocused: true,
 			wantIDs: []string{"member:back", "member-action:copy-username", "member-action:add-contact",
 				"member-action:remove-contact", "member-action:block", "member-action:unblock"},
-			wantValue: app.ActionReceived{Action: app.CloseMemberDetail, ChatID: 9},
+			wantValue: ActionReceived{Action: CloseMemberDetail, ChatID: 9},
 		},
 		{
 			name:        "pinned messages",
@@ -273,7 +270,7 @@ func TestListModalControllerDescriptorCoversEverySupportedSurface(t *testing.T) 
 			wantKind:    selectorPinnedMessages,
 			wantFocused: true,
 			wantIDs:     []string{"pinned:30", "pinned:20"},
-			wantValue:   app.ActionReceived{Action: app.SelectMessage, ChatID: 9, MessageID: 20},
+			wantValue:   ActionReceived{Action: SelectMessage, ChatID: 9, MessageID: 20},
 		},
 		{
 			name:        "topics",
@@ -281,7 +278,7 @@ func TestListModalControllerDescriptorCoversEverySupportedSurface(t *testing.T) 
 			wantKind:    selectorTopics,
 			wantFocused: true,
 			wantIDs:     []string{"topic:all", "topic:1", "topic:2"},
-			wantValue:   app.ActionReceived{Action: app.SelectTopic, ChatID: 9, TopicID: 1},
+			wantValue:   ActionReceived{Action: SelectTopic, ChatID: 9, TopicID: 1},
 		},
 	}
 	for _, test := range tests {
@@ -337,42 +334,42 @@ func TestListModalControllerDescriptorCoversEverySupportedSurface(t *testing.T) 
 func TestListModalControllerDescriptorRowsAreThePaintedRows(t *testing.T) {
 	tests := []struct {
 		name   string
-		model  ui.ViewModel
-		rows   func(ui.ViewModel) []modalRowSpec
+		model  ViewModel
+		rows   func(ViewModel) []modalRowSpec
 		remote string
-		paint  func(ui.ViewModel, renderStyles) surfaceResult
+		paint  func(ViewModel, renderStyles) surfaceResult
 	}{
 		{
 			name:   "members",
 			model:  overflowMembersViewModel(),
-			rows:   func(model ui.ViewModel) []modalRowSpec { return membersRows(model.Members) },
+			rows:   func(model ViewModel) []modalRowSpec { return membersRows(model.Members) },
 			remote: "Member 1",
-			paint: func(model ui.ViewModel, styles renderStyles) surfaceResult {
+			paint: func(model ViewModel, styles renderStyles) surfaceResult {
 				return buildMembersLayer(model, styles, "")
 			},
 		},
 		{
 			name:   "topics",
 			model:  overflowTopicsViewModel(),
-			rows:   func(model ui.ViewModel) []modalRowSpec { return topicsRows(model.Topics) },
+			rows:   func(model ViewModel) []modalRowSpec { return topicsRows(model.Topics) },
 			remote: "Topic 1",
-			paint:  func(model ui.ViewModel, styles renderStyles) surfaceResult { return buildTopicsLayer(model, styles) },
+			paint:  func(model ViewModel, styles renderStyles) surfaceResult { return buildTopicsLayer(model, styles) },
 		},
 		{
 			name:   "pinned messages",
 			model:  overflowPinnedViewModel(),
-			rows:   func(model ui.ViewModel) []modalRowSpec { return pinnedMessagesRows(model, time.UTC) },
+			rows:   func(model ViewModel) []modalRowSpec { return pinnedMessagesRows(model, time.UTC) },
 			remote: "far off",
-			paint: func(model ui.ViewModel, styles renderStyles) surfaceResult {
+			paint: func(model ViewModel, styles renderStyles) surfaceResult {
 				return buildPinnedMessagesLayer(model, time.UTC, styles, "")
 			},
 		},
 		{
 			name:   "message search",
 			model:  overflowSearchViewModel(),
-			rows:   func(model ui.ViewModel) []modalRowSpec { return messageSearchRows(model, time.UTC) },
+			rows:   func(model ViewModel) []modalRowSpec { return messageSearchRows(model, time.UTC) },
 			remote: "far off",
-			paint: func(model ui.ViewModel, styles renderStyles) surfaceResult {
+			paint: func(model ViewModel, styles renderStyles) surfaceResult {
 				return buildMessageSearchLayer(model, time.UTC, styles, "", "")
 			},
 		},
@@ -419,7 +416,7 @@ func TestListModalControllerChatSearchStaysManual(t *testing.T) {
 	if _, ok := activeListModalDescriptor(model, time.UTC); ok {
 		t.Fatal("ChatSearch resolved a descriptor; it must stay manual")
 	}
-	if listModalSnapshotActive(app.State{ChatSearch: model.ChatSearch, Focus: app.FocusChatSearchResults}) {
+	if listModalSnapshotActive(State{ChatSearch: model.ChatSearch, Focus: FocusChatSearchResults}) {
 		t.Fatal("ChatSearch must stay out of the list modal fast path")
 	}
 	controller := newListModalController()
@@ -433,10 +430,10 @@ func TestListModalControllerChatSearchStaysManual(t *testing.T) {
 	}
 }
 
-// reactionOptionIDs is one stable id per app.ReactionPalette entry.
+// reactionOptionIDs is one stable id per ReactionPalette entry.
 func reactionOptionIDs() []string {
-	ids := make([]string, 0, len(app.ReactionPalette))
-	for index := range app.ReactionPalette {
+	ids := make([]string, 0, len(ReactionPalette))
+	for index := range ReactionPalette {
 		ids = append(ids, "reaction:"+strconv.Itoa(index))
 	}
 	return ids
@@ -450,7 +447,7 @@ func optionIDsOf(options []selectorOption) []string {
 	return ids
 }
 
-func withSelected(model ui.ViewModel, selected int) ui.ViewModel {
+func withSelected(model ViewModel, selected int) ViewModel {
 	if model.Members != nil {
 		model.Members.Selected = selected
 	}
@@ -466,9 +463,9 @@ func withSelected(model ui.ViewModel, selected int) ui.ViewModel {
 	return model
 }
 
-func membersDetailViewModel() ui.ViewModel {
+func membersDetailViewModel() ViewModel {
 	model := membersViewModel()
-	model.Members.Detail = &app.MemberDetail{UserID: 1, Name: "Ada", Username: "ada"}
+	model.Members.Detail = &MemberDetail{UserID: 1, Name: "Ada", Username: "ada"}
 	return model
 }
 
@@ -487,7 +484,7 @@ func overflowRows(count int) []domain.Message {
 	return rows
 }
 
-func overflowMembersViewModel() ui.ViewModel {
+func overflowMembersViewModel() ViewModel {
 	model := membersViewModel()
 	model.Height = 24
 	members := make([]domain.ChatMember, 0, 40)
@@ -499,7 +496,7 @@ func overflowMembersViewModel() ui.ViewModel {
 	return model
 }
 
-func overflowTopicsViewModel() ui.ViewModel {
+func overflowTopicsViewModel() ViewModel {
 	model := topicsViewModel()
 	model.Height = 24
 	topics := make([]domain.ForumTopic, 0, 40)
@@ -511,7 +508,7 @@ func overflowTopicsViewModel() ui.ViewModel {
 	return model
 }
 
-func overflowPinnedViewModel() ui.ViewModel {
+func overflowPinnedViewModel() ViewModel {
 	model := pinnedViewModel()
 	model.Height = 24
 	model.PinnedMessages.Results = overflowRows(40)
@@ -519,7 +516,7 @@ func overflowPinnedViewModel() ui.ViewModel {
 	return model
 }
 
-func overflowSearchViewModel() ui.ViewModel {
+func overflowSearchViewModel() ViewModel {
 	model := searchViewModel()
 	model.Height = 24
 	model.MessageSearch.Results = overflowRows(40)
@@ -529,7 +526,7 @@ func overflowSearchViewModel() ui.ViewModel {
 
 // paintedListModalText composes one surface layer over the model bounds and
 // returns the plain painted text, the same row list the descriptor claims.
-func paintedListModalText(model ui.ViewModel, surface surfaceResult) string {
+func paintedListModalText(model ViewModel, surface surfaceResult) string {
 	_, canvas := listModalCanvas(image.Rect(0, 0, model.Width, model.Height), surface)
 	return ansi.Strip(canvas.Render())
 }

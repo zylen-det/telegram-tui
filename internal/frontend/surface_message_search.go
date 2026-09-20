@@ -8,8 +8,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 func messageSearchFrame(bounds image.Rectangle) image.Rectangle {
@@ -29,11 +27,11 @@ func messageSearchInputRect(bounds image.Rectangle) image.Rectangle {
 	return image.Rect(frame.Min.X+2, frame.Min.Y+3, frame.Max.X-2, frame.Min.Y+4)
 }
 
-func buildMessageSearchLayer(model ui.ViewModel, location *time.Location, styles renderStyles, searchInputView, selectorView string) surfaceResult {
+func buildMessageSearchLayer(model ViewModel, location *time.Location, styles renderStyles, searchInputView, selectorView string) surfaceResult {
 	if model.MessageSearch == nil {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
-	if !model.MessageSearch.Submitted || model.Focus == app.FocusSearchInput {
+	if !model.MessageSearch.Submitted || model.Focus == FocusSearchInput {
 		return buildMessageSearchInputLayer(image.Rect(0, 0, model.Width, model.Height), model.MessageSearch, styles, searchInputView)
 	}
 	rows := displayedMessageSearchRows(model, location)
@@ -50,7 +48,7 @@ func buildMessageSearchLayer(model ui.ViewModel, location *time.Location, styles
 // reduced to the window that actually reaches the frame. The renderer and the
 // list modal controller both call it, so selector options, geometry, and paint
 // always describe the same displayed rows.
-func displayedMessageSearchRows(model ui.ViewModel, location *time.Location) []modalRowSpec {
+func displayedMessageSearchRows(model ViewModel, location *time.Location) []modalRowSpec {
 	if model.MessageSearch == nil {
 		return nil
 	}
@@ -58,7 +56,7 @@ func displayedMessageSearchRows(model ui.ViewModel, location *time.Location) []m
 	return windowMessageSearchRows(rows, model.MessageSearch.Selected, max(1, model.Height-5))
 }
 
-func buildMessageSearchInputLayer(bounds image.Rectangle, search *app.MessageSearchState, styles renderStyles, inputView string) surfaceResult {
+func buildMessageSearchInputLayer(bounds image.Rectangle, search *MessageSearchState, styles renderStyles, inputView string) surfaceResult {
 	frame := messageSearchFrame(bounds)
 	if frame.Empty() {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
@@ -74,7 +72,7 @@ func buildMessageSearchInputLayer(bounds image.Rectangle, search *app.MessageSea
 	closeAbs := image.Rect(frame.Max.X-2, frame.Min.Y, frame.Max.X-1, frame.Min.Y+1).Intersect(frame)
 	if !closeAbs.Empty() {
 		interactions = append(interactions, addInteractive(root, frame.Min, closeAbs.Sub(frame.Min), "search:close", zModalControl,
-			renderLine(styles.Accent, "×", 1), app.ActionReceived{Action: app.Close}, app.ActionReceived{}, app.ActionReceived{}))
+			renderLine(styles.Accent, "×", 1), ActionReceived{Action: Close}, ActionReceived{}, ActionReceived{}))
 	}
 	label := ansi.Truncate("Query", max(0, frame.Dx()-4), "")
 	if label != "" {
@@ -88,24 +86,24 @@ func buildMessageSearchInputLayer(bounds image.Rectangle, search *app.MessageSea
 		}
 		view = clipPhotoPathInputView(view, inputAbs.Dx())
 		interactions = append(interactions, addInteractive(root, frame.Min, inputAbs.Sub(frame.Min), "search:input", zModalControl,
-			renderLine(styles.Panel, view, inputAbs.Dx()), app.ActionReceived{}, app.ActionReceived{}, app.ActionReceived{}))
+			renderLine(styles.Panel, view, inputAbs.Dx()), ActionReceived{}, ActionReceived{}, ActionReceived{}))
 	}
 	buttonAbs := image.Rect(frame.Max.X-10, frame.Max.Y-3, frame.Max.X-2, frame.Max.Y-2).Intersect(frame)
 	enabled := strings.TrimSpace(string(search.Input)) != ""
 	buttonStyle := styles.Muted
-	buttonAction := app.ActionReceived{}
+	buttonAction := ActionReceived{}
 	if enabled {
 		buttonStyle = styles.Accent
-		buttonAction = app.ActionReceived{Action: app.SubmitMessageSearch}
+		buttonAction = ActionReceived{Action: SubmitMessageSearch}
 	}
 	if !buttonAbs.Empty() {
 		interactions = append(interactions, addInteractive(root, frame.Min, buttonAbs.Sub(frame.Min), "search:submit", zModalControl,
-			renderLine(buttonStyle, "[Search]", buttonAbs.Dx()), buttonAction, app.ActionReceived{}, app.ActionReceived{}))
+			renderLine(buttonStyle, "[Search]", buttonAbs.Dx()), buttonAction, ActionReceived{}, ActionReceived{}))
 	}
 	return surfaceResult{Layer: root, Rect: frame, Interactions: interactions, Cursor: renderCursor{X: -1, Y: -1}, IsModal: true}
 }
 
-func messageSearchRows(model ui.ViewModel, location *time.Location) []modalRowSpec {
+func messageSearchRows(model ViewModel, location *time.Location) []modalRowSpec {
 	search := model.MessageSearch
 	if search == nil {
 		return nil
@@ -116,7 +114,7 @@ func messageSearchRows(model ui.ViewModel, location *time.Location) []modalRowSp
 			ID:       fmt.Sprintf("search:%d", message.ID),
 			Label:    messageSearchResultLabel(message.SenderName, message.SentAt, message.DisplayText(), location),
 			Selected: index == search.Selected,
-			Action:   app.ActionReceived{Action: app.SelectMessage, ChatID: search.ChatID, MessageID: message.ID},
+			Action:   ActionReceived{Action: SelectMessage, ChatID: search.ChatID, MessageID: message.ID},
 		})
 	}
 	switch {

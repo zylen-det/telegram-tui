@@ -12,10 +12,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
 	"github.com/zylen-det/telegram-tui/internal/media/thumbnail"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // messageSelection is the active message selection used to decide whether a
@@ -75,7 +73,7 @@ type messageGroupLocalInteraction struct {
 	ID    string
 	Rect  image.Rectangle
 	Z     int
-	Click app.ActionReceived
+	Click ActionReceived
 }
 
 // messageGroupResult is the product of one message-group builder.
@@ -84,7 +82,7 @@ type messageGroupResult struct {
 	Width             int
 	Height            int
 	Rows              []messageRowSpec
-	Group             ui.RenderedMessageGroup
+	Group             RenderedMessageGroup
 	Selected          bool
 	RowOffset         int // original full-group row index represented by Rows[0]
 	LocalInteractions []messageGroupLocalInteraction
@@ -95,7 +93,7 @@ type messageGroupResult struct {
 // (0,0). An empty group or width <= 0 returns a zero result. The finished
 // Layer width/height and result dimensions always equal width x len(Rows).
 func buildMessageGroupLayer(
-	group ui.RenderedMessageGroup,
+	group RenderedMessageGroup,
 	width int,
 	location *time.Location,
 	selection messageSelection,
@@ -143,7 +141,7 @@ func buildMessageGroupLayer(
 // its first full-group row index. The returned Inline placements use
 // full-group-local coordinates.
 func renderMessageGroupLayer(
-	group ui.RenderedMessageGroup,
+	group RenderedMessageGroup,
 	width int,
 	rows []messageRowSpec,
 	rowOffset int,
@@ -186,7 +184,7 @@ func renderMessageGroupLayer(
 				ID:    id,
 				Rect:  image.Rect(0, i, width, i+1),
 				Z:     zRowBackground,
-				Click: app.ActionReceived{Action: app.SelectMessage, ChatID: row.chatID, MessageID: row.messageID},
+				Click: ActionReceived{Action: SelectMessage, ChatID: row.chatID, MessageID: row.messageID},
 			})
 		}
 		root.AddLayers(bgLayer)
@@ -242,7 +240,7 @@ func renderMessageGroupLayer(
 					ID:    id,
 					Rect:  adjusted,
 					Z:     zControl,
-					Click: app.ActionReceived{Action: app.Retry, AvatarKey: group.AvatarKey},
+					Click: ActionReceived{Action: Retry, AvatarKey: group.AvatarKey},
 				})
 			}
 			root.AddLayers(avatarLayer)
@@ -400,7 +398,7 @@ func sliceMessageGroupLayer(
 // porting the exact legacy buildSurfaceMessageBlock behavior onto the frozen
 // messageRowSpec types.
 func buildMessageRows(
-	group ui.RenderedMessageGroup,
+	group RenderedMessageGroup,
 	width int,
 	location *time.Location,
 	selection messageSelection,
@@ -747,7 +745,7 @@ func messageRowStyle(kind messageRowKind, styles renderStyles) lipgloss.Style {
 // messageRowTextX returns the local X of a row's text. Incoming rows start at
 // the avatar gutter (or 1); outgoing rows are right-aligned against their text
 // width.
-func messageRowTextX(group ui.RenderedMessageGroup, width int, row messageRowSpec) int {
+func messageRowTextX(group RenderedMessageGroup, width int, row messageRowSpec) int {
 	incomingTextX := 1
 	if group.ShowAvatar {
 		incomingTextX = min(width, 5)

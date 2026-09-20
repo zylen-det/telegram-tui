@@ -7,18 +7,16 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
-func pinnedViewModel() ui.ViewModel {
+func pinnedViewModel() ViewModel {
 	sentAt := time.Unix(1700000000, 0).UTC()
-	return ui.ViewModel{
+	return ViewModel{
 		Width: 100, Height: 30,
-		Layout: ui.Layout{Mode: app.LayoutWide},
-		Focus:  app.FocusPinnedResults,
-		PinnedMessages: &app.PinnedMessagesState{
+		Layout: ViewLayout{Mode: LayoutWide},
+		Focus:  FocusPinnedResults,
+		PinnedMessages: &PinnedMessagesState{
 			RequestID: 10, ChatID: 9,
 			Results: []domain.Message{
 				{ID: 30, ChatID: 9, Kind: domain.MessageText, Text: "new pin", SenderName: "Ada", SentAt: sentAt},
@@ -30,20 +28,20 @@ func pinnedViewModel() ui.ViewModel {
 }
 
 func TestPinnedMessageKeyMappings(t *testing.T) {
-	if got, ok := mapKeyPress(app.FocusConversation, tea.KeyPressMsg(tea.Key{Code: 'p'})); !ok || got.Action != app.OpenPinnedMessages {
+	if got, ok := mapKeyPress(FocusConversation, tea.KeyPressMsg(tea.Key{Code: 'p'})); !ok || got.Action != OpenPinnedMessages {
 		t.Fatalf("conversation p = (%#v,%t), want OpenPinnedMessages", got, ok)
 	}
-	cases := map[tea.Key]app.Action{
-		{Code: tea.KeyDown}:    app.SelectNext,
-		{Code: 'j', Text: "j"}: app.SelectNext,
-		{Code: tea.KeyUp}:      app.SelectPrevious,
-		{Code: 'k', Text: "k"}: app.SelectPrevious,
-		{Code: tea.KeyEnter}:   app.Activate,
-		{Code: tea.KeyEscape}:  app.Close,
-		{Code: 'q', Text: "q"}: app.Close,
+	cases := map[tea.Key]Action{
+		{Code: tea.KeyDown}:    SelectNext,
+		{Code: 'j', Text: "j"}: SelectNext,
+		{Code: tea.KeyUp}:      SelectPrevious,
+		{Code: 'k', Text: "k"}: SelectPrevious,
+		{Code: tea.KeyEnter}:   Activate,
+		{Code: tea.KeyEscape}:  Close,
+		{Code: 'q', Text: "q"}: Close,
 	}
 	for key, want := range cases {
-		got, ok := mapKeyPress(app.FocusPinnedResults, tea.KeyPressMsg(key))
+		got, ok := mapKeyPress(FocusPinnedResults, tea.KeyPressMsg(key))
 		if !ok || got.Action != want {
 			t.Fatalf("pinned results key %#v = (%v,%t), want %v", key, got.Action, ok, want)
 		}
@@ -56,10 +54,10 @@ func TestPinnedMessageSelectorOptionsCarryChatMessageIdentity(t *testing.T) {
 	if len(options) != 2 || options[0].ID != "pinned:30" || options[1].ID != "pinned:20" {
 		t.Fatalf("options = %#v", options)
 	}
-	if options[0].Value != (app.ActionReceived{Action: app.SelectMessage, ChatID: 9, MessageID: 30}) {
+	if options[0].Value != (ActionReceived{Action: SelectMessage, ChatID: 9, MessageID: 30}) {
 		t.Fatalf("option payload = %#v", options[0].Value)
 	}
-	if got := selectorOptionsFromRows(pinnedMessagesRows(ui.ViewModel{}, time.UTC)); got != nil {
+	if got := selectorOptionsFromRows(pinnedMessagesRows(ViewModel{}, time.UTC)); got != nil {
 		t.Fatalf("nil pinned options = %#v", got)
 	}
 }
@@ -112,7 +110,7 @@ func TestPinnedMessageLayerIsModalAndClosesUnderlyingHits(t *testing.T) {
 	}
 	// Result rows preserve mouse parity payloads.
 	rows := pinnedMessagesRows(model, time.UTC)
-	if rows[0].Action != (app.ActionReceived{Action: app.SelectMessage, ChatID: 9, MessageID: 30}) {
+	if rows[0].Action != (ActionReceived{Action: SelectMessage, ChatID: 9, MessageID: 30}) {
 		t.Fatalf("row action = %#v", rows[0].Action)
 	}
 }
@@ -129,13 +127,13 @@ func TestPinnedMessageInputGeometryIsBounded(t *testing.T) {
 }
 
 func TestPinnedMessageViewModelClonesWithoutAliasing(t *testing.T) {
-	state := app.InitialState()
-	state.Focus = app.FocusPinnedResults
-	state.PinnedMessages = &app.PinnedMessagesState{
+	state := InitialState()
+	state.Focus = FocusPinnedResults
+	state.PinnedMessages = &PinnedMessagesState{
 		ChatID:  9,
 		Results: []domain.Message{{ID: 1, ChatID: 9, Kind: domain.MessageText, Text: "x"}},
 	}
-	model := ui.Select(state, time.UTC)
+	model := Select(state, time.UTC)
 	if model.PinnedMessages == nil || len(model.PinnedMessages.Results) != 1 {
 		t.Fatalf("projection = %#v", model.PinnedMessages)
 	}

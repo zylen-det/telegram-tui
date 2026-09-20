@@ -7,19 +7,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 func TestComposerSurfaceRectMatchesConversationSplit(t *testing.T) {
-	model := ui.ViewModel{
+	model := ViewModel{
 		Width:      120,
 		Height:     30,
-		Focus:      app.FocusComposer,
+		Focus:      FocusComposer,
 		ActiveChat: domain.Chat{ID: 9, CanSend: true},
 	}
-	model.Layout = ui.ComputeLayout(model.Width, model.Height, false, model.Focus)
+	model.Layout = ComputeLayout(model.Width, model.Height, false, model.Focus)
 
 	if got, want := composerSurfaceRect(model), image.Rect(33, 26, 119, 29); !got.Eq(want) {
 		t.Fatalf("composer surface rect = %v, want %v", got, want)
@@ -34,7 +32,7 @@ func TestComposerSurfaceRectMatchesConversationSplit(t *testing.T) {
 func TestComposerTextRectUsesControlsBannersAndAvailableRows(t *testing.T) {
 	testCases := []struct {
 		name  string
-		model ui.ViewModel
+		model ViewModel
 		rect  image.Rectangle
 		want  image.Rectangle
 	}{
@@ -46,9 +44,9 @@ func TestComposerTextRectUsesControlsBannersAndAvailableRows(t *testing.T) {
 		},
 		{
 			name: "reply banner advances top",
-			model: func() ui.ViewModel {
+			model: func() ViewModel {
 				model := composerModel(20, 5, writable(9))
-				model.ReplyTarget = &app.ReplyTarget{ChatID: 9}
+				model.ReplyTarget = &ReplyTarget{ChatID: 9}
 				return model
 			}(),
 			rect: image.Rect(0, 0, 20, 5),
@@ -56,9 +54,9 @@ func TestComposerTextRectUsesControlsBannersAndAvailableRows(t *testing.T) {
 		},
 		{
 			name: "edit error leaves one row",
-			model: func() ui.ViewModel {
+			model: func() ViewModel {
 				model := composerModel(20, 3, writable(9))
-				model.EditTarget = &app.EditTarget{ChatID: 9, Error: &domain.AppError{Message: "opaque"}}
+				model.EditTarget = &EditTarget{ChatID: 9, Error: &domain.AppError{Message: "opaque"}}
 				return model
 			}(),
 			rect: image.Rect(0, 0, 20, 3),

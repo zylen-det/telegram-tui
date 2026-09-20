@@ -8,14 +8,12 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 func TestComposerLayerRendersInjectedHuhViewWithoutLegacyDraftOrCursor(t *testing.T) {
-	model := ui.ViewModel{
-		Width: 100, Height: 24, Focus: app.FocusComposer,
+	model := ViewModel{
+		Width: 100, Height: 24, Focus: FocusComposer,
 		ActiveChat: domain.Chat{ID: 9, CanSend: true},
 		Draft:      "LEGACY_DRAFT_MUST_NOT_RENDER",
 	}
@@ -57,8 +55,8 @@ func TestClipComposerTextViewStopsAtExactHeight(t *testing.T) {
 }
 
 func TestComposerLayerWithoutInjectedViewDoesNotFallbackToDraft(t *testing.T) {
-	model := ui.ViewModel{
-		Width: 100, Height: 24, Focus: app.FocusComposer,
+	model := ViewModel{
+		Width: 100, Height: 24, Focus: FocusComposer,
 		ActiveChat: domain.Chat{ID: 9, CanSend: true},
 		Draft:      "LEGACY_FALLBACK_MUST_NOT_RENDER",
 	}

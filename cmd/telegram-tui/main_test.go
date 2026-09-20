@@ -15,7 +15,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/blacktop/go-termimg"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/auth"
 	"github.com/zylen-det/telegram-tui/internal/config"
 	"github.com/zylen-det/telegram-tui/internal/frontend"
@@ -26,14 +25,18 @@ import (
 func TestCopyProductionCompositionInjectsClipboard(t *testing.T) {
 	clipboard := &platform.FakeClipboard{Matches: func(value string) bool { return value == "opaque" }}
 	handler := newProductionHandler(context.Background(), nil, nil, nil, nil, clipboard, nil, termimg.Halfblocks)
-	events := make([]app.Event, 0, 1)
-	handler.Handle(context.Background(), app.WriteClipboard{Text: "opaque"}, func(event app.Event) {
+	cmd := handler.Cmd(frontend.WriteClipboard{Text: "opaque"})
+	if cmd == nil {
+		t.Fatal("clipboard effect returned no command")
+	}
+	events := make([]frontend.Event, 0, 1)
+	if event := cmd(); event != nil {
 		events = append(events, event)
-	})
+	}
 	if clipboard.Writes != 1 || !clipboard.Matched || len(events) != 1 {
 		t.Fatalf("production clipboard composition = writes:%d matched:%t events:%d", clipboard.Writes, clipboard.Matched, len(events))
 	}
-	if _, ok := events[0].(app.ClipboardWritten); !ok {
+	if _, ok := events[0].(frontend.ClipboardWritten); !ok {
 		t.Fatalf("production clipboard event type = %T", events[0])
 	}
 }
@@ -183,21 +186,20 @@ func TestEnsureRuntimeDirectoriesCreatesPrivatePaths(t *testing.T) {
 
 func TestProductionCleanupRunsForProgramFailure(t *testing.T) {
 	calls := []string{}
-	ctx, baseCancel := context.WithCancel(context.Background())
+	_, baseCancel := context.WithCancel(context.Background())
 	cancel := func() {
 		calls = append(calls, "cancel")
 		baseCancel()
 	}
-	runtime := &productionRuntimeStub{ctx: ctx, calls: &calls}
 	overlay := &productionOverlayStub{calls: &calls}
 	wantErr := errors.New("program failed")
 	program := &productionProgramStub{calls: &calls, err: wantErr}
 
-	err := runProductionBubbleTea(context.Background(), cancel, runtime, overlay, program, productionStatusStub{}, nil)
+	err := runProductionBubbleTea(context.Background(), cancel, overlay, program, productionStatusStub{}, nil)
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("runProductionBubbleTea() error = %v, want %v", err, wantErr)
 	}
-	wantCalls := []string{"program-run", "cancel", "runtime-close", "runtime-wait", "image-clear"}
+	wantCalls := []string{"program-run", "cancel", "image-clear"}
 	if !reflect.DeepEqual(calls, wantCalls) {
 		t.Fatalf("cleanup calls = %#v, want %#v", calls, wantCalls)
 	}
@@ -206,10 +208,9 @@ func TestProductionCleanupRunsForProgramFailure(t *testing.T) {
 func TestProductionCleanupTreatsParentCancellationAsControlled(t *testing.T) {
 	parent, parentCancel := context.WithCancel(context.Background())
 	parentCancel()
-	ctx, cancel := context.WithCancel(parent)
+	_, cancel := context.WithCancel(parent)
 	calls := []string{}
 	err := runProductionBubbleTea(parent, cancel,
-		&productionRuntimeStub{ctx: ctx, calls: &calls},
 		&productionOverlayStub{calls: &calls},
 		&productionProgramStub{calls: &calls, err: tea.ErrProgramKilled},
 		productionStatusStub{},
@@ -220,9 +221,8 @@ func TestProductionCleanupTreatsParentCancellationAsControlled(t *testing.T) {
 	}
 
 	activeParent := context.Background()
-	activeContext, activeCancel := context.WithCancel(activeParent)
+	_, activeCancel := context.WithCancel(activeParent)
 	err = runProductionBubbleTea(activeParent, activeCancel,
-		&productionRuntimeStub{ctx: activeContext, calls: &calls},
 		&productionOverlayStub{calls: &calls},
 		&productionProgramStub{calls: &calls, err: tea.ErrProgramKilled},
 		productionStatusStub{},
@@ -260,20 +260,11 @@ func testProductionSignalRealAppLifecycle(t *testing.T, received os.Signal) {
 		closed: make(chan struct{}),
 	}
 	clientCreated := make(chan struct{}, 1)
-	observed := &productionSignalHandler{
-		promptRequested:  make(chan struct{}, 1),
-		shutdownComplete: make(chan struct{}, 1),
-	}
-	observed.Handler = app.NewHandler(processCtx, resolver, func(config.Runtime, auth.Prompter) (telegram.Client, error) {
+	handler := frontend.NewHandler(processCtx, resolver, func(config.Runtime, auth.Prompter) (telegram.Client, error) {
 		clientCreated <- struct{}{}
 		return client, nil
 	}, broker, nil)
-	runtime, err := frontend.NewAppRuntime(processCtx, app.NewExecutor(2, observed))
-	if err != nil {
-		t.Fatal("NewAppRuntime returned an unexpected error")
-	}
-	engine := app.NewEngine(app.InitialState())
-	model, err := frontend.NewAppModel(engine, runtime)
+	model, err := frontend.NewAppModel(frontend.InitialState(), handler)
 	if err != nil {
 		t.Fatal("NewAppModel returned an unexpected error")
 	}
@@ -290,17 +281,13 @@ func testProductionSignalRealAppLifecycle(t *testing.T, received os.Signal) {
 		tea.WithoutSignalHandler(),
 	)
 	programReturned := make(chan productionRealProgramResult, 1)
-	wrappedProgram := &productionRealProgram{
-		Program:  program,
-		runtime:  runtime,
-		returned: programReturned,
-	}
+	wrappedProgram := &productionRealProgram{Program: program, returned: programReturned}
 	overlayCleared := make(chan struct{}, 1)
 	wrappedOverlay := &productionRealOverlay{OutputOverlay: output, cleared: overlayCleared}
 	signals := make(chan os.Signal, 1)
 	topReturned := make(chan error, 1)
 	go func() {
-		topReturned <- runProductionBubbleTea(processCtx, cancel, runtime, wrappedOverlay, wrappedProgram, nil, signals)
+		topReturned <- runProductionBubbleTea(processCtx, cancel, wrappedOverlay, wrappedProgram, nil, signals)
 	}()
 
 	cleanupComplete := false
@@ -310,22 +297,13 @@ func testProductionSignalRealAppLifecycle(t *testing.T, received os.Signal) {
 		}
 		cancel()
 		program.Kill()
-		runtime.Close()
 		select {
 		case <-topReturned:
 		case <-time.After(2 * time.Second):
 			t.Error("real production lifecycle cleanup did not return")
 		}
-		waited := make(chan struct{})
-		go func() { runtime.Wait(); close(waited) }()
-		select {
-		case <-waited:
-		case <-time.After(2 * time.Second):
-			t.Error("real production runtime cleanup did not stop")
-		}
 	})
 
-	waitProductionSignal(t, observed.promptRequested, "PromptRequested")
 	waitProductionOutput(t, rendered, "Account password")
 	program.Send(tea.KeyPressMsg(tea.Key{Text: "ready"}))
 	program.Send(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
@@ -334,20 +312,16 @@ func testProductionSignalRealAppLifecycle(t *testing.T, received os.Signal) {
 
 	signals <- received
 	waitProductionSignal(t, client.closed, "fake client Close")
-	waitProductionSignal(t, observed.shutdownComplete, "ShutdownComplete")
 
 	programResult := waitProductionValue(t, programReturned, "Program.Run return")
-	if !programResult.runtimeDone {
-		t.Fatal("Program.Run returned before AppRuntime.Done closed")
-	}
 	if programResult.err != nil {
 		t.Fatal("Program.Run returned an unexpected error")
 	}
 	if _, ok := programResult.model.(frontend.AppModel); !ok {
 		t.Fatalf("Program.Run() model = %T, want frontend.AppModel", programResult.model)
 	}
-	if !engine.Snapshot().Quitting {
-		t.Fatal("production signal did not apply app.Quit through the formal reducer")
+	if !model.Snapshot().Quitting {
+		t.Fatal("production signal did not apply frontend.Quit through the model")
 	}
 	topErr := waitProductionValue(t, topReturned, "runProductionBubbleTea return")
 	cleanupComplete = true
@@ -355,11 +329,6 @@ func testProductionSignalRealAppLifecycle(t *testing.T, received os.Signal) {
 		t.Fatalf("runProductionBubbleTea returned an unexpected error: %v", topErr)
 	}
 	waitProductionSignal(t, overlayCleared, "overlay clear")
-	select {
-	case <-runtime.Done():
-	default:
-		t.Fatal("AppRuntime.Done was open after production returned")
-	}
 }
 
 func testProductionSignalGraceful(t *testing.T, signal os.Signal) {
@@ -380,7 +349,6 @@ func testProductionSignalGraceful(t *testing.T, signal os.Signal) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	err := runProductionBubbleTea(context.Background(), cancel,
-		&productionLifecycleRuntime{done: runtimeDone, recorder: recorder},
 		&productionLifecycleOverlay{recorder: recorder},
 		wrapped,
 		model,
@@ -394,7 +362,7 @@ func testProductionSignalGraceful(t *testing.T, signal os.Signal) {
 	}
 	want := []string{
 		"process-quit", "client-close", "shutdown-complete", "runtime-done",
-		"program-return", "runtime-close", "runtime-wait", "image-clear",
+		"program-return", "image-clear",
 	}
 	if got := recorder.snapshot(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("production lifecycle calls = %#v", got)
@@ -405,10 +373,9 @@ func TestProductionFatalShutdownReturnsSanitizedFailure(t *testing.T) {
 	original := startApplication
 	t.Cleanup(func() { startApplication = original })
 	startApplication = func(parent context.Context, _ appOptions) error {
-		ctx, cancel := context.WithCancel(parent)
+		_, cancel := context.WithCancel(parent)
 		calls := []string{}
 		return runProductionBubbleTea(parent, cancel,
-			&productionRuntimeStub{ctx: ctx, calls: &calls},
 			&productionOverlayStub{calls: &calls},
 			&productionProgramStub{calls: &calls},
 			productionStatusStub{err: errors.New("private shutdown payload")},
@@ -439,20 +406,6 @@ func (p *productionProgramStub) Run() (tea.Model, error) {
 }
 
 func (p *productionProgramStub) Send(tea.Msg) {}
-
-type productionRuntimeStub struct {
-	ctx   context.Context
-	calls *[]string
-}
-
-func (r *productionRuntimeStub) Close() {
-	if r.ctx.Err() == nil {
-		panic("runtime closed before shared context cancellation")
-	}
-	*r.calls = append(*r.calls, "runtime-close")
-}
-
-func (r *productionRuntimeStub) Wait() { *r.calls = append(*r.calls, "runtime-wait") }
 
 type productionOverlayStub struct{ calls *[]string }
 
@@ -524,22 +477,6 @@ func (p *recordingProductionProgram) Run() (tea.Model, error) {
 	return model, err
 }
 
-type productionLifecycleRuntime struct {
-	done     <-chan struct{}
-	recorder *productionLifecycleRecorder
-}
-
-func (r *productionLifecycleRuntime) Close() {
-	select {
-	case <-r.done:
-	default:
-		panic("runtime closed before ShutdownComplete")
-	}
-	r.recorder.add("runtime-close")
-}
-
-func (r *productionLifecycleRuntime) Wait() { r.recorder.add("runtime-wait") }
-
 type productionLifecycleOverlay struct{ recorder *productionLifecycleRecorder }
 
 func (o *productionLifecycleOverlay) Clear() error {
@@ -576,45 +513,19 @@ func (c *productionSignalClient) Close(ctx context.Context) error {
 	return c.Fake.Close(ctx)
 }
 
-type productionSignalHandler struct {
-	*app.Handler
-	promptRequested  chan struct{}
-	shutdownComplete chan struct{}
-}
-
-func (h *productionSignalHandler) Handle(ctx context.Context, command app.Command, emit func(app.Event)) {
-	h.Handler.Handle(ctx, command, func(event app.Event) {
-		switch event.(type) {
-		case app.PromptRequested:
-			signalProductionObservation(h.promptRequested)
-		case app.ShutdownComplete:
-			signalProductionObservation(h.shutdownComplete)
-		}
-		emit(event)
-	})
-}
-
 type productionRealProgramResult struct {
-	model       tea.Model
-	err         error
-	runtimeDone bool
+	model tea.Model
+	err   error
 }
 
 type productionRealProgram struct {
 	*tea.Program
-	runtime  *frontend.AppRuntime
 	returned chan<- productionRealProgramResult
 }
 
 func (p *productionRealProgram) Run() (tea.Model, error) {
 	model, err := p.Program.Run()
-	runtimeDone := false
-	select {
-	case <-p.runtime.Done():
-		runtimeDone = true
-	default:
-	}
-	p.returned <- productionRealProgramResult{model: model, err: err, runtimeDone: runtimeDone}
+	p.returned <- productionRealProgramResult{model: model, err: err}
 	return model, err
 }
 

@@ -9,12 +9,11 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/zylen-det/telegram-tui/internal/domain"
 	"github.com/zylen-det/telegram-tui/internal/frontend/components"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // toastCanvas composes a full-size styles.Base root with the toast layer onto
 // a canvas sized to the model viewport.
-func toastCanvas(model ui.ViewModel, surface surfaceResult) *lipgloss.Canvas {
+func toastCanvas(model ViewModel, surface surfaceResult) *lipgloss.Canvas {
 	styles := newRenderStyles(false)
 	rootContent := styles.Base.Width(model.Width).Height(model.Height).Render("")
 	root := lipgloss.NewLayer(rootContent).X(0).Y(0).Z(zFrame)
@@ -23,17 +22,17 @@ func toastCanvas(model ui.ViewModel, surface surfaceResult) *lipgloss.Canvas {
 	return lipgloss.NewCanvas(model.Width, model.Height).Compose(compositor)
 }
 
-func toastModel(width, height int, kind, message string) ui.ViewModel {
+func toastModel(width, height int, kind, message string) ViewModel {
 	var toast *domain.AppError
 	if message != "" || kind != "" {
 		toast = &domain.AppError{Kind: domain.ErrorKind(kind), Message: message}
 	}
-	return ui.ViewModel{Width: width, Height: height, Toast: toast}
+	return ViewModel{Width: width, Height: height, Toast: toast}
 }
 
 func TestToastLayerNilToastAndEmptyViewport(t *testing.T) {
 	styles := newRenderStyles(false)
-	for _, model := range []ui.ViewModel{
+	for _, model := range []ViewModel{
 		{Width: 80, Height: 24},
 		{Width: 0, Height: 0},
 		{Width: 80, Height: 0},
@@ -235,7 +234,7 @@ func TestToastLayerTinyBoundsSafe(t *testing.T) {
 
 func TestToastLayerNoInteractionsIDsOrCursor(t *testing.T) {
 	styles := newRenderStyles(false)
-	for _, model := range []ui.ViewModel{
+	for _, model := range []ViewModel{
 		toastModel(80, 24, "", "Message copied"),
 		toastModel(80, 24, "network", "Temporarily offline"),
 		{Width: 80, Height: 24},

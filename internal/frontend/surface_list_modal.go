@@ -6,10 +6,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
 	"github.com/zylen-det/telegram-tui/internal/frontend/components"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // modalRowSpec is one semantic action list row for the shared list modal.
@@ -19,7 +17,7 @@ type modalRowSpec struct {
 	ID       string
 	Label    string
 	Selected bool
-	Action   app.ActionReceived
+	Action   ActionReceived
 	Header   bool
 }
 
@@ -82,14 +80,14 @@ func buildListModalWidth(bounds image.Rectangle, title string, rows []modalRowSp
 		}
 	}
 
-	// Close control: exact 1-cell at Close intersect Frame, click app.Close.
+	// Close control: exact 1-cell at Close intersect Frame, click Close.
 	closeLocal := image.Rect(layout.Close.X, layout.Close.Y, layout.Close.X+1, layout.Close.Y+1).
 		Intersect(frame).Sub(frame.Min)
 	if !closeLocal.Empty() {
 		closeContent := renderLine(styles.Accent, "×", 1)
 		interactions = append(interactions, addInteractive(
 			root, frame.Min, closeLocal, "modal:close", zModalControl, closeContent,
-			app.ActionReceived{Action: app.Close}, app.ActionReceived{}, app.ActionReceived{},
+			ActionReceived{Action: Close}, ActionReceived{}, ActionReceived{},
 		))
 	}
 
@@ -112,7 +110,7 @@ func buildListModalWidth(bounds image.Rectangle, title string, rows []modalRowSp
 			continue
 		}
 
-		interactive := spec.ID != "" && spec.Action.Action != app.NoAction
+		interactive := spec.ID != "" && spec.Action.Action != NoAction
 
 		if interactive {
 			// Union of visible actionable row rects; equals the host's modal-row
@@ -121,7 +119,7 @@ func buildListModalWidth(bounds image.Rectangle, title string, rows []modalRowSp
 			rowContent := renderEmptyBox(rowStyle, rowLocal.Dx(), rowLocal.Dy())
 			interactions = append(interactions, addInteractive(
 				root, frame.Min, rowLocal, spec.ID, zModalRow, rowContent,
-				spec.Action, app.ActionReceived{}, app.ActionReceived{},
+				spec.Action, ActionReceived{}, ActionReceived{},
 			))
 			if !injected {
 				rowLayer := root.GetLayer(spec.ID)
@@ -160,7 +158,7 @@ func buildListModalWidth(bounds image.Rectangle, title string, rows []modalRowSp
 // states; every other actionable row is gated on a settled menu. When a
 // selector Huh View is injected it replaces the actionable row labels and
 // selected-row paint; omitted injection retains the legacy rows.
-func buildActionModalLayer(model ui.ViewModel, styles renderStyles, selectorView ...string) surfaceResult {
+func buildActionModalLayer(model ViewModel, styles renderStyles, selectorView ...string) surfaceResult {
 	if model.MessageMenu == nil {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
@@ -172,7 +170,7 @@ func buildActionModalLayer(model ui.ViewModel, styles renderStyles, selectorView
 // loading/error informational row. Nothing else may compile this list; the
 // renderer and the list modal controller both call it so row order, gating,
 // labels, semantic payloads, and the selected row stay identical.
-func messageActionRows(menu *app.MessageActionMenu) []modalRowSpec {
+func messageActionRows(menu *MessageActionMenu) []modalRowSpec {
 	if menu == nil {
 		return nil
 	}
@@ -204,7 +202,7 @@ func messageActionRows(menu *app.MessageActionMenu) []modalRowSpec {
 		rows = append(rows, modalRowSpec{
 			ID:     id,
 			Label:  label,
-			Action: app.ActionReceived{Action: app.ViewMessageMedia, ChatID: menu.ChatID, MessageID: menu.MessageID},
+			Action: ActionReceived{Action: ViewMessageMedia, ChatID: menu.ChatID, MessageID: menu.MessageID},
 		})
 	}
 
@@ -212,42 +210,42 @@ func messageActionRows(menu *app.MessageActionMenu) []modalRowSpec {
 		rows = append(rows, modalRowSpec{
 			ID:     "action:reply",
 			Label:  "Reply",
-			Action: app.ActionReceived{Action: app.ReplyMessage, ChatID: menu.ChatID, MessageID: menu.MessageID},
+			Action: ActionReceived{Action: ReplyMessage, ChatID: menu.ChatID, MessageID: menu.MessageID},
 		})
 	}
 	if !menu.Loading && menu.Error == nil && menu.Capabilities.Forward {
 		rows = append(rows, modalRowSpec{
 			ID:     "action:forward",
 			Label:  "Forward",
-			Action: app.ActionReceived{Action: app.ForwardMessageSource, ChatID: menu.ChatID, MessageID: menu.MessageID},
+			Action: ActionReceived{Action: ForwardMessageSource, ChatID: menu.ChatID, MessageID: menu.MessageID},
 		})
 	}
 	if !menu.Loading && menu.Error == nil && menu.Capabilities.Edit {
 		rows = append(rows, modalRowSpec{
 			ID:     "action:edit",
 			Label:  "Edit",
-			Action: app.ActionReceived{Action: app.EditMessage, ChatID: menu.ChatID, MessageID: menu.MessageID},
+			Action: ActionReceived{Action: EditMessage, ChatID: menu.ChatID, MessageID: menu.MessageID},
 		})
 	}
 	if menu.Capabilities.Copy {
 		rows = append(rows, modalRowSpec{
 			ID:     "action:copy",
 			Label:  "Copy",
-			Action: app.ActionReceived{Action: app.CopyMessage, ChatID: menu.ChatID, MessageID: menu.MessageID},
+			Action: ActionReceived{Action: CopyMessage, ChatID: menu.ChatID, MessageID: menu.MessageID},
 		})
 	}
 	if menu.UserID != 0 {
 		rows = append(rows, modalRowSpec{
 			ID:     "action:user-info",
 			Label:  "User info",
-			Action: app.ActionReceived{Action: app.ViewUserInfo, ChatID: menu.ChatID, MessageID: menu.MessageID},
+			Action: ActionReceived{Action: ViewUserInfo, ChatID: menu.ChatID, MessageID: menu.MessageID},
 		})
 	}
 	if !menu.Loading && menu.Error == nil && menu.CanReact {
 		rows = append(rows, modalRowSpec{
 			ID:     "action:react",
 			Label:  "React",
-			Action: app.ActionReceived{Action: app.ReactMessage, ChatID: menu.ChatID, MessageID: menu.MessageID},
+			Action: ActionReceived{Action: ReactMessage, ChatID: menu.ChatID, MessageID: menu.MessageID},
 		})
 	}
 	if !menu.Loading && menu.Error == nil && menu.Capabilities.Pin {
@@ -258,21 +256,21 @@ func messageActionRows(menu *app.MessageActionMenu) []modalRowSpec {
 		rows = append(rows, modalRowSpec{
 			ID:     "action:pin",
 			Label:  pinLabel,
-			Action: app.ActionReceived{Action: app.PinMessage, ChatID: menu.ChatID, MessageID: menu.MessageID},
+			Action: ActionReceived{Action: PinMessage, ChatID: menu.ChatID, MessageID: menu.MessageID},
 		})
 	}
 	if !menu.Loading && menu.Error == nil && menu.Capabilities.DeleteForSelf {
 		rows = append(rows, modalRowSpec{
 			ID:     "action:delete",
 			Label:  "Delete",
-			Action: app.ActionReceived{Action: app.DeleteMessage, ChatID: menu.ChatID, MessageID: menu.MessageID},
+			Action: ActionReceived{Action: DeleteMessage, ChatID: menu.ChatID, MessageID: menu.MessageID},
 		})
 	}
 	if !menu.Loading && menu.Error == nil && menu.Capabilities.DeleteForAll {
 		rows = append(rows, modalRowSpec{
 			ID:     "action:delete-all",
 			Label:  "Delete for everyone",
-			Action: app.ActionReceived{Action: app.DeleteForEveryone, ChatID: menu.ChatID, MessageID: menu.MessageID},
+			Action: ActionReceived{Action: DeleteForEveryone, ChatID: menu.ChatID, MessageID: menu.MessageID},
 		})
 	}
 	if menu.Loading {
@@ -290,7 +288,7 @@ func messageActionRows(menu *app.MessageActionMenu) []modalRowSpec {
 // buildReactionPickerLayer adapts the reaction picker into the shared list
 // modal. When a selector Huh View is injected it replaces the palette row
 // labels and selected-row paint; omitted injection retains the legacy rows.
-func buildReactionPickerLayer(model ui.ViewModel, styles renderStyles, selectorView ...string) surfaceResult {
+func buildReactionPickerLayer(model ViewModel, styles renderStyles, selectorView ...string) surfaceResult {
 	if model.ReactionPicker == nil {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
@@ -298,21 +296,21 @@ func buildReactionPickerLayer(model ui.ViewModel, styles renderStyles, selectorV
 }
 
 // reactionRows is the single displayed row source for the reaction picker: one
-// row per app.ReactionPalette entry in exact order. The Rune encodes the
+// row per ReactionPalette entry in exact order. The Rune encodes the
 // palette index as a supplementary-plane code point, preserving the
 // mouse/reducer contract.
-func reactionRows(picker *app.ReactionPicker) []modalRowSpec {
+func reactionRows(picker *ReactionPicker) []modalRowSpec {
 	if picker == nil {
 		return nil
 	}
-	rows := make([]modalRowSpec, 0, len(app.ReactionPalette))
-	for index, emoji := range app.ReactionPalette {
+	rows := make([]modalRowSpec, 0, len(ReactionPalette))
+	for index, emoji := range ReactionPalette {
 		rows = append(rows, modalRowSpec{
 			ID:       fmt.Sprintf("reaction:%d", index),
 			Label:    emoji,
 			Selected: index == picker.Selected,
-			Action: app.ActionReceived{
-				Action:    app.Activate,
+			Action: ActionReceived{
+				Action:    Activate,
 				ChatID:    picker.ChatID,
 				MessageID: picker.MessageID,
 				Rune:      rune(index + 0x10000),
@@ -325,7 +323,7 @@ func reactionRows(picker *app.ReactionPicker) []modalRowSpec {
 // buildForwardPickerLayer adapts the forward picker into the shared list
 // modal. When a selector Huh View is injected it replaces the chat row labels
 // and selected-row paint; omitted injection retains the legacy rows.
-func buildForwardPickerLayer(model ui.ViewModel, styles renderStyles, selectorView ...string) surfaceResult {
+func buildForwardPickerLayer(model ViewModel, styles renderStyles, selectorView ...string) surfaceResult {
 	if model.ForwardPicker == nil {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
@@ -333,9 +331,9 @@ func buildForwardPickerLayer(model ui.ViewModel, styles renderStyles, selectorVi
 }
 
 // forwardRows is the single displayed row source for the forward picker: one
-// row per ui.ChatRow entry in exact current order. The destination is the
+// row per ChatRow entry in exact current order. The destination is the
 // chat's own ID, so the semantic payload survives chat reordering.
-func forwardRows(picker *app.ForwardPicker, chats []ui.ChatRow) []modalRowSpec {
+func forwardRows(picker *ForwardPicker, chats []ChatRow) []modalRowSpec {
 	if picker == nil {
 		return nil
 	}
@@ -345,7 +343,7 @@ func forwardRows(picker *app.ForwardPicker, chats []ui.ChatRow) []modalRowSpec {
 			ID:       fmt.Sprintf("forward:%d:%d", index, row.Chat.ID),
 			Label:    row.Chat.Title,
 			Selected: index == picker.SelectedChat,
-			Action:   app.ActionReceived{Action: app.Activate, ChatID: row.Chat.ID},
+			Action:   ActionReceived{Action: Activate, ChatID: row.Chat.ID},
 		})
 	}
 	return rows

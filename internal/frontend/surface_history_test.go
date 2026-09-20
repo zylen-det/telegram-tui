@@ -8,15 +8,13 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
 	"github.com/zylen-det/telegram-tui/internal/media/thumbnail"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // historySurfaceCanvas composes a history surface under a full viewport root
 // and returns the canvas plus compositor for hit testing.
-func historySurfaceCanvas(model ui.ViewModel, surface surfaceResult) (*lipgloss.Canvas, *lipgloss.Compositor) {
+func historySurfaceCanvas(model ViewModel, surface surfaceResult) (*lipgloss.Canvas, *lipgloss.Compositor) {
 	root := lipgloss.NewLayer(lipgloss.NewStyle().Width(model.Width).Height(model.Height).Render("")).X(0).Y(0).Z(zFrame)
 	root.AddLayers(surface.Layer)
 	compositor := lipgloss.NewCompositor(root)
@@ -24,12 +22,12 @@ func historySurfaceCanvas(model ui.ViewModel, surface surfaceResult) (*lipgloss.
 }
 
 // historyModel builds a wide-layout viewmodel with a conversation rect.
-func historyModel(width, height int, rect image.Rectangle) ui.ViewModel {
-	return ui.ViewModel{
+func historyModel(width, height int, rect image.Rectangle) ViewModel {
+	return ViewModel{
 		Width:  width,
 		Height: height,
-		Layout: ui.ComputeLayout(width, height, false, app.FocusConversation),
-		Focus:  app.FocusConversation,
+		Layout: ComputeLayout(width, height, false, FocusConversation),
+		Focus:  FocusConversation,
 	}
 }
 
@@ -59,10 +57,10 @@ func TestHistoryRootRectIDActionsAndEmptyBackgroundHit(t *testing.T) {
 	if rootHit == nil {
 		t.Fatal("no history root interaction")
 	}
-	if rootHit.Click.Action != app.FocusPane || rootHit.Click.TargetFocus != app.FocusConversation {
+	if rootHit.Click.Action != FocusPane || rootHit.Click.TargetFocus != FocusConversation {
 		t.Errorf("root click = %#v", rootHit.Click)
 	}
-	if rootHit.WheelUp.Action != app.PageUp || rootHit.WheelDown.Action != app.PageDown {
+	if rootHit.WheelUp.Action != PageUp || rootHit.WheelDown.Action != PageDown {
 		t.Errorf("root wheels = %#v/%#v", rootHit.WheelUp, rootHit.WheelDown)
 	}
 	if rootHit.Z != zPaneBackground {
@@ -106,7 +104,7 @@ func TestHistoryErrorRetryRowAndWins(t *testing.T) {
 	if !retry.Rect.Eq(wantRect) {
 		t.Errorf("retry rect = %v, want %v", retry.Rect, wantRect)
 	}
-	if retry.Click.Action != app.Retry {
+	if retry.Click.Action != Retry {
 		t.Errorf("retry click = %#v, want Retry", retry.Click)
 	}
 	if retry.Z != zControl {
@@ -221,7 +219,7 @@ func TestHistoryLoadingOlderStillRendersGroups(t *testing.T) {
 	styles := newRenderStyles(false)
 	model := historyModel(100, 40, image.Rect(0, 0, 100, 40))
 	msg := testMessage(1, 7, "hello")
-	model.Groups = []ui.RenderedMessageGroup{styledMessageGroup("Mina", false, msg)}
+	model.Groups = []RenderedMessageGroup{styledMessageGroup("Mina", false, msg)}
 	model.HistoryLoading = true
 	surface := buildHistoryLayer(model, image.Rect(0, 0, 100, 40), time.Local, styles)
 	canvas, _ := historySurfaceCanvas(model, surface)
@@ -239,7 +237,7 @@ func TestHistoryBottomAlignmentAndInterGroupGap(t *testing.T) {
 	model := historyModel(100, 40, image.Rect(0, 0, 100, 40))
 	g1 := styledMessageGroup("Mina", false, testMessage(1, 7, "first"))
 	g2 := styledMessageGroup("Lou", false, testMessage(2, 7, "second"))
-	model.Groups = []ui.RenderedMessageGroup{g1, g2}
+	model.Groups = []RenderedMessageGroup{g1, g2}
 	surface := buildHistoryLayer(model, image.Rect(0, 0, 100, 40), time.Local, styles)
 	canvas, _ := historySurfaceCanvas(model, surface)
 
@@ -263,7 +261,7 @@ func TestHistoryOffsetMatchesGroupsBeforeSurfaceOffset(t *testing.T) {
 	g1 := styledMessageGroup("Mina", false, testMessage(1, 7, "first"))
 	g2 := styledMessageGroup("Lou", false, testMessage(2, 7, "second"))
 	g3 := styledMessageGroup("Zed", false, testMessage(3, 7, "third"))
-	model.Groups = []ui.RenderedMessageGroup{g1, g2, g3}
+	model.Groups = []RenderedMessageGroup{g1, g2, g3}
 	model.HistoryOffset = 1 // hides the latest message (g3)
 
 	surface := buildHistoryLayer(model, image.Rect(0, 0, 100, 40), time.Local, styles)
@@ -278,13 +276,13 @@ func TestHistoryOffsetMatchesGroupsBeforeSurfaceOffset(t *testing.T) {
 }
 
 func TestBuildVisibleHistoryResultsBoundsOrdinaryHistoryToViewport(t *testing.T) {
-	groups := make([]ui.RenderedMessageGroup, 500)
+	groups := make([]RenderedMessageGroup, 500)
 	for index := range groups {
 		groups[index] = styledMessageGroup("Mina", false, testMessage(domain.MessageID(index+1), 7, "message"))
 	}
 
 	calls := 0
-	results := buildVisibleHistoryResults(groups, 9, false, messageSelection{}, func(group ui.RenderedMessageGroup) messageGroupResult {
+	results := buildVisibleHistoryResults(groups, 9, false, messageSelection{}, func(group RenderedMessageGroup) messageGroupResult {
 		calls++
 		return messageGroupResult{Height: 1, Group: group}
 	})
@@ -298,14 +296,14 @@ func TestBuildVisibleHistoryResultsBoundsOrdinaryHistoryToViewport(t *testing.T)
 }
 
 func TestBuildVisibleHistoryResultsBoundsCenteredSelectionToViewport(t *testing.T) {
-	groups := make([]ui.RenderedMessageGroup, 500)
+	groups := make([]RenderedMessageGroup, 500)
 	for index := range groups {
 		groups[index] = styledMessageGroup("Mina", false, testMessage(domain.MessageID(index+1), 7, "message"))
 	}
 	selection := messageSelection{ChatID: 7, MessageID: 250}
 
 	calls := 0
-	results := buildVisibleHistoryResults(groups, 9, true, selection, func(group ui.RenderedMessageGroup) messageGroupResult {
+	results := buildVisibleHistoryResults(groups, 9, true, selection, func(group RenderedMessageGroup) messageGroupResult {
 		calls++
 		message := group.Messages[0]
 		return messageGroupResult{
@@ -370,7 +368,7 @@ func TestHistorySelectionFollowKeepsBottomAlignmentWhenEverythingFits(t *testing
 func messageInteractionRect(t *testing.T, surface surfaceResult, chatID domain.ChatID, messageID domain.MessageID) image.Rectangle {
 	t.Helper()
 	for _, interaction := range surface.Interactions {
-		if interaction.Click.Action == app.SelectMessage && interaction.Click.ChatID == chatID && interaction.Click.MessageID == messageID {
+		if interaction.Click.Action == SelectMessage && interaction.Click.ChatID == chatID && interaction.Click.MessageID == messageID {
 			return interaction.Rect
 		}
 	}
@@ -387,7 +385,7 @@ func TestHistoryTopClippedGroupRendersOnlyVisibleRows(t *testing.T) {
 	long := testMessage(10, 7, strings.Repeat("word ", 60)) // wraps to >= 4 rows
 	g1 := styledMessageGroup("Mina", false, long)
 	g2 := styledMessageGroup("Lou", false, testMessage(11, 7, "bottom"))
-	model.Groups = []ui.RenderedMessageGroup{g1, g2}
+	model.Groups = []RenderedMessageGroup{g1, g2}
 
 	// Prerequisite: top full height + separator + bottom height must exceed
 	// the content height so the top group is genuinely clipped.
@@ -472,12 +470,12 @@ func TestHistoryPartiallyClippedAvatarNoRetry(t *testing.T) {
 	msg := testMessage(20, 7, "hello")
 	group := styledMessageGroup("Mina", true, msg)
 	group.AvatarError = &domain.AppError{Kind: domain.ErrorMedia, Message: "failed"}
-	model.Groups = []ui.RenderedMessageGroup{group}
+	model.Groups = []RenderedMessageGroup{group}
 
 	// With a history height of 1, the 2-row group is clipped to its bottom row
 	// (the body); the avatar row is above the viewport and must be omitted.
 	small := historyModel(100, 1, image.Rect(0, 0, 100, 1))
-	small.Groups = []ui.RenderedMessageGroup{group}
+	small.Groups = []RenderedMessageGroup{group}
 	small.HistoryDone = true
 	surface := buildHistoryLayer(small, image.Rect(0, 0, 100, 1), time.Local, styles)
 	for _, interaction := range surface.Interactions {
@@ -497,7 +495,7 @@ func TestHistoryFullyContainedAvatarRetained(t *testing.T) {
 	model := historyModel(100, 40, image.Rect(0, 0, 100, 40))
 	msg := testMessage(21, 7, "hello")
 	group := styledMessageGroup("Mina", true, msg)
-	model.Groups = []ui.RenderedMessageGroup{group}
+	model.Groups = []RenderedMessageGroup{group}
 
 	surface := buildHistoryLayer(model, image.Rect(0, 0, 100, 40), time.Local, styles)
 	canvas, _ := historySurfaceCanvas(model, surface)
@@ -521,7 +519,7 @@ func TestHistorySelectedAvatarRetryRetainedNonzeroStart(t *testing.T) {
 	msg := testMessage(45, 7, "selected avatar")
 	group := styledMessageGroup("Mina", true, msg)
 	group.AvatarError = &domain.AppError{Kind: domain.ErrorMedia, Message: "failed"}
-	model.Groups = []ui.RenderedMessageGroup{group}
+	model.Groups = []RenderedMessageGroup{group}
 	model.SelectedMessageChat = 7
 	model.SelectedMessage = 45
 
@@ -548,7 +546,7 @@ func TestHistorySelectedAvatarRetryRetainedNonzeroStart(t *testing.T) {
 	if !retry.Rect.Eq(wantRect) {
 		t.Errorf("retry rect = %v, want %v", retry.Rect, wantRect)
 	}
-	if retry.Click.Action != app.Retry || retry.Click.AvatarKey != "avatar-key" {
+	if retry.Click.Action != Retry || retry.Click.AvatarKey != "avatar-key" {
 		t.Errorf("retry click = %#v, want Retry/avatar-key", retry.Click)
 	}
 	if retry.Z != zControl {
@@ -591,7 +589,7 @@ func TestHistorySelectedClippedFragmentRoundedFrame(t *testing.T) {
 	long := "this is a long selected body that wraps onto several rows of text content to make it tall"
 	msg := testMessage(30, 7, long)
 	group := styledMessageGroup("Mina", false, msg)
-	model.Groups = []ui.RenderedMessageGroup{group}
+	model.Groups = []RenderedMessageGroup{group}
 	model.SelectedMessageChat = 7
 	model.SelectedMessage = 30
 
@@ -640,7 +638,7 @@ func TestHistoryEveryNonVirtualInteractionHitParityAndUniqueIDs(t *testing.T) {
 	model := historyModel(100, 40, image.Rect(0, 0, 100, 40))
 	msg := testMessage(40, 7, "hit me")
 	group := styledMessageGroup("Mina", false, msg)
-	model.Groups = []ui.RenderedMessageGroup{group}
+	model.Groups = []RenderedMessageGroup{group}
 	model.HistoryDone = true
 
 	surface := buildHistoryLayer(model, image.Rect(0, 0, 100, 40), time.Local, styles)
@@ -675,7 +673,7 @@ func TestHistoryLongFE0FZWJReactionStaysWithinWidth(t *testing.T) {
 	msg := testMessage(50, 7, "👨‍👩‍👧‍👦🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀")
 	msg.Outgoing = true
 	group := styledMessageGroup("Mina", false, msg)
-	model.Groups = []ui.RenderedMessageGroup{group}
+	model.Groups = []RenderedMessageGroup{group}
 	model.HistoryDone = true
 
 	surface := buildHistoryLayer(model, image.Rect(0, 0, 100, 40), time.Local, styles)
@@ -723,7 +721,7 @@ func TestHistoryEmptyAndTinyViewportSafety(t *testing.T) {
 	// Tiny viewport with a group: must not panic and must not leak.
 	tiny := historyModel(5, 2, image.Rect(0, 0, 5, 2))
 	msg := testMessage(60, 7, "x")
-	tiny.Groups = []ui.RenderedMessageGroup{styledMessageGroup("Mina", false, msg)}
+	tiny.Groups = []RenderedMessageGroup{styledMessageGroup("Mina", false, msg)}
 	tiny.HistoryDone = true
 	ts := buildHistoryLayer(tiny, image.Rect(0, 0, 5, 2), time.Local, styles)
 	if ts.Layer == nil {
@@ -743,8 +741,8 @@ func TestHistoryPublishesKittyPlacementsAbsolute(t *testing.T) {
 
 	block := thumbnail.Block{Text: "kitty", Width: 20, Height: 8, Kitty: true, ImageID: 99}
 	model := historyModel(100, 40, image.Rect(0, 0, 100, 40))
-	model.Groups = []ui.RenderedMessageGroup{group}
-	model.InlineThumbnails = []ui.RenderedThumbnail{{ChatID: 9, MessageID: 4001, Block: block}}
+	model.Groups = []RenderedMessageGroup{group}
+	model.InlineThumbnails = []RenderedThumbnail{{ChatID: 9, MessageID: 4001, Block: block}}
 
 	surface := buildHistoryLayer(model, image.Rect(0, 0, 100, 40), time.Local, styles)
 	if len(surface.Inline) != 1 {
@@ -771,8 +769,8 @@ func TestHistoryClipsKittyPlacementsToViewport(t *testing.T) {
 	transmit := "\x1b_Ga=T,f=100,i=100,s=64,v=64,c=20,r=8,q=2;AAAA\x1b\\"
 	block := thumbnail.Block{Text: transmit, Width: 20, Height: 8, Kitty: true, ImageID: 100}
 	model := historyModel(100, 4, image.Rect(0, 0, 100, 4))
-	model.Groups = []ui.RenderedMessageGroup{group}
-	model.InlineThumbnails = []ui.RenderedThumbnail{{ChatID: 9, MessageID: 4002, Block: block}}
+	model.Groups = []RenderedMessageGroup{group}
+	model.InlineThumbnails = []RenderedThumbnail{{ChatID: 9, MessageID: 4002, Block: block}}
 
 	surface := buildHistoryLayer(model, image.Rect(0, 0, 100, 4), time.Local, styles)
 	if len(surface.Inline) != 1 {

@@ -6,7 +6,6 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
 )
 
@@ -93,13 +92,13 @@ func TestAttachmentActionOptionsAreExactAndPreserveAcceptedMedia(t *testing.T) {
 	}
 	for _, test := range cases {
 		t.Run(test.label, func(t *testing.T) {
-			menu := &app.MessageActionMenu{
+			menu := &MessageActionMenu{
 				ChatID: 9, MessageID: 77, MediaKind: test.kind,
 				MediaFile: domain.MediaFileRef{ID: 1, CanDownload: true},
 				Loading:   true,
 			}
 			options := selectorOptionsFromRows(messageActionRows(menu))
-			if len(options) == 0 || options[0].ID != test.id || options[0].Label != test.label || options[0].Value.Action != app.ViewMessageMedia {
+			if len(options) == 0 || options[0].ID != test.id || options[0].Label != test.label || options[0].Value.Action != ViewMessageMedia {
 				t.Fatalf("options = %#v", options)
 			}
 			menu.Loading = false

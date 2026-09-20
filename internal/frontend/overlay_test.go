@@ -16,7 +16,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
 )
 
@@ -74,14 +73,13 @@ func TestOverlayClearsAndReplacesInvalidatedPlacement(t *testing.T) {
 }
 
 func TestOverlayViewUsesReservedModalContentAndReadyState(t *testing.T) {
-	state := app.InitialState()
+	state := InitialState()
 	state.Width = 100
 	state.Height = 24
-	state.Focus = app.FocusModal
+	state.Focus = FocusModal
 	path := writeOverlayPNG(t, "modal.png", 76, 30)
-	state.Modal = &app.ModalState{Title: "Image", Path: path, PreviousFocus: app.FocusConversation}
-	engine := app.NewEngine(state)
-	model := newAppModelForTest(t, engine, newBoundedAppRuntimeForModelTest(t))
+	state.Modal = &ModalState{Title: "Image", Path: path, PreviousFocus: FocusConversation}
+	model := newAppModelForTest(t, state, newTestSession(t))
 	images := &overlayImages{}
 	overlay := NewOutputOverlay(&bytes.Buffer{}, images, func(int, int) image.Point { return image.Pt(1, 2) })
 	model.SetOutputOverlay(overlay)
@@ -97,22 +95,22 @@ func TestOverlayViewUsesReservedModalContentAndReadyState(t *testing.T) {
 	}
 
 	state.Modal.Loading = true
-	model.engine = app.NewEngine(state)
+	model.state = &state
 	view = model.View()
 	mustWriteOverlay(t, overlay, view.WindowTitle)
 	state.Modal.Loading = false
 	state.Modal.Error = &domain.AppError{Kind: domain.ErrorMedia, Message: "unavailable"}
-	model.engine = app.NewEngine(state)
+	model.state = &state
 	view = model.View()
 	mustWriteOverlay(t, overlay, view.WindowTitle)
 	state.Modal.Error = nil
 	state.Modal.Path = ""
-	model.engine = app.NewEngine(state)
+	model.state = &state
 	view = model.View()
 	mustWriteOverlay(t, overlay, view.WindowTitle)
 	state.Modal.Path = path
 	state.Width = minimumWidth - 1
-	model.engine = app.NewEngine(state)
+	model.state = &state
 	view = model.View()
 	mustWriteOverlay(t, overlay, view.WindowTitle)
 	if images.shows != 1 || images.clears != 1 {
@@ -159,18 +157,17 @@ func TestOverlayClearFailureIsSanitized(t *testing.T) {
 }
 
 func TestProductionSignalGracefulAppModelRoutesThroughQuit(t *testing.T) {
-	engine := app.NewEngine(app.InitialState())
-	model := newAppModelForTest(t, engine, newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, InitialState(), newTestSession(t))
 	_, command := model.Update(ProcessQuitMsg{})
-	if !engine.Snapshot().Quitting || command == nil {
+	if !model.Snapshot().Quitting || command == nil {
 		t.Fatal("process quit did not begin application shutdown")
 	}
 }
 
 func TestProductionFatalShutdownMetadataRecordedBeforeQuit(t *testing.T) {
-	model := newAppModelForTest(t, app.NewEngine(app.InitialState()), newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, InitialState(), newTestSession(t))
 	failure := domain.AppError{Kind: domain.ErrorInternal, Message: "fatal shutdown sentinel"}
-	updated, command := model.Update(appEventMsg{event: app.ShutdownComplete{Error: &failure}})
+	updated, command := model.Update(ShutdownComplete{Error: &failure})
 	if command == nil || model.ShutdownError() == nil {
 		t.Fatal("shutdown failure was not recorded before the graceful quit command")
 	}
@@ -245,13 +242,13 @@ func TestOverlayFrameBindingSurvivesBubbleTeaRenderer(t *testing.T) {
 
 func TestOverlaySelectedChatIdentitySurvivesReorderAndReplacement(t *testing.T) {
 	path := writeOverlayPNG(t, "identity.png", 4, 2)
-	state := app.InitialState()
+	state := InitialState()
 	state.Width, state.Height = 100, 24
-	state.Focus = app.FocusModal
-	state.Modal = &app.ModalState{Title: "Image", Path: path, PreviousFocus: app.FocusConversation}
+	state.Focus = FocusModal
+	state.Modal = &ModalState{Title: "Image", Path: path, PreviousFocus: FocusConversation}
 	state.Chats = []domain.Chat{{ID: 11}, {ID: 22}}
 	state.SelectedChat = 0
-	model := newAppModelForTest(t, app.NewEngine(state), newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, state, newTestSession(t))
 	images := &overlayImages{}
 	overlay := NewOutputOverlay(&bytes.Buffer{}, images, nil)
 	model.SetOutputOverlay(overlay)
@@ -260,7 +257,7 @@ func TestOverlaySelectedChatIdentitySurvivesReorderAndReplacement(t *testing.T) 
 	mustWriteOverlay(t, overlay, view.WindowTitle)
 	state.Chats = []domain.Chat{{ID: 22}, {ID: 11}}
 	state.SelectedChat = 1
-	model.engine = app.NewEngine(state)
+	model.state = &state
 	view = model.View()
 	mustWriteOverlay(t, overlay, view.WindowTitle)
 	if images.shows != 1 || images.clears != 0 || overlay.active.selectedID != 11 {
@@ -268,7 +265,7 @@ func TestOverlaySelectedChatIdentitySurvivesReorderAndReplacement(t *testing.T) 
 	}
 
 	state.Chats = []domain.Chat{{ID: 22}, {ID: 33}}
-	model.engine = app.NewEngine(state)
+	model.state = &state
 	view = model.View()
 	mustWriteOverlay(t, overlay, view.WindowTitle)
 	if images.shows != 2 || images.clears != 1 || overlay.active.selectedID != 33 {

@@ -6,15 +6,13 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // composerCanvas composes a single fixed-size viewport root at (0,0) sized to
 // the model dimensions and attaches the composer surface root, returning the
 // resulting canvas, compositor, and the surface result for inspection.
-func composerCanvas(model ui.ViewModel, rect image.Rectangle, styles renderStyles, composerView ...string) (*lipgloss.Canvas, *lipgloss.Compositor, surfaceResult) {
+func composerCanvas(model ViewModel, rect image.Rectangle, styles renderStyles, composerView ...string) (*lipgloss.Canvas, *lipgloss.Compositor, surfaceResult) {
 	result := buildComposerLayer(model, rect, styles, composerView...)
 	root := lipgloss.NewLayer(lipgloss.NewStyle().Width(model.Width).Height(model.Height).Render("")).X(0).Y(0).Z(zFrame)
 	if result.Layer != nil {
@@ -25,11 +23,11 @@ func composerCanvas(model ui.ViewModel, rect image.Rectangle, styles renderStyle
 	return canvas, compositor, result
 }
 
-func composerModel(width, height int, active domain.Chat) ui.ViewModel {
-	return ui.ViewModel{
+func composerModel(width, height int, active domain.Chat) ViewModel {
+	return ViewModel{
 		Width:      width,
 		Height:     height,
-		Focus:      app.FocusConversation,
+		Focus:      FocusConversation,
 		ActiveChat: active,
 	}
 }
@@ -115,7 +113,7 @@ func TestComposerLayerRootExactBoundsAcrossFocus(t *testing.T) {
 			w, h := 60, 6
 			model := composerModel(w, h, writable(1))
 			if tc.focused {
-				model.Focus = app.FocusComposer
+				model.Focus = FocusComposer
 			}
 			styles := newRenderStyles(false)
 			_, compositor, result := composerCanvas(model, image.Rect(0, 0, w, h), styles)
@@ -283,7 +281,7 @@ func TestComposerLayerWritableInteraction(t *testing.T) {
 	if interaction.Z != zPaneBackground {
 		t.Errorf("composer interaction Z = %d, want %d", interaction.Z, zPaneBackground)
 	}
-	if interaction.Click.Action != app.FocusPane || interaction.Click.TargetFocus != app.FocusComposer {
+	if interaction.Click.Action != FocusPane || interaction.Click.TargetFocus != FocusComposer {
 		t.Errorf("composer interaction click = %+v, want FocusPane/FocusComposer", interaction.Click)
 	}
 	// Hit parity across several cells.
@@ -313,7 +311,7 @@ func TestComposerLayerSendControl(t *testing.T) {
 	if send.Z != zControl {
 		t.Errorf("send Z = %d, want zControl", send.Z)
 	}
-	if send.Click.Action != app.ComposerSubmit {
+	if send.Click.Action != ComposerSubmit {
 		t.Errorf("send click = %+v, want ComposerSubmit", send.Click)
 	}
 	// Hit parity.
@@ -353,8 +351,8 @@ func TestComposerLayerNoInteractionWithoutWritable(t *testing.T) {
 	styles := newRenderStyles(false)
 	// EditTarget exists but chat is read-only: no controls/interactions.
 	model := composerModel(40, 5, readOnly(7))
-	model.Focus = app.FocusComposer
-	model.EditTarget = &app.EditTarget{ChatID: 7, Error: &domain.AppError{Message: "boom"}}
+	model.Focus = FocusComposer
+	model.EditTarget = &EditTarget{ChatID: 7, Error: &domain.AppError{Message: "boom"}}
 	_, _, result := composerCanvas(model, image.Rect(0, 0, 40, 5), styles)
 	if len(result.Interactions) != 0 {
 		t.Errorf("read-only with edit target produced interactions: %+v", result.Interactions)
@@ -368,7 +366,7 @@ func TestComposerLayerReplyBannerClipsBeforeCancel(t *testing.T) {
 	styles := newRenderStyles(false)
 	w, h := 30, 5
 	model := composerModel(w, h, writable(1))
-	model.ReplyTarget = &app.ReplyTarget{ChatID: 1, Sender: "Mina", Preview: "hello world"}
+	model.ReplyTarget = &ReplyTarget{ChatID: 1, Sender: "Mina", Preview: "hello world"}
 	_, compositor, result := composerCanvas(model, image.Rect(0, 0, w, h), styles)
 
 	cancel := interactionByID(result, "composer:cancel-reply")
@@ -380,7 +378,7 @@ func TestComposerLayerReplyBannerClipsBeforeCancel(t *testing.T) {
 	if !cancel.Rect.Eq(want) {
 		t.Fatalf("cancel-reply rect = %v, want %v", cancel.Rect, want)
 	}
-	if cancel.Click.Action != app.CancelReply {
+	if cancel.Click.Action != CancelReply {
 		t.Errorf("cancel click = %+v, want CancelReply", cancel.Click)
 	}
 	if cancel.Z != zControl {
@@ -421,7 +419,7 @@ func TestComposerLayerReplyCJKFe0fZwj(t *testing.T) {
 		h := 5
 		model := composerModel(w, h, writable(1))
 		preview := "界❤️👨\u200d👩\u200d👧\u200d👦👍🔥 中文长文本overflow"
-		model.ReplyTarget = &app.ReplyTarget{ChatID: 1, Sender: "名", Preview: preview}
+		model.ReplyTarget = &ReplyTarget{ChatID: 1, Sender: "名", Preview: preview}
 		_, compositor, result := composerCanvas(model, image.Rect(0, 0, w, h), styles)
 		cancel := interactionByID(result, "composer:cancel-reply")
 		if cancel == nil {
@@ -449,7 +447,7 @@ func TestComposerLayerEditBannerAndError(t *testing.T) {
 	styles := newRenderStyles(false)
 	w, h := 30, 6
 	model := composerModel(w, h, writable(1))
-	model.EditTarget = &app.EditTarget{ChatID: 1, Buffer: "abc", Error: &domain.AppError{Message: "failed"}}
+	model.EditTarget = &EditTarget{ChatID: 1, Buffer: "abc", Error: &domain.AppError{Message: "failed"}}
 	_, compositor, result := composerCanvas(model, image.Rect(0, 0, w, h), styles)
 
 	cancel := interactionByID(result, "composer:cancel-edit")
@@ -461,7 +459,7 @@ func TestComposerLayerEditBannerAndError(t *testing.T) {
 	if !cancel.Rect.Eq(want) {
 		t.Fatalf("cancel-edit rect = %v, want %v", cancel.Rect, want)
 	}
-	if cancel.Click.Action != app.CancelEdit {
+	if cancel.Click.Action != CancelEdit {
 		t.Errorf("cancel-edit click = %+v, want CancelEdit", cancel.Click)
 	}
 	if hit := compositor.Hit(want.Min.X, 0); hit.ID() != "composer:cancel-edit" {
@@ -480,7 +478,7 @@ func TestComposerLayerEditErrorOmittedNoPreSendRow(t *testing.T) {
 	// height 2: edit banner row 0, send row 1 => no room for Edit failed.
 	w, h := 20, 2
 	model := composerModel(w, h, writable(1))
-	model.EditTarget = &app.EditTarget{ChatID: 1, Buffer: "x", Error: &domain.AppError{Message: "failed"}}
+	model.EditTarget = &EditTarget{ChatID: 1, Buffer: "x", Error: &domain.AppError{Message: "failed"}}
 	_, compositor, _ := composerCanvas(model, image.Rect(0, 0, w, h), styles)
 	// No error line exists; the error text must not render on the send row.
 	rows := strings.Split(plainText(compositor.Render()), "\n")
@@ -499,8 +497,8 @@ func TestComposerLayerReplyAndEditCoexistInOrder(t *testing.T) {
 	styles := newRenderStyles(false)
 	w, h := 40, 6
 	model := composerModel(w, h, writable(1))
-	model.ReplyTarget = &app.ReplyTarget{ChatID: 1, Sender: "S", Preview: "p"}
-	model.EditTarget = &app.EditTarget{ChatID: 1, Buffer: "abc", Error: nil}
+	model.ReplyTarget = &ReplyTarget{ChatID: 1, Sender: "S", Preview: "p"}
+	model.EditTarget = &EditTarget{ChatID: 1, Buffer: "abc", Error: nil}
 	_, compositor, result := composerCanvas(model, image.Rect(0, 0, w, h), styles)
 
 	replyCancel := interactionByID(result, "composer:cancel-reply")
@@ -561,7 +559,7 @@ func TestComposerLayerHuhEmptyAndExplicitNewlineKeepTerminalCursorHidden(t *test
 	w, h := 20, 5
 
 	model := composerModel(w, h, writable(1))
-	model.Focus = app.FocusComposer
+	model.Focus = FocusComposer
 	_, _, result := composerCanvas(model, image.Rect(0, 0, w, h), styles)
 	if result.Cursor.Visible || result.Cursor.X != -1 || result.Cursor.Y != -1 {
 		t.Errorf("empty Huh view exposed terminal cursor: %+v", result.Cursor)
@@ -588,7 +586,7 @@ func TestComposerLayerTerminalCursorHiddenFocusedAndUnfocused(t *testing.T) {
 	}
 
 	focused := composerModel(w, h, writable(1))
-	focused.Focus = app.FocusComposer
+	focused.Focus = FocusComposer
 	_, _, r2 := composerCanvas(focused, image.Rect(0, 0, w, h), styles, "hello")
 	if r2.Cursor.Visible || r2.Cursor.X != -1 || r2.Cursor.Y != -1 {
 		t.Errorf("focused composer exposed terminal cursor: %+v", r2.Cursor)
@@ -601,7 +599,7 @@ func TestComposerLayerHuhViewRendersCJKZwjWithTerminalCursorHidden(t *testing.T)
 	// leaving 15 draft columns, enough for the full CJK/ZWJ content.
 	w, h := 40, 5
 	model := composerModel(w, h, writable(1))
-	model.Focus = app.FocusComposer
+	model.Focus = FocusComposer
 	text := "❤️界👨\u200d👩\u200d👧\u200d👦"
 	_, compositor, result := composerCanvas(model, image.Rect(0, 0, w, h), styles, text)
 	if !strings.Contains(plainText(compositor.Render()), text) {
@@ -615,9 +613,9 @@ func TestComposerLayerHuhViewRendersCJKZwjWithTerminalCursorHidden(t *testing.T)
 func TestComposerLayerInteractionIDsUnique(t *testing.T) {
 	styles := newRenderStyles(false)
 	model := composerModel(40, 8, writable(1))
-	model.Focus = app.FocusComposer
-	model.ReplyTarget = &app.ReplyTarget{ChatID: 1, Sender: "s", Preview: "p"}
-	model.EditTarget = &app.EditTarget{ChatID: 1, Buffer: "b", Error: nil}
+	model.Focus = FocusComposer
+	model.ReplyTarget = &ReplyTarget{ChatID: 1, Sender: "s", Preview: "p"}
+	model.EditTarget = &EditTarget{ChatID: 1, Buffer: "b", Error: nil}
 	model.Draft = "some draft text"
 	_, compositor, result := composerCanvas(model, image.Rect(0, 0, 40, 8), styles)
 	if err := assertUniqueNonEmptyIDs(result.Interactions); err != nil {
@@ -651,10 +649,10 @@ func TestComposerLayerBoundsTinyDeterministic(t *testing.T) {
 	for width := 1; width <= 12; width++ {
 		for height := 1; height <= 4; height++ {
 			model := composerModel(width, height, writable(1))
-			model.ReplyTarget = &app.ReplyTarget{ChatID: 1, Sender: "s", Preview: draft}
-			model.EditTarget = &app.EditTarget{ChatID: 1, Buffer: "abc", Error: &domain.AppError{Message: "e"}}
+			model.ReplyTarget = &ReplyTarget{ChatID: 1, Sender: "s", Preview: draft}
+			model.EditTarget = &EditTarget{ChatID: 1, Buffer: "abc", Error: &domain.AppError{Message: "e"}}
 			model.Draft = draft
-			model.Focus = app.FocusComposer
+			model.Focus = FocusComposer
 			rect := image.Rect(0, 0, width, height)
 			_, compositor, result := composerCanvas(model, rect, styles)
 			if compositor == nil {
@@ -715,7 +713,7 @@ func TestComposerLayerPhoto(t *testing.T) {
 		if photo.Z != zControl {
 			t.Errorf("photo Z = %d, want zControl", photo.Z)
 		}
-		if photo.Click.Action != app.OpenPhotoSend {
+		if photo.Click.Action != OpenPhotoSend {
 			t.Errorf("photo click = %+v, want OpenPhotoSend", photo.Click)
 		}
 		// Hit parity.
@@ -723,7 +721,7 @@ func TestComposerLayerPhoto(t *testing.T) {
 			t.Errorf("photo hit = %q, want composer:photo", hit.ID())
 		}
 		// Send unchanged.
-		if send.Click.Action != app.ComposerSubmit {
+		if send.Click.Action != ComposerSubmit {
 			t.Errorf("send action changed: %v", send.Click.Action)
 		}
 	})
@@ -732,7 +730,7 @@ func TestComposerLayerPhoto(t *testing.T) {
 	t.Run("noPhotoReadOnlyNoChat", func(t *testing.T) {
 		// Read-only.
 		model := composerModel(60, 5, readOnly(7))
-		model.PhotoSend = &app.PhotoSendState{ChatID: 1, Input: []rune("/tmp/x")}
+		model.PhotoSend = &PhotoSendState{ChatID: 1, Input: []rune("/tmp/x")}
 		_, _, result := composerCanvas(model, image.Rect(0, 0, 60, 5), styles)
 		if interactionByID(result, "composer:photo") != nil {
 			t.Error("read-only has photo")
@@ -743,7 +741,7 @@ func TestComposerLayerPhoto(t *testing.T) {
 
 		// No active chat.
 		model2 := composerModel(60, 5, domain.Chat{})
-		model2.PhotoSend = &app.PhotoSendState{ChatID: 1, Input: []rune("/tmp/x")}
+		model2.PhotoSend = &PhotoSendState{ChatID: 1, Input: []rune("/tmp/x")}
 		_, _, result2 := composerCanvas(model2, image.Rect(0, 0, 60, 5), styles)
 		if interactionByID(result2, "composer:photo") != nil {
 			t.Error("no chat has photo")
@@ -759,7 +757,7 @@ func TestComposerLayerPhoto(t *testing.T) {
 			image.Rect(0, 0, 14, 1),
 		} {
 			model := composerModel(12, 4, writable(1))
-			model.PhotoSend = &app.PhotoSendState{ChatID: 1, Input: []rune("/tmp/x")}
+			model.PhotoSend = &PhotoSendState{ChatID: 1, Input: []rune("/tmp/x")}
 			_, _, res := composerCanvas(model, rect, styles)
 			if res.Layer == nil {
 				continue
@@ -786,7 +784,7 @@ func TestComposerLayerPhoto(t *testing.T) {
 		w, h := 40, 5
 		model := composerModel(w, h, writable(1))
 
-		model.Focus = app.FocusComposer
+		model.Focus = FocusComposer
 		model.Draft = "hello world"
 		_, _, result := composerCanvas(model, image.Rect(0, 0, w, h), styles)
 
@@ -824,7 +822,7 @@ func TestComposerLayerPhoto(t *testing.T) {
 		// clipped by the viewport.
 		rect := image.Rect(15, 7, 60, 19)
 		model := composerModel(100, 40, writable(1))
-		model.Focus = app.FocusComposer
+		model.Focus = FocusComposer
 		model.Draft = "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor"
 		_, compositor, result := composerCanvas(model, rect, styles)
 

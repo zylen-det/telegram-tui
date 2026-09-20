@@ -10,12 +10,10 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/auth"
 	"github.com/zylen-det/telegram-tui/internal/domain"
 	"github.com/zylen-det/telegram-tui/internal/media/pixel"
 	"github.com/zylen-det/telegram-tui/internal/telegram"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 func TestMainSurfacesRenderApplicationState(t *testing.T) {
@@ -37,24 +35,24 @@ func TestMainSurfacesRenderApplicationState(t *testing.T) {
 
 func TestHistoryViewportShowsExplicitLoadingAndEmptyStates(t *testing.T) {
 	model := mainSurfaceModel(t, 100, 24)
-	state := model.engine.Snapshot()
+	state := model.Snapshot()
 	chatID := state.Chats[state.SelectedChat].ID
 	state.Messages[chatID] = nil
-	state.History[chatID] = app.HistoryState{Loading: true}
-	model.engine = app.NewEngine(state)
+	state.History[chatID] = HistoryState{Loading: true}
+	model.state = &state
 	loading := plainAppView(model)
 	if !strings.Contains(loading, "Loading messages...") || strings.Contains(loading, "No messages") {
 		t.Fatal("history viewport did not render an exclusive loading state")
 	}
 
-	state.History[chatID] = app.HistoryState{Done: true}
-	model.engine = app.NewEngine(state)
+	state.History[chatID] = HistoryState{Done: true}
+	model.state = &state
 	if plain := plainAppView(model); !strings.Contains(plain, "No messages") {
 		t.Fatal("history viewport omitted its empty state")
 	}
-	state.History[chatID] = app.HistoryState{Loading: true}
+	state.History[chatID] = HistoryState{Loading: true}
 	state.Messages[chatID] = []domain.Message{{ID: 9001, ChatID: chatID, Kind: domain.MessageText, Text: "existing-history-marker", SentAt: time.Unix(9001, 0)}}
-	model.engine = app.NewEngine(state)
+	model.state = &state
 	olderLoading := plainAppView(model)
 	if !strings.Contains(olderLoading, "Loading older messages...") || !strings.Contains(olderLoading, "existing-history-marker") {
 		t.Fatal("non-empty history omitted loading indicator or existing content")
@@ -65,21 +63,21 @@ func TestResponsiveLayoutsExposeExpectedPane(t *testing.T) {
 	tests := []struct {
 		name          string
 		width, height int
-		focus         app.Focus
+		focus         Focus
 		want          []string
 		dontWant      []string
 	}{
-		{name: "wide", width: 140, height: 30, focus: app.FocusConversation, want: []string{"Chats", "Weekend dev"}},
-		{name: "normal", width: 100, height: 24, focus: app.FocusConversation, want: []string{"Chats", "Weekend dev"}},
-		{name: "narrow chats", width: 70, height: 22, focus: app.FocusChats, want: []string{"Chats", "Mina Chen"}, dontWant: []string{"Hello from the group"}},
-		{name: "narrow conversation", width: 70, height: 22, focus: app.FocusConversation, want: []string{"Hello from the group", "[Send]"}, dontWant: []string{"Mina Chen"}},
+		{name: "wide", width: 140, height: 30, focus: FocusConversation, want: []string{"Chats", "Weekend dev"}},
+		{name: "normal", width: 100, height: 24, focus: FocusConversation, want: []string{"Chats", "Weekend dev"}},
+		{name: "narrow chats", width: 70, height: 22, focus: FocusChats, want: []string{"Chats", "Mina Chen"}, dontWant: []string{"Hello from the group"}},
+		{name: "narrow conversation", width: 70, height: 22, focus: FocusConversation, want: []string{"Hello from the group", "[Send]"}, dontWant: []string{"Mina Chen"}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			model := mainSurfaceModel(t, test.width, test.height)
-			state := model.engine.Snapshot()
+			state := model.Snapshot()
 			state.Focus = test.focus
-			model.engine = app.NewEngine(state)
+			model.state = &state
 			plain := plainAppView(model)
 			assertFullWindow(t, plain, test.width, test.height)
 			for _, want := range test.want {
@@ -105,10 +103,10 @@ func TestResponsiveLayoutsExposeExpectedPane(t *testing.T) {
 
 func TestModalShellIncludesStatesAndBoundedControls(t *testing.T) {
 	model := mainSurfaceModel(t, 100, 24)
-	state := model.engine.Snapshot()
-	state.Focus = app.FocusModal
-	state.Modal = &app.ModalState{Title: "Weekend image", Loading: true, PreviousFocus: app.FocusConversation}
-	model.engine = app.NewEngine(state)
+	state := model.Snapshot()
+	state.Focus = FocusModal
+	state.Modal = &ModalState{Title: "Weekend image", Loading: true, PreviousFocus: FocusConversation}
+	model.state = &state
 	plain := plainAppView(model)
 	for _, want := range []string{"Weekend image", "Loading image...", "×", "╭", "╯"} {
 		if !strings.Contains(plain, want) {
@@ -118,7 +116,7 @@ func TestModalShellIncludesStatesAndBoundedControls(t *testing.T) {
 
 	state.Modal.Loading = false
 	state.Modal.Error = &domain.AppError{Kind: domain.ErrorMedia, Message: "Image unavailable"}
-	model.engine = app.NewEngine(state)
+	model.state = &state
 	_ = model.View()
 	plain = plainAppView(model)
 	for _, want := range []string{"Image unavailable", "Retry"} {
@@ -135,18 +133,18 @@ func TestModalShellIncludesStatesAndBoundedControls(t *testing.T) {
 
 func TestMessageSelectionAndActionMenuSurfacesPublishSemanticHits(t *testing.T) {
 	model := mainSurfaceModel(t, 100, 24)
-	state := model.engine.Snapshot()
+	state := model.Snapshot()
 	state.SelectedMessageChat, state.SelectedMessage = 2, 7
-	state.MessageMenu = &app.MessageActionMenu{ChatID: 2, MessageID: 7, Capabilities: domain.MessageCapabilities{Copy: true}}
-	model.engine = app.NewEngine(state)
+	state.MessageMenu = &MessageActionMenu{ChatID: 2, MessageID: 7, Capabilities: domain.MessageCapabilities{Copy: true}}
+	model.state = &state
 	plain := plainAppView(model)
 	if !strings.Contains(plain, "Copy") {
 		t.Fatal("action menu did not render Copy")
 	}
 	var selectHit, copyHit bool
 	for _, hit := range model.hitRegions() {
-		selectHit = selectHit || (hit.Click.Action == app.SelectMessage && hit.Click.ChatID == 2 && hit.Click.MessageID == 7)
-		copyHit = copyHit || hit.Click.Action == app.CopyMessage
+		selectHit = selectHit || (hit.Click.Action == SelectMessage && hit.Click.ChatID == 2 && hit.Click.MessageID == 7)
+		copyHit = copyHit || hit.Click.Action == CopyMessage
 	}
 	if selectHit || !copyHit {
 		t.Fatalf("modal semantic hit availability = underlying-select:%t copy:%t", selectHit, copyHit)
@@ -155,16 +153,16 @@ func TestMessageSelectionAndActionMenuSurfacesPublishSemanticHits(t *testing.T) 
 
 func TestAuthoritativeMessageActionsLoadingAndErrorNeverRenderEdit(t *testing.T) {
 	model := mainSurfaceModel(t, 100, 24)
-	state := model.engine.Snapshot()
-	state.MessageMenu = &app.MessageActionMenu{ChatID: 2, MessageID: 7, Loading: true, Capabilities: domain.MessageCapabilities{Copy: true, Edit: true}}
-	model.engine = app.NewEngine(state)
+	state := model.Snapshot()
+	state.MessageMenu = &MessageActionMenu{ChatID: 2, MessageID: 7, Loading: true, Capabilities: domain.MessageCapabilities{Copy: true, Edit: true}}
+	model.state = &state
 	plain := plainAppView(model)
 	if !strings.Contains(plain, "Loading actions...") || strings.Contains(plain, "Edit") || !strings.Contains(plain, "Copy") {
 		t.Fatalf("loading modal = %q", plain)
 	}
 	state.MessageMenu.Loading = false
 	state.MessageMenu.Error = &domain.AppError{Message: "Could not load message actions"}
-	model.engine = app.NewEngine(state)
+	model.state = &state
 	plain = plainAppView(model)
 	if !strings.Contains(plain, "Actions unavailable") || strings.Contains(plain, "Edit") {
 		t.Fatalf("error modal = %q", plain)
@@ -173,9 +171,9 @@ func TestAuthoritativeMessageActionsLoadingAndErrorNeverRenderEdit(t *testing.T)
 
 func TestMessageActionRowsRenderInCanonicalOrderWithForwardAndGating(t *testing.T) {
 	model := mainSurfaceModel(t, 100, 24)
-	state := model.engine.Snapshot()
-	state.MessageMenu = &app.MessageActionMenu{ChatID: 2, MessageID: 7, Capabilities: domain.MessageCapabilities{Copy: true, Reply: true, Forward: true, Edit: true, DeleteForSelf: true, DeleteForAll: true}}
-	model.engine = app.NewEngine(state)
+	state := model.Snapshot()
+	state.MessageMenu = &MessageActionMenu{ChatID: 2, MessageID: 7, Capabilities: domain.MessageCapabilities{Copy: true, Reply: true, Forward: true, Edit: true, DeleteForSelf: true, DeleteForAll: true}}
+	model.state = &state
 	plain := plainAppView(model)
 	for _, label := range []string{"Reply", "Forward", "Edit", "Copy", "Delete", "Delete for everyone"} {
 		if !strings.Contains(plain, label) {
@@ -198,21 +196,21 @@ func TestMessageActionRowsRenderInCanonicalOrderWithForwardAndGating(t *testing.
 
 	// Forward is hidden without the capability.
 	state.MessageMenu.Capabilities = domain.MessageCapabilities{Copy: true, Reply: true, Edit: true, DeleteForSelf: true, DeleteForAll: true}
-	model.engine = app.NewEngine(state)
+	model.state = &state
 	plain = plainAppView(model)
 	if strings.Contains(plain, "Forward") {
 		t.Fatalf("Forward row rendered without capability: %q", plain)
 	}
 
 	state.MessageMenu.Capabilities = domain.MessageCapabilities{Copy: true, Forward: true, Edit: true, DeleteForSelf: true}
-	model.engine = app.NewEngine(state)
+	model.state = &state
 	plain = plainAppView(model)
 	if strings.Contains(plain, "Delete for everyone") {
 		t.Fatalf("self-only rows wrong: %q", plain)
 	}
 
 	state.MessageMenu.Capabilities = domain.MessageCapabilities{Copy: true, Forward: true, Edit: true, DeleteForAll: true}
-	model.engine = app.NewEngine(state)
+	model.state = &state
 	plain = plainAppView(model)
 	if strings.Contains(plain, "Delete for everyone") && strings.Index(plain, "Delete") != strings.Index(plain, "Delete for everyone") {
 		t.Fatalf("for-all rows wrong (standalone self-delete leaked): %q", plain)
@@ -220,14 +218,14 @@ func TestMessageActionRowsRenderInCanonicalOrderWithForwardAndGating(t *testing.
 
 	state.MessageMenu.Capabilities = domain.MessageCapabilities{Copy: true, Reply: true, Forward: true, Edit: true, DeleteForSelf: true, DeleteForAll: true}
 	state.MessageMenu.Loading = true
-	model.engine = app.NewEngine(state)
+	model.state = &state
 	plain = plainAppView(model)
 	if strings.Contains(plain, "Forward") {
 		t.Fatalf("Forward row rendered while loading: %q", plain)
 	}
 	state.MessageMenu.Loading = false
 	state.MessageMenu.Error = &domain.AppError{Message: "Could not load message actions"}
-	model.engine = app.NewEngine(state)
+	model.state = &state
 	plain = plainAppView(model)
 	if strings.Contains(plain, "Forward") {
 		t.Fatalf("Forward row rendered on error: %q", plain)
@@ -237,33 +235,33 @@ func TestMessageActionRowsRenderInCanonicalOrderWithForwardAndGating(t *testing.
 func TestPinMessageRowRendersLabelAndGating(t *testing.T) {
 	model := mainSurfaceModel(t, 100, 24)
 
-	state := model.engine.Snapshot()
-	state.MessageMenu = &app.MessageActionMenu{ChatID: 2, MessageID: 7, Capabilities: domain.MessageCapabilities{Copy: true, Pin: true}}
-	model.engine = app.NewEngine(state)
+	state := model.Snapshot()
+	state.MessageMenu = &MessageActionMenu{ChatID: 2, MessageID: 7, Capabilities: domain.MessageCapabilities{Copy: true, Pin: true}}
+	model.state = &state
 	plain := plainAppView(model)
 	if !containsTrimmedLine(plain, "Pin") || containsTrimmedLine(plain, "Unpin") {
 		t.Fatalf("pin label = %q", plain)
 	}
 
-	state = model.engine.Snapshot()
-	state.MessageMenu = &app.MessageActionMenu{ChatID: 2, MessageID: 7, Pinned: true, Capabilities: domain.MessageCapabilities{Copy: true, Pin: true}}
-	model.engine = app.NewEngine(state)
+	state = model.Snapshot()
+	state.MessageMenu = &MessageActionMenu{ChatID: 2, MessageID: 7, Pinned: true, Capabilities: domain.MessageCapabilities{Copy: true, Pin: true}}
+	model.state = &state
 	plain = plainAppView(model)
 	if !containsTrimmedLine(plain, "Unpin") || containsTrimmedLine(plain, "Pin") {
 		t.Fatalf("unpin label = %q", plain)
 	}
 
-	state = model.engine.Snapshot()
-	state.MessageMenu = &app.MessageActionMenu{ChatID: 2, MessageID: 7, Pinned: true, Loading: true, Capabilities: domain.MessageCapabilities{Copy: true, Pin: true}}
-	model.engine = app.NewEngine(state)
+	state = model.Snapshot()
+	state.MessageMenu = &MessageActionMenu{ChatID: 2, MessageID: 7, Pinned: true, Loading: true, Capabilities: domain.MessageCapabilities{Copy: true, Pin: true}}
+	model.state = &state
 	plain = plainAppView(model)
 	if containsTrimmedLine(plain, "Unpin") || containsTrimmedLine(plain, "Pin") || !strings.Contains(plain, "Loading actions...") {
 		t.Fatalf("pin row rendered while loading: %q", plain)
 	}
 
-	state = model.engine.Snapshot()
-	state.MessageMenu = &app.MessageActionMenu{ChatID: 2, MessageID: 7, Pinned: true, Error: &domain.AppError{Message: "Could not load message actions"}, Capabilities: domain.MessageCapabilities{Copy: true, Pin: true}}
-	model.engine = app.NewEngine(state)
+	state = model.Snapshot()
+	state.MessageMenu = &MessageActionMenu{ChatID: 2, MessageID: 7, Pinned: true, Error: &domain.AppError{Message: "Could not load message actions"}, Capabilities: domain.MessageCapabilities{Copy: true, Pin: true}}
+	model.state = &state
 	plain = plainAppView(model)
 	if containsTrimmedLine(plain, "Unpin") || containsTrimmedLine(plain, "Pin") || !strings.Contains(plain, "Actions unavailable") {
 		t.Fatalf("pin row rendered on error: %q", plain)
@@ -272,9 +270,9 @@ func TestPinMessageRowRendersLabelAndGating(t *testing.T) {
 
 func TestPinMessageActionModalRowOrderIsBetweenCopyAndDelete(t *testing.T) {
 	model := mainSurfaceModel(t, 100, 24)
-	state := model.engine.Snapshot()
-	state.MessageMenu = &app.MessageActionMenu{ChatID: 2, MessageID: 7, Capabilities: domain.MessageCapabilities{Copy: true, Reply: true, Forward: true, Edit: true, Pin: true, DeleteForSelf: true, DeleteForAll: true}}
-	model.engine = app.NewEngine(state)
+	state := model.Snapshot()
+	state.MessageMenu = &MessageActionMenu{ChatID: 2, MessageID: 7, Capabilities: domain.MessageCapabilities{Copy: true, Reply: true, Forward: true, Edit: true, Pin: true, DeleteForSelf: true, DeleteForAll: true}}
+	model.state = &state
 	lines := strings.Split(plainAppView(model), "\n")
 	labels := []string{"Reply", "Forward", "Edit", "Copy", "Pin", "Delete", "Delete for everyone"}
 	positions := make([]int, len(labels))
@@ -300,10 +298,10 @@ func TestPinMessageActionModalRowOrderIsBetweenCopyAndDelete(t *testing.T) {
 
 func TestPinnedMarkerRendersUnderCard(t *testing.T) {
 	model := mainSurfaceModel(t, 100, 24)
-	state := model.engine.Snapshot()
+	state := model.Snapshot()
 	chatID := state.Chats[state.SelectedChat].ID
 	state.Messages[chatID][0].Pinned = true
-	model.engine = app.NewEngine(state)
+	model.state = &state
 	plain := plainAppView(model)
 	if !strings.Contains(plain, "pinned") {
 		t.Fatalf("pinned marker missing from %q", plain)
@@ -326,11 +324,11 @@ func modalLineHasWord(line, word string) bool {
 
 func TestForwardPickerSurfaceListsChatTitlesWithoutContentPreview(t *testing.T) {
 	model := mainSurfaceModel(t, 100, 24)
-	state := model.engine.Snapshot()
-	state.Focus = app.FocusForwardPicker
-	state.ForwardPicker = &app.ForwardPicker{SourceChatID: 2, SourceMessageID: 7, SelectedChat: 0, RequestID: 5}
+	state := model.Snapshot()
+	state.Focus = FocusForwardPicker
+	state.ForwardPicker = &ForwardPicker{SourceChatID: 2, SourceMessageID: 7, SelectedChat: 0, RequestID: 5}
 	state.MessageMenu = nil
-	model.engine = app.NewEngine(state)
+	model.state = &state
 	plain := plainAppView(model)
 	for _, title := range []string{"Mina Chen", "Weekend dev"} {
 		if !strings.Contains(plain, title) {
@@ -344,11 +342,11 @@ func TestForwardPickerSurfaceListsChatTitlesWithoutContentPreview(t *testing.T) 
 	underlying := 0
 	for _, hit := range model.hitRegions() {
 		switch {
-		case hit.Click.Action == app.Activate && hit.Click.ChatID == 1:
+		case hit.Click.Action == Activate && hit.Click.ChatID == 1:
 			destination1 = true
-		case hit.Click.Action == app.Activate && hit.Click.ChatID == 2:
+		case hit.Click.Action == Activate && hit.Click.ChatID == 2:
 			destination2 = true
-		case hit.Click.Action == app.SelectChat:
+		case hit.Click.Action == SelectChat:
 			underlying++
 		}
 	}
@@ -366,9 +364,9 @@ func TestForwardPickerSurfaceListsChatTitlesWithoutContentPreview(t *testing.T) 
 
 func TestReactionRowRendersBetweenCopyAndPin(t *testing.T) {
 	model := mainSurfaceModel(t, 100, 24)
-	state := model.engine.Snapshot()
-	state.MessageMenu = &app.MessageActionMenu{ChatID: 2, MessageID: 7, CanReact: true, Capabilities: domain.MessageCapabilities{Copy: true, Reply: true, Forward: true, Edit: true, Pin: true, DeleteForSelf: true, DeleteForAll: true}}
-	model.engine = app.NewEngine(state)
+	state := model.Snapshot()
+	state.MessageMenu = &MessageActionMenu{ChatID: 2, MessageID: 7, CanReact: true, Capabilities: domain.MessageCapabilities{Copy: true, Reply: true, Forward: true, Edit: true, Pin: true, DeleteForSelf: true, DeleteForAll: true}}
+	model.state = &state
 	lines := strings.Split(plainAppView(model), "\n")
 	labels := []string{"Reply", "Forward", "Edit", "Copy", "React", "Pin", "Delete", "Delete for everyone"}
 	positions := make([]int, len(labels))
@@ -394,33 +392,33 @@ func TestReactionRowRendersBetweenCopyAndPin(t *testing.T) {
 
 func TestReactionRowGatedOnLoadingErrorAndLocalCapability(t *testing.T) {
 	model := mainSurfaceModel(t, 100, 24)
-	state := model.engine.Snapshot()
-	state.MessageMenu = &app.MessageActionMenu{ChatID: 2, MessageID: 7, CanReact: true, Capabilities: domain.MessageCapabilities{Copy: true, Reply: true}}
-	model.engine = app.NewEngine(state)
+	state := model.Snapshot()
+	state.MessageMenu = &MessageActionMenu{ChatID: 2, MessageID: 7, CanReact: true, Capabilities: domain.MessageCapabilities{Copy: true, Reply: true}}
+	model.state = &state
 	plain := plainAppView(model)
 	if !containsTrimmedLine(plain, "React") {
 		t.Fatalf("React row missing when locally capable: %q", plain)
 	}
 
-	state = model.engine.Snapshot()
-	state.MessageMenu = &app.MessageActionMenu{ChatID: 2, MessageID: 7, CanReact: true, Loading: true, Capabilities: domain.MessageCapabilities{Copy: true, Reply: true}}
-	model.engine = app.NewEngine(state)
+	state = model.Snapshot()
+	state.MessageMenu = &MessageActionMenu{ChatID: 2, MessageID: 7, CanReact: true, Loading: true, Capabilities: domain.MessageCapabilities{Copy: true, Reply: true}}
+	model.state = &state
 	plain = plainAppView(model)
 	if containsTrimmedLine(plain, "React") || !strings.Contains(plain, "Loading actions...") {
 		t.Fatalf("React row rendered while loading: %q", plain)
 	}
 
-	state = model.engine.Snapshot()
-	state.MessageMenu = &app.MessageActionMenu{ChatID: 2, MessageID: 7, CanReact: true, Error: &domain.AppError{Message: "Could not load message actions"}, Capabilities: domain.MessageCapabilities{Copy: true, Reply: true}}
-	model.engine = app.NewEngine(state)
+	state = model.Snapshot()
+	state.MessageMenu = &MessageActionMenu{ChatID: 2, MessageID: 7, CanReact: true, Error: &domain.AppError{Message: "Could not load message actions"}, Capabilities: domain.MessageCapabilities{Copy: true, Reply: true}}
+	model.state = &state
 	plain = plainAppView(model)
 	if containsTrimmedLine(plain, "React") || !strings.Contains(plain, "Actions unavailable") {
 		t.Fatalf("React row rendered on error: %q", plain)
 	}
 
-	state = model.engine.Snapshot()
-	state.MessageMenu = &app.MessageActionMenu{ChatID: 2, MessageID: 7, CanReact: false, Capabilities: domain.MessageCapabilities{Copy: true, Reply: true}}
-	model.engine = app.NewEngine(state)
+	state = model.Snapshot()
+	state.MessageMenu = &MessageActionMenu{ChatID: 2, MessageID: 7, CanReact: false, Capabilities: domain.MessageCapabilities{Copy: true, Reply: true}}
+	model.state = &state
 	plain = plainAppView(model)
 	if containsTrimmedLine(plain, "React") {
 		t.Fatalf("React row rendered without local capability: %q", plain)
@@ -449,17 +447,17 @@ func TestLiveReactionUpdateRendersChipEndToEnd(t *testing.T) {
 		t.Fatalf("emitted update = %#v, want %#v", got, want)
 	}
 
-	state := app.InitialState()
+	state := InitialState()
 	state.Chats = []domain.Chat{{ID: 9, Kind: domain.ChatPrivate}}
 	state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "opaque-body"}}
-	live, _ := app.Reduce(state, app.TelegramEvent{Value: got})
+	live, _ := updateState(state, TelegramEvent{Value: got})
 	if len(live.Messages[9][0].Reactions) != 1 || live.Messages[9][0].Reactions[0].Emoji != "👍" {
 		t.Fatalf("reducer did not apply live reactions: %#v", live.Messages[9][0].Reactions)
 	}
 
-	groups := ui.GroupMessages(domain.ChatPrivate, live.Messages[9], time.UTC)
+	groups := GroupMessages(domain.ChatPrivate, live.Messages[9], time.UTC)
 	styles := newRenderStyles(false)
-	result := buildMessageGroupLayer(ui.RenderedMessageGroup{MessageGroup: groups[0]}, 40, time.UTC, messageSelection{}, nil, styles)
+	result := buildMessageGroupLayer(RenderedMessageGroup{MessageGroup: groups[0]}, 40, time.UTC, messageSelection{}, nil, styles)
 	var chipsLine messageRowSpec
 	found := false
 	for _, row := range result.Rows {
@@ -486,16 +484,16 @@ func receiveSurfaceUpdate(t *testing.T, updates <-chan telegram.Update) telegram
 
 func TestReactionPickerSurfaceListsPaletteEmojis(t *testing.T) {
 	model := mainSurfaceModel(t, 100, 24)
-	state := model.engine.Snapshot()
-	state.Focus = app.FocusReactionPicker
-	state.ReactionPicker = &app.ReactionPicker{ChatID: 2, MessageID: 7, RequestID: 5, Selected: 1}
+	state := model.Snapshot()
+	state.Focus = FocusReactionPicker
+	state.ReactionPicker = &ReactionPicker{ChatID: 2, MessageID: 7, RequestID: 5, Selected: 1}
 	state.MessageMenu = nil
-	model.engine = app.NewEngine(state)
+	model.state = &state
 	plain := plainAppView(model)
 	if !strings.Contains(plain, "React") {
 		t.Fatal("reaction picker title missing")
 	}
-	for _, emoji := range app.ReactionPalette {
+	for _, emoji := range ReactionPalette {
 		if !strings.Contains(plain, emoji) {
 			t.Fatalf("reaction picker missing emoji %q in %q", emoji, plain)
 		}
@@ -503,14 +501,14 @@ func TestReactionPickerSurfaceListsPaletteEmojis(t *testing.T) {
 	var activateHits, underlying int
 	for _, hit := range model.hitRegions() {
 		switch {
-		case hit.Click.Action == app.Activate:
+		case hit.Click.Action == Activate:
 			activateHits++
-		case hit.Click.Action == app.SelectChat:
+		case hit.Click.Action == SelectChat:
 			underlying++
 		}
 	}
-	if activateHits != len(app.ReactionPalette) {
-		t.Fatalf("reaction picker activate hits = %d, want %d", activateHits, len(app.ReactionPalette))
+	if activateHits != len(ReactionPalette) {
+		t.Fatalf("reaction picker activate hits = %d, want %d", activateHits, len(ReactionPalette))
 	}
 	if underlying != 0 {
 		t.Fatalf("reaction picker leaked %d underlying chat-list hits", underlying)
@@ -519,9 +517,9 @@ func TestReactionPickerSurfaceListsPaletteEmojis(t *testing.T) {
 
 func TestRoundedMessageSelectionSurroundsFullCard(t *testing.T) {
 	model := mainSurfaceModel(t, 100, 24)
-	state := model.engine.Snapshot()
+	state := model.Snapshot()
 	state.SelectedMessageChat, state.SelectedMessage = 2, 7
-	model.engine = app.NewEngine(state)
+	model.state = &state
 	lines := strings.Split(plainAppView(model), "\n")
 	messageLine := -1
 	for index, value := range lines {
@@ -537,10 +535,10 @@ func TestRoundedMessageSelectionSurroundsFullCard(t *testing.T) {
 
 func TestPrivateMessageMetadataShowsAvatarNameAndTimePerMessage(t *testing.T) {
 	model := mainSurfaceModel(t, 100, 24)
-	state := model.engine.Snapshot()
+	state := model.Snapshot()
 	state.SelectedChat = 0
 	state.Messages[1] = []domain.Message{{ID: 1, ChatID: 1, SenderName: "Mina Chen", SentAt: time.Date(2026, time.July, 20, 9, 41, 0, 0, time.Local), Kind: domain.MessageText, Text: "private one"}, {ID: 2, ChatID: 1, Outgoing: true, SentAt: time.Date(2026, time.July, 20, 9, 42, 0, 0, time.Local), Kind: domain.MessageText, Text: "private two"}}
-	model.engine = app.NewEngine(state)
+	model.state = &state
 	plain := plainAppView(model)
 	for _, want := range []string{"Mina Chen  09:41", "You  09:42", "private one", "private two"} {
 		if !strings.Contains(plain, want) {
@@ -551,18 +549,18 @@ func TestPrivateMessageMetadataShowsAvatarNameAndTimePerMessage(t *testing.T) {
 
 func TestReplyComposerBannerClipsAndPublishesCancelHit(t *testing.T) {
 	model := mainSurfaceModel(t, 80, 20)
-	state := model.engine.Snapshot()
-	state.Focus = app.FocusComposer
-	state.ReplyTarget = &app.ReplyTarget{ChatID: state.Chats[state.SelectedChat].ID, MessageID: 7, Sender: "Sender", Preview: "bounded"}
+	state := model.Snapshot()
+	state.Focus = FocusComposer
+	state.ReplyTarget = &ReplyTarget{ChatID: state.Chats[state.SelectedChat].ID, MessageID: 7, Sender: "Sender", Preview: "bounded"}
 	state.Drafts[state.ReplyTarget.ChatID] = "first line that wraps across the composer width and a second line"
-	model.engine = app.NewEngine(state)
+	model.state = &state
 	plain := plainAppView(model)
 	if !strings.Contains(plain, "Reply to Sender: bounded") || !strings.Contains(plain, "[Cancel]") || !strings.Contains(plain, "[Send]") {
 		t.Fatal("reply composer banner or controls missing")
 	}
 	cancelHit := false
 	for _, hit := range model.hitRegions() {
-		cancelHit = cancelHit || hit.Click.Action == app.CancelReply
+		cancelHit = cancelHit || hit.Click.Action == CancelReply
 	}
 	if !cancelHit {
 		t.Fatal("reply composer did not publish cancel hit")
@@ -571,13 +569,13 @@ func TestReplyComposerBannerClipsAndPublishesCancelHit(t *testing.T) {
 
 func TestMessageEditComposerAndEditedMarker(t *testing.T) {
 	model := mainSurfaceModel(t, 100, 24)
-	state := model.engine.Snapshot()
+	state := model.Snapshot()
 	chatID := state.Chats[state.SelectedChat].ID
-	state.Focus = app.FocusComposer
+	state.Focus = FocusComposer
 	state.Drafts[chatID] = "opaque-ordinary"
-	state.EditTarget = &app.EditTarget{ChatID: chatID, MessageID: 7, Original: "opaque-original", Buffer: "opaque-buffer", Error: &domain.AppError{Message: "Edit failed"}}
+	state.EditTarget = &EditTarget{ChatID: chatID, MessageID: 7, Original: "opaque-original", Buffer: "opaque-buffer", Error: &domain.AppError{Message: "Edit failed"}}
 	state.Messages[chatID][0].EditedAt = time.Unix(20, 0)
-	model.engine = app.NewEngine(state)
+	model.state = &state
 	_ = model.syncComposerTextHost()
 	plain := plainAppView(model)
 	if !strings.Contains(plain, "Editing message") || !strings.Contains(plain, "Edit failed") || !strings.Contains(plain, "edited") || !strings.Contains(plain, "opaque-buffer") || strings.Contains(plain, "opaque-ordinary") {
@@ -585,7 +583,7 @@ func TestMessageEditComposerAndEditedMarker(t *testing.T) {
 	}
 	cancelHit := false
 	for _, hit := range model.hitRegions() {
-		cancelHit = cancelHit || hit.Click.Action == app.CancelEdit
+		cancelHit = cancelHit || hit.Click.Action == CancelEdit
 	}
 	if !cancelHit {
 		t.Fatal("edit composer did not publish cancel hit")
@@ -594,17 +592,17 @@ func TestMessageEditComposerAndEditedMarker(t *testing.T) {
 
 func TestActionModalIsCenteredAndSuppressesUnderlyingHits(t *testing.T) {
 	model := mainSurfaceModel(t, 100, 24)
-	state := model.engine.Snapshot()
+	state := model.Snapshot()
 	state.SelectedMessageChat, state.SelectedMessage = 2, 7
-	state.MessageMenu = &app.MessageActionMenu{ChatID: 2, MessageID: 7, Capabilities: domain.MessageCapabilities{Copy: true}}
-	state.Focus = app.FocusModal
-	model.engine = app.NewEngine(state)
+	state.MessageMenu = &MessageActionMenu{ChatID: 2, MessageID: 7, Capabilities: domain.MessageCapabilities{Copy: true}}
+	state.Focus = FocusModal
+	model.state = &state
 	plain := plainAppView(model)
 	if !strings.Contains(plain, "Message actions") || !strings.Contains(plain, "Copy") {
 		t.Fatal("centered action modal content missing")
 	}
 	for _, hit := range model.hitRegions() {
-		if hit.Click.Action == app.SelectChat || hit.Click.Action == app.FocusPane {
+		if hit.Click.Action == SelectChat || hit.Click.Action == FocusPane {
 			t.Fatalf("action modal retained underlying hit: %#v", hit)
 		}
 	}
@@ -612,10 +610,10 @@ func TestActionModalIsCenteredAndSuppressesUnderlyingHits(t *testing.T) {
 
 func TestToastComponentFloatsAtBottomRightWithoutReservingHistory(t *testing.T) {
 	model := mainSurfaceModel(t, 100, 24)
-	state := model.engine.Snapshot()
+	state := model.Snapshot()
 	state.Toast = &domain.AppError{Message: "Message copied"}
 	state.ToastGeneration, state.ToastDuration = 1, 2*time.Second
-	model.engine = app.NewEngine(state)
+	model.state = &state
 	plain := plainAppView(model)
 	if !strings.Contains(plain, "Message copied") || !strings.Contains(plain, "Hello from the group") {
 		t.Fatal("toast displaced history or did not render")
@@ -648,9 +646,9 @@ func TestStaleHitClearedAfterResizeAndModalTopologyChange(t *testing.T) {
 		stale := selectChatHit(t, model.hitRegions(), 1)
 		model, _ = updateAppModel(t, model, tea.WindowSizeMsg{Width: 59, Height: 17})
 		_ = model.View()
-		before := model.engine.Snapshot().SelectedChat
+		before := model.Snapshot().SelectedChat
 		model, _ = updateAppModel(t, model, tea.MouseClickMsg{X: stale.Rect.Min.X, Y: stale.Rect.Min.Y, Button: tea.MouseLeft})
-		if got := model.engine.Snapshot().SelectedChat; got != before {
+		if got := model.Snapshot().SelectedChat; got != before {
 			t.Fatalf("stale resize hit changed selected chat from %d to %d", before, got)
 		}
 	})
@@ -659,19 +657,19 @@ func TestStaleHitClearedAfterResizeAndModalTopologyChange(t *testing.T) {
 		model := mainSurfaceModel(t, 100, 24)
 		_ = model.View()
 		stale := selectChatHit(t, model.hitRegions(), 1)
-		state := model.engine.Snapshot()
-		state.Focus = app.FocusModal
-		state.Modal = &app.ModalState{Title: "Avatar", Loading: true, PreviousFocus: app.FocusConversation}
-		model.engine = app.NewEngine(state)
+		state := model.Snapshot()
+		state.Focus = FocusModal
+		state.Modal = &ModalState{Title: "Avatar", Loading: true, PreviousFocus: FocusConversation}
+		model.state = &state
 		_ = model.View()
 		for _, hit := range model.hitRegions() {
-			if hit.Click.Action == app.SelectChat || hit.Click.Action == app.FocusPane {
+			if hit.Click.Action == SelectChat || hit.Click.Action == FocusPane {
 				t.Fatalf("modal topology retained underlying hit: %#v", hit)
 			}
 		}
-		before := model.engine.Snapshot().SelectedChat
+		before := model.Snapshot().SelectedChat
 		model, _ = updateAppModel(t, model, tea.MouseClickMsg{X: stale.Rect.Max.X - 1, Y: stale.Rect.Min.Y, Button: tea.MouseLeft})
-		state = model.engine.Snapshot()
+		state = model.Snapshot()
 		if state.SelectedChat != before || state.Modal == nil {
 			t.Fatalf("stale modal hit changed topology: selected %d -> %d, modal = %#v", before, state.SelectedChat, state.Modal)
 		}
@@ -698,23 +696,23 @@ func patternedAvatar(t *testing.T, width, height int) pixel.Avatar {
 	return avatar
 }
 
-func selectChatHit(t *testing.T, hits ui.HitMap, chatID domain.ChatID) ui.Hit {
+func selectChatHit(t *testing.T, hits HitMap, chatID domain.ChatID) Hit {
 	t.Helper()
 	for _, hit := range hits {
-		if hit.Click.Action == app.SelectChat && hit.Click.ChatID == chatID {
+		if hit.Click.Action == SelectChat && hit.Click.ChatID == chatID {
 			return hit
 		}
 	}
 	t.Fatalf("no SelectChat hit for chat %d in %#v", chatID, hits)
-	return ui.Hit{}
+	return Hit{}
 }
 
 func mainSurfaceModel(t *testing.T, width, height int) AppModel {
 	t.Helper()
-	state := app.InitialState()
+	state := InitialState()
 	state.Width = width
 	state.Height = height
-	state.Focus = app.FocusConversation
+	state.Focus = FocusConversation
 	state.Connection = domain.ConnectionOnline
 	state.ChatsLoaded = true
 	state.Chats = []domain.Chat{
@@ -726,9 +724,8 @@ func mainSurfaceModel(t *testing.T, width, height int) AppModel {
 		ID: 7, ChatID: 2, SenderName: "Iris", SentAt: time.Date(2026, time.July, 20, 14, 30, 0, 0, time.Local), Kind: domain.MessageText, Text: "Hello from the group",
 	}}
 	state.Drafts[2] = "draft reply"
-	engine := app.NewEngine(state)
-	engine.Apply(app.Resized{Width: width, Height: height})
-	model := newAppModelForTest(t, engine, newBoundedAppRuntimeForModelTest(t))
+	state, _ = updateState(state, Resized{Width: width, Height: height})
+	model := newAppModelForTest(t, state, newTestSession(t))
 	_ = model.syncComposerTextHost()
 	return model
 }
@@ -738,8 +735,8 @@ func plainView(content string) string {
 }
 
 // plainAppView mirrors production's post-Update host state when a test swaps
-// the engine directly instead of driving AppModel.Update. View itself remains
-// pure and snapshots the engine exactly once.
+// the model-owned state directly instead of driving AppModel.Update. View
+// itself remains pure and snapshots the owned state exactly once.
 func plainAppView(model AppModel) string {
 	_ = model.syncListModalController()
 	return plainView(model.View().Content)

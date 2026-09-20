@@ -10,10 +10,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
 	"github.com/zylen-det/telegram-tui/internal/media/thumbnail"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // embeddedKittyImageID extracts the i= image id from the first kitty
@@ -38,39 +36,39 @@ func embeddedKittyImageID(transmit string) (uint32, bool) {
 }
 
 func TestStickerComposerShortcutControlAndGridKeyMapping(t *testing.T) {
-	if action, ok := mapKeyPress(app.FocusComposer, tea.KeyPressMsg(tea.Key{Code: 's', Text: "s", Mod: tea.ModCtrl})); !ok || action.Action != app.OpenStickerPicker {
+	if action, ok := mapKeyPress(FocusComposer, tea.KeyPressMsg(tea.Key{Code: 's', Text: "s", Mod: tea.ModCtrl})); !ok || action.Action != OpenStickerPicker {
 		t.Fatalf("Ctrl+S = %#v, %t", action, ok)
 	}
-	if _, ok := mapKeyPress(app.FocusConversation, tea.KeyPressMsg(tea.Key{Code: 's', Text: "s", Mod: tea.ModCtrl})); ok {
+	if _, ok := mapKeyPress(FocusConversation, tea.KeyPressMsg(tea.Key{Code: 's', Text: "s", Mod: tea.ModCtrl})); ok {
 		t.Fatal("Ctrl+S escaped composer focus")
 	}
 	for _, test := range []struct {
 		key  tea.Key
-		want app.Action
+		want Action
 	}{
-		{tea.Key{Code: tea.KeyLeft}, app.StickerMoveLeft},
-		{tea.Key{Text: "l"}, app.StickerMoveRight},
-		{tea.Key{Text: "k"}, app.StickerMoveUp},
-		{tea.Key{Code: tea.KeyDown}, app.StickerMoveDown},
-		{tea.Key{Code: tea.KeyEnter}, app.StickerActivate},
-		{tea.Key{Code: tea.KeyEscape}, app.Close},
+		{tea.Key{Code: tea.KeyLeft}, StickerMoveLeft},
+		{tea.Key{Text: "l"}, StickerMoveRight},
+		{tea.Key{Text: "k"}, StickerMoveUp},
+		{tea.Key{Code: tea.KeyDown}, StickerMoveDown},
+		{tea.Key{Code: tea.KeyEnter}, StickerActivate},
+		{tea.Key{Code: tea.KeyEscape}, Close},
 	} {
-		got, ok := mapKeyPress(app.FocusStickerPicker, tea.KeyPressMsg(test.key))
+		got, ok := mapKeyPress(FocusStickerPicker, tea.KeyPressMsg(test.key))
 		if !ok || got.Action != test.want {
 			t.Errorf("key %#v = %#v, %t", test.key, got, ok)
 		}
 	}
 
-	model := ui.ViewModel{Width: 80, Height: 24, ActiveChat: domain.Chat{ID: 9, CanSend: true}}
+	model := ViewModel{Width: 80, Height: 24, ActiveChat: domain.Chat{ID: 9, CanSend: true}}
 	rect := imageRect(0, 0, 80, 3)
 	surface := buildComposerLayer(model, rect, newRenderStyles(false))
 	var stickerHit, photoHit bool
 	for _, hit := range surface.Interactions {
 		if hit.ID == "composer:sticker" {
-			stickerHit = hit.Click.Action == app.OpenStickerPicker && hit.Rect.Dy() == 1
+			stickerHit = hit.Click.Action == OpenStickerPicker && hit.Rect.Dy() == 1
 		}
 		if hit.ID == "composer:photo" {
-			photoHit = hit.Click.Action == app.OpenPhotoSend
+			photoHit = hit.Click.Action == OpenPhotoSend
 		}
 	}
 	if !stickerHit || !photoHit {
@@ -81,10 +79,10 @@ func TestStickerComposerShortcutControlAndGridKeyMapping(t *testing.T) {
 func imageRect(x0, y0, x1, y1 int) image.Rectangle { return image.Rect(x0, y0, x1, y1) }
 
 func TestStickerGridHalfBlockFallbackHitsWheelAndKittyPlacement(t *testing.T) {
-	picker := &app.StickerPickerState{RequestID: 7, ChatID: 9, Catalog: []domain.StickerRef{
+	picker := &StickerPickerState{RequestID: 7, ChatID: 9, Catalog: []domain.StickerRef{
 		{File: domain.MediaFileRef{ID: 101}, Emoji: "🙂"}, {File: domain.MediaFileRef{ID: 102}},
 	}, Selected: 1, Columns: 4, VisibleRows: 2}
-	model := ui.ViewModel{Width: 80, Height: 24, StickerPicker: picker, StickerThumbnails: []ui.RenderedStickerThumbnail{
+	model := ViewModel{Width: 80, Height: 24, StickerPicker: picker, StickerThumbnails: []RenderedStickerThumbnail{
 		{StickerFileID: 101, Block: thumbnail.Block{Text: "HALF_BLOCK", Width: 10, Height: 2}},
 	}}
 	surface := buildStickerPickerLayer(model, newRenderStyles(false))
@@ -98,11 +96,11 @@ func TestStickerGridHalfBlockFallbackHitsWheelAndKittyPlacement(t *testing.T) {
 			tileHit = hit
 		}
 	}
-	if tileHit.Click.Action != app.StickerActivate || tileHit.Click.RequestID != 7 || tileHit.Click.StickerFileID != 102 || tileHit.WheelUp.Action != app.StickerMoveUp || tileHit.WheelDown.Action != app.StickerMoveDown {
+	if tileHit.Click.Action != StickerActivate || tileHit.Click.RequestID != 7 || tileHit.Click.StickerFileID != 102 || tileHit.WheelUp.Action != StickerMoveUp || tileHit.WheelDown.Action != StickerMoveDown {
 		t.Fatalf("tile hit = %#v", tileHit)
 	}
 
-	model.StickerThumbnails = []ui.RenderedStickerThumbnail{{StickerFileID: 101, Block: thumbnail.Block{Text: "kitty", Width: 10, Height: 4, Kitty: true, ImageID: 501}}}
+	model.StickerThumbnails = []RenderedStickerThumbnail{{StickerFileID: 101, Block: thumbnail.Block{Text: "kitty", Width: 10, Height: 4, Kitty: true, ImageID: 501}}}
 	kitty := buildStickerPickerLayer(model, newRenderStyles(false))
 	if len(kitty.Inline) != 1 || kitty.Inline[0].ImageID != 501 || kitty.Inline[0].X <= kitty.Rect.Min.X || kitty.Inline[0].Y <= kitty.Rect.Min.Y {
 		t.Fatalf("Kitty placements = %#v", kitty.Inline)
@@ -217,17 +215,17 @@ func TestStickerMessagesSharingCachedKittyBlockGetPlacementSpecificTransmits(t *
 }
 
 func TestStickerPickerOwnsInlinePlaneAndSuppressesUnderlyingHits(t *testing.T) {
-	state := app.InitialState()
+	state := InitialState()
 	state.Width, state.Height = 100, 30
 	state.Connection = domain.ConnectionOnline
-	state.Focus = app.FocusStickerPicker
+	state.Focus = FocusStickerPicker
 	state.Chats = []domain.Chat{{ID: 9, CanSend: true}}
 	state.SelectedChat = 0
 	state.Messages[9] = []domain.Message{{ID: 77, ChatID: 9, Kind: domain.MessageSticker, Media: domain.MessageMedia{Thumbnail: domain.MediaFileRef{ID: 700}}}}
 	state.Thumbnails[9] = map[domain.MessageID]thumbnail.Block{77: {Text: "\x1b_Ga=T,f=900,i=700,c=10,r=4,q=2,s=64,v=32;conversation-kitty\x1b\\", Width: 10, Height: 4, Kitty: true, ImageID: 700}}
-	state.StickerPicker = &app.StickerPickerState{RequestID: 8, ChatID: 9, Catalog: []domain.StickerRef{{File: domain.MediaFileRef{ID: 101}}}, Columns: 5, VisibleRows: 2}
+	state.StickerPicker = &StickerPickerState{RequestID: 8, ChatID: 9, Catalog: []domain.StickerRef{{File: domain.MediaFileRef{ID: 101}}}, Columns: 5, VisibleRows: 2}
 	state.StickerThumbnails[101] = thumbnail.Block{Text: "picker-kitty", Width: 10, Height: 4, Kitty: true, ImageID: 801}
-	model := ui.Select(state, nil)
+	model := Select(state, nil)
 	frame := composeApplication(model, nil)
 	if len(frame.Inline) != 1 || frame.Inline[0].ImageID != 801 {
 		t.Fatalf("open picker inline = %#v", frame.Inline)
@@ -237,8 +235,8 @@ func TestStickerPickerOwnsInlinePlaneAndSuppressesUnderlyingHits(t *testing.T) {
 	}
 
 	state.StickerPicker = nil
-	state.Focus = app.FocusConversation
-	closed := composeApplication(ui.Select(state, nil), nil)
+	state.Focus = FocusConversation
+	closed := composeApplication(Select(state, nil), nil)
 	if len(closed.Inline) != 1 || closed.Inline[0].ImageID != stickerMessageInlineID(9, 77) {
 		t.Fatalf("closed picker inline = %#v", closed.Inline)
 	}

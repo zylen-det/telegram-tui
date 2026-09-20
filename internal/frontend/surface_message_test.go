@@ -10,15 +10,13 @@ import (
 
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
 	"github.com/zylen-det/telegram-tui/internal/media/pixel"
 	"github.com/zylen-det/telegram-tui/internal/media/thumbnail"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 func messageGroupCanvas(
-	group ui.RenderedMessageGroup,
+	group RenderedMessageGroup,
 	width int,
 	location *time.Location,
 	selection messageSelection,
@@ -36,7 +34,7 @@ func messageGroupCanvas(
 }
 
 func messageGroupRender(
-	group ui.RenderedMessageGroup,
+	group RenderedMessageGroup,
 	width int,
 	location *time.Location,
 	selection messageSelection,
@@ -61,13 +59,13 @@ func testMessage(id domain.MessageID, chat domain.ChatID, text string) domain.Me
 	}
 }
 
-func styledMessageGroup(name string, showAvatar bool, msgs ...domain.Message) ui.RenderedMessageGroup {
-	group := ui.RenderedMessageGroup{
-		MessageGroup: ui.MessageGroup{
+func styledMessageGroup(name string, showAvatar bool, msgs ...domain.Message) RenderedMessageGroup {
+	group := RenderedMessageGroup{
+		MessageGroup: MessageGroup{
 			SenderName:    name,
 			ShowAvatar:    showAvatar,
 			Messages:      msgs,
-			ReplyContexts: map[domain.MessageID]ui.ReplyContext{},
+			ReplyContexts: map[domain.MessageID]ReplyContext{},
 		},
 		AvatarKey: "avatar-key",
 	}
@@ -77,7 +75,7 @@ func styledMessageGroup(name string, showAvatar bool, msgs ...domain.Message) ui
 func selectMessageInteractions(result messageGroupResult) []messageGroupLocalInteraction {
 	var out []messageGroupLocalInteraction
 	for _, li := range result.LocalInteractions {
-		if li.Click.Action == app.SelectMessage {
+		if li.Click.Action == SelectMessage {
 			out = append(out, li)
 		}
 	}
@@ -184,7 +182,7 @@ func TestMessageGroupReplyRows(t *testing.T) {
 	msg.Outgoing = true
 	msg.HasReply = true
 	group := styledMessageGroup("Mina", false, msg)
-	group.ReplyContexts = map[domain.MessageID]ui.ReplyContext{
+	group.ReplyContexts = map[domain.MessageID]ReplyContext{
 		9: {Available: true, Sender: "Lou  ", Preview: "   a    long preview   "},
 	}
 	_, _, result := messageGroupCanvas(group, 30, time.Local, messageSelection{}, nil, styles)
@@ -217,7 +215,7 @@ func TestMessageGroupReplyRows(t *testing.T) {
 	msg2 := testMessage(10, 7, "second")
 	msg2.HasReply = true
 	group2 := styledMessageGroup("Mina", false, msg2)
-	group2.ReplyContexts = map[domain.MessageID]ui.ReplyContext{10: {Available: false}}
+	group2.ReplyContexts = map[domain.MessageID]ReplyContext{10: {Available: false}}
 	_, _, r2 := messageGroupCanvas(group2, 42, time.Local, messageSelection{}, nil, styles)
 	if got := r2.Rows[0].text; got != "Reply · Original message unavailable" {
 		t.Errorf("unavailable reply = %q", got)
@@ -227,7 +225,7 @@ func TestMessageGroupReplyRows(t *testing.T) {
 	msg3 := testMessage(11, 7, "x")
 	msg3.HasReply = true
 	group3 := styledMessageGroup("Mina", false, msg3)
-	group3.ReplyContexts = map[domain.MessageID]ui.ReplyContext{11: {Available: true, Sender: "Alice", Preview: strings.Repeat("yes ", 30)}}
+	group3.ReplyContexts = map[domain.MessageID]ReplyContext{11: {Available: true, Sender: "Alice", Preview: strings.Repeat("yes ", 30)}}
 	_, _, r3 := messageGroupCanvas(group3, 10, time.Local, messageSelection{}, nil, styles)
 	if got := displayWidth(r3.Rows[1].text); got > 10 {
 		t.Errorf("reply preview not clipped: width %d row %q", got, r3.Rows[1].text)
@@ -237,7 +235,7 @@ func TestMessageGroupReplyRows(t *testing.T) {
 	msg2b := testMessage(12, 7, "y")
 	msg2b.HasReply = true
 	group2b := styledMessageGroup("Mina", false, msg2b)
-	group2b.ReplyContexts = map[domain.MessageID]ui.ReplyContext{12: {Available: false}}
+	group2b.ReplyContexts = map[domain.MessageID]ReplyContext{12: {Available: false}}
 	_, _, r2b := messageGroupCanvas(group2b, 42, time.Local, messageSelection{}, nil, styles)
 	if got := r2b.Rows[0].text; got != "Reply · Original message unavailable" {
 		t.Errorf("unavailable reply = %q", got)
@@ -401,7 +399,7 @@ func TestMessageGroupIdentityInteractions(t *testing.T) {
 	reply := testMessage(60, 8, "reply body")
 	reply.HasReply = true
 	group := styledMessageGroup("Mina", false, reply)
-	group.ReplyContexts = map[domain.MessageID]ui.ReplyContext{60: {Available: true, Sender: "X", Preview: "p"}}
+	group.ReplyContexts = map[domain.MessageID]ReplyContext{60: {Available: true, Sender: "X", Preview: "p"}}
 
 	longBody := testMessage(61, 8, strings.Repeat("go ", 20)) // wraps
 	editedMsg := testMessage(62, 8, "ed")
@@ -410,7 +408,7 @@ func TestMessageGroupIdentityInteractions(t *testing.T) {
 	pinnedMsg.Pinned = true
 
 	group2 := styledMessageGroup("Mina", false, reply, longBody, editedMsg, pinnedMsg)
-	group2.ReplyContexts = map[domain.MessageID]ui.ReplyContext{60: {Available: true, Sender: "X", Preview: "p"}}
+	group2.ReplyContexts = map[domain.MessageID]ReplyContext{60: {Available: true, Sender: "X", Preview: "p"}}
 
 	_, _, result := messageGroupCanvas(group2, 40, time.Local, messageSelection{}, nil, styles)
 
@@ -491,7 +489,7 @@ func TestMessageGroupCompositorHitParity(t *testing.T) {
 	// there is none here) — verify header/reply/pinned rows produce no hit.
 	// This group has body(70) + edited(70) identity rows only.
 	for _, li := range result.LocalInteractions {
-		if li.Click.Action != app.SelectMessage {
+		if li.Click.Action != SelectMessage {
 			continue
 		}
 		pt := image.Pt(2, li.Rect.Min.Y)
@@ -544,7 +542,7 @@ func TestMessageGroupAvatarGeometryRetry(t *testing.T) {
 	if retry.Z != zControl {
 		t.Errorf("retry Z = %d, want %d", retry.Z, zControl)
 	}
-	if retry.Click.Action != app.Retry || retry.Click.AvatarKey != "avatar-key" {
+	if retry.Click.Action != Retry || retry.Click.AvatarKey != "avatar-key" {
 		t.Errorf("retry click = %#v", retry.Click)
 	}
 	pt := image.Pt(2, 1)
@@ -693,7 +691,7 @@ func TestMessageGroupSliceRetainsOriginalRowIDsLocalRects(t *testing.T) {
 	// Message row IDs carry original row index: local rows 0 and 1 of the
 	// slice keep suffixes 1 and 2 (their original full-group indices).
 	for _, li := range slice.LocalInteractions {
-		if li.Click.Action != app.SelectMessage {
+		if li.Click.Action != SelectMessage {
 			continue
 		}
 		if li.Click.MessageID != 201 {

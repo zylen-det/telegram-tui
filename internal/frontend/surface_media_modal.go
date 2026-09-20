@@ -5,8 +5,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // buildMediaModalLayer builds the media modal as a real Lipgloss layer surface
@@ -18,7 +16,7 @@ import (
 // loading and error shells; a ready modal keeps the text shell empty so the
 // Kitty image fills the content rectangle. Outside-frame rectangles are virtual
 // close interactions with no visual Layer.
-func buildMediaModalLayer(model ui.ViewModel, styles renderStyles) (surfaceResult, overlayRequest) {
+func buildMediaModalLayer(model ViewModel, styles renderStyles) (surfaceResult, overlayRequest) {
 	if model.Modal == nil || model.Width <= 0 || model.Height <= 0 {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}, overlayRequest{}
 	}
@@ -42,7 +40,7 @@ func buildMediaModalLayer(model ui.ViewModel, styles renderStyles) (surfaceResul
 		model.Width >= minimumWidth &&
 		model.Height >= minimumHeight &&
 		model.Prompt == nil &&
-		model.Focus != app.FocusAuth
+		model.Focus != FocusAuth
 	request.Ready = ready
 
 	// Frame root: absolute at Frame.Min, no ID. Use the actual rounded Style
@@ -73,14 +71,14 @@ func buildMediaModalLayer(model ui.ViewModel, styles renderStyles) (surfaceResul
 		}
 	}
 
-	// Close control: exact 1-cell at the top-right interior, click app.Close.
+	// Close control: exact 1-cell at the top-right interior, click Close.
 	closeLocal := image.Rect(frame.Max.X-2, frame.Min.Y, frame.Max.X-1, frame.Min.Y+1).
 		Intersect(frame).Sub(frame.Min)
 	if !closeLocal.Empty() {
 		closeContent := renderLine(styles.Accent, "×", 1)
 		interactions = append(interactions, addInteractive(
 			root, frame.Min, closeLocal, "media:close", zModalControl, closeContent,
-			app.ActionReceived{Action: app.Close}, app.ActionReceived{}, app.ActionReceived{},
+			ActionReceived{Action: Close}, ActionReceived{}, ActionReceived{},
 		))
 	}
 
@@ -105,7 +103,7 @@ func buildMediaModalLayer(model ui.ViewModel, styles renderStyles) (surfaceResul
 			ID:      region.id,
 			Rect:    region.rect,
 			Z:       zModalControl,
-			Click:   app.ActionReceived{Action: app.Close},
+			Click:   ActionReceived{Action: Close},
 			Virtual: true,
 		})
 	}
@@ -141,7 +139,7 @@ func buildMediaModalLayer(model ui.ViewModel, styles renderStyles) (surfaceResul
 					interactions = append(interactions, addInteractive(
 						root, frame.Min, retryLocal, "media:retry", zModalControl,
 						renderLine(styles.Accent, retryText, retryWidth),
-						app.ActionReceived{Action: app.Retry}, app.ActionReceived{}, app.ActionReceived{},
+						ActionReceived{Action: Retry}, ActionReceived{}, ActionReceived{},
 					))
 				}
 			}

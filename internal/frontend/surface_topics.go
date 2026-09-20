@@ -4,9 +4,7 @@ import (
 	"fmt"
 	"image"
 
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // topicsFrame is the centered modal geometry for the forum-topic list,
@@ -25,7 +23,7 @@ func topicsFrame(bounds image.Rectangle) image.Rectangle {
 // purely visual. When a selector Huh View is injected it replaces the
 // actionable row labels and selected-row paint; omitted injection retains the
 // legacy rows.
-func buildTopicsLayer(model ui.ViewModel, styles renderStyles, selectorView ...string) surfaceResult {
+func buildTopicsLayer(model ViewModel, styles renderStyles, selectorView ...string) surfaceResult {
 	if model.Topics == nil {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
@@ -42,7 +40,7 @@ func buildTopicsLayer(model ui.ViewModel, styles renderStyles, selectorView ...s
 // the ALL pseudo-row plus one row per result and the trailing
 // loading/error/empty informational row, reduced to the window the frame
 // shows.
-func displayedTopicsRows(model ui.ViewModel) []modalRowSpec {
+func displayedTopicsRows(model ViewModel) []modalRowSpec {
 	if model.Topics == nil {
 		return nil
 	}
@@ -50,7 +48,7 @@ func displayedTopicsRows(model ui.ViewModel) []modalRowSpec {
 	return windowTopicsRows(rows, model.Topics.Selected, max(1, model.Height-5))
 }
 
-func topicsRows(topics *app.TopicListState) []modalRowSpec {
+func topicsRows(topics *TopicListState) []modalRowSpec {
 	if topics == nil {
 		return nil
 	}
@@ -61,8 +59,8 @@ func topicsRows(topics *app.TopicListState) []modalRowSpec {
 		ID:       "topic:all",
 		Label:    "All messages",
 		Selected: topics.Selected == 0,
-		Action: app.ActionReceived{
-			Action:  app.SelectTopic,
+		Action: ActionReceived{
+			Action:  SelectTopic,
 			ChatID:  topics.ChatID,
 			TopicID: 0,
 		},
@@ -72,8 +70,8 @@ func topicsRows(topics *app.TopicListState) []modalRowSpec {
 			ID:       fmt.Sprintf("topic:%d", topic.ID),
 			Label:    topicResultLabel(topic),
 			Selected: index+1 == topics.Selected,
-			Action: app.ActionReceived{
-				Action:  app.SelectTopic,
+			Action: ActionReceived{
+				Action:  SelectTopic,
 				ChatID:  topics.ChatID,
 				TopicID: topic.ID,
 			},

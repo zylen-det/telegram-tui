@@ -7,25 +7,24 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
 )
 
-func photoPathAppState(chatID domain.ChatID, value string, focus app.Focus) app.State {
-	state := app.InitialState()
+func photoPathAppState(chatID domain.ChatID, value string, focus Focus) State {
+	state := InitialState()
 	state.Width = 100
 	state.Height = 24
 	state.Focus = focus
-	state.PhotoSend = &app.PhotoSendState{
+	state.PhotoSend = &PhotoSendState{
 		ChatID:        chatID,
 		Input:         []rune(value),
-		PreviousFocus: app.FocusComposer,
+		PreviousFocus: FocusComposer,
 	}
 	return state
 }
 
 func TestAppModelHuhPhotoPathOwnsPersistentHost(t *testing.T) {
-	model := newAppModelForTest(t, app.NewEngine(app.InitialState()), newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, InitialState(), newTestSession(t))
 	if model.photoPathInput == nil {
 		t.Fatal("NewAppModel photoPathInput host is nil")
 	}
@@ -33,7 +32,7 @@ func TestAppModelHuhPhotoPathOwnsPersistentHost(t *testing.T) {
 	if copied.photoPathInput != model.photoPathInput {
 		t.Fatal("AppModel value copy replaced persistent photo path host")
 	}
-	other := newAppModelForTest(t, app.NewEngine(app.InitialState()), newBoundedAppRuntimeForModelTest(t))
+	other := newAppModelForTest(t, InitialState(), newTestSession(t))
 	if other.photoPathInput == model.photoPathInput {
 		t.Fatal("independent AppModels share photo path host")
 	}
@@ -76,8 +75,7 @@ func TestPhotoSendModalConsumesSharedInputRect(t *testing.T) {
 }
 
 func TestAppModelHuhPhotoPathSynchronizesIdentityValueFocusAndGeometry(t *testing.T) {
-	engine := app.NewEngine(photoPathAppState(9, "/tmp/界🙂.png", app.FocusPhotoSend))
-	model := newAppModelForTest(t, engine, newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, photoPathAppState(9, "/tmp/界🙂.png", FocusPhotoSend), newTestSession(t))
 	if cmd := model.syncPhotoPathInputHost(); cmd == nil {
 		t.Fatal("initial photo path focus command was discarded")
 	}
@@ -85,9 +83,8 @@ func TestAppModelHuhPhotoPathSynchronizesIdentityValueFocusAndGeometry(t *testin
 		t.Fatalf("initial photo host = id:%d value:%q focus:%t width:%d", got.Identity(), got.Value(), got.focused, got.width)
 	}
 
-	state := photoPathAppState(10, "next", app.FocusConversation)
-	engine = app.NewEngine(state)
-	model.engine = engine
+	state := photoPathAppState(10, "next", FocusConversation)
+	model.state = &state
 	if cmd := model.syncPhotoPathInputHost(); cmd != nil {
 		t.Fatal("Huh photo path blur returned an unexpected command")
 	}
@@ -96,8 +93,7 @@ func TestAppModelHuhPhotoPathSynchronizesIdentityValueFocusAndGeometry(t *testin
 	}
 
 	state.PhotoSend = nil
-	engine = app.NewEngine(state)
-	model.engine = engine
+	model.state = &state
 	_ = model.syncPhotoPathInputHost()
 	if got := model.photoPathInput; got.Identity() != 0 || got.Value() != "" || got.focused {
 		t.Fatalf("closed photo host retained state = id:%d value:%q focus:%t", got.Identity(), got.Value(), got.focused)
@@ -105,8 +101,7 @@ func TestAppModelHuhPhotoPathSynchronizesIdentityValueFocusAndGeometry(t *testin
 }
 
 func TestAppModelHuhPhotoPathRetainsWindowSizeFocusCommand(t *testing.T) {
-	engine := app.NewEngine(photoPathAppState(9, "", app.FocusPhotoSend))
-	model := newAppModelForTest(t, engine, newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, photoPathAppState(9, "", FocusPhotoSend), newTestSession(t))
 	model, cmd := updateAppModel(t, model, tea.WindowSizeMsg{Width: 100, Height: 24})
 	if cmd == nil {
 		t.Fatal("WindowSize discarded the photo path Huh focus command")

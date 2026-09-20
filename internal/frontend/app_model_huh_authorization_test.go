@@ -5,16 +5,15 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/auth"
 )
 
-func authorizationAppState(id uint64, input string, secret bool) app.State {
-	state := app.InitialState()
+func authorizationAppState(id uint64, input string, secret bool) State {
+	state := InitialState()
 	state.Width = 100
 	state.Height = 24
-	state.Focus = app.FocusAuth
-	state.Prompt = &app.PromptState{
+	state.Focus = FocusAuth
+	state.Prompt = &PromptState{
 		Prompt: auth.Prompt{ID: id, Kind: auth.PromptPassword, Label: "Password", Secret: secret},
 		Input:  []rune(input),
 	}
@@ -22,7 +21,7 @@ func authorizationAppState(id uint64, input string, secret bool) app.State {
 }
 
 func TestAppModelHuhAuthorizationOwnsPersistentHost(t *testing.T) {
-	model := newAppModelForTest(t, app.NewEngine(app.InitialState()), newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, InitialState(), newTestSession(t))
 	if model.authorizationInput == nil {
 		t.Fatal("NewAppModel authorizationInput host is nil")
 	}
@@ -30,15 +29,14 @@ func TestAppModelHuhAuthorizationOwnsPersistentHost(t *testing.T) {
 	if copied.authorizationInput != model.authorizationInput {
 		t.Fatal("AppModel value copy replaced persistent authorization host")
 	}
-	other := newAppModelForTest(t, app.NewEngine(app.InitialState()), newBoundedAppRuntimeForModelTest(t))
+	other := newAppModelForTest(t, InitialState(), newTestSession(t))
 	if other.authorizationInput == model.authorizationInput {
 		t.Fatal("independent AppModels share authorization host")
 	}
 }
 
 func TestAppModelHuhAuthorizationRetainsFocusSyncCommand(t *testing.T) {
-	engine := app.NewEngine(authorizationAppState(7, "", false))
-	model := newAppModelForTest(t, engine, newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, authorizationAppState(7, "", false), newTestSession(t))
 
 	model, cmd := updateAppModel(t, model, tea.WindowSizeMsg{Width: 100, Height: 24})
 	if cmd == nil {
@@ -67,25 +65,22 @@ func TestAuthorizationInputRectMatchesSharedSurfaceGeometry(t *testing.T) {
 }
 
 func TestAppModelHuhAuthorizationSynchronizesPromptIdentityPrivacyAndGeometry(t *testing.T) {
-	engine := app.NewEngine(authorizationAppState(11, "s界🙂cret", true))
-	model := newAppModelForTest(t, engine, newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, authorizationAppState(11, "s界🙂cret", true), newTestSession(t))
 	_ = model.syncAuthorizationInputHost()
 	if got := model.authorizationInput; got.Identity() != 11 || got.Value() != "s界🙂cret" || !got.focused || !got.secret || got.width != 52 {
 		t.Fatalf("initial authorization host = id:%d value:%q focus:%t secret:%t width:%d", got.Identity(), got.Value(), got.focused, got.secret, got.width)
 	}
 
 	state := authorizationAppState(12, "plain", false)
-	engine = app.NewEngine(state)
-	model.engine = engine
+	model.state = &state
 	_ = model.syncAuthorizationInputHost()
 	if got := model.authorizationInput; got.Identity() != 12 || got.Value() != "plain" || !got.focused || got.secret || got.width != 52 {
 		t.Fatalf("new prompt host retained stale state: id:%d value:%q focus:%t secret:%t width:%d", got.Identity(), got.Value(), got.focused, got.secret, got.width)
 	}
 
-	state = engine.Snapshot()
-	state.Focus = app.FocusChats
-	engine = app.NewEngine(state)
-	model.engine = engine
+	state = model.Snapshot()
+	state.Focus = FocusChats
+	model.state = &state
 	_ = model.syncAuthorizationInputHost()
 	if model.authorizationInput.focused {
 		t.Fatal("authorization host stayed focused outside FocusAuth")
@@ -93,13 +88,12 @@ func TestAppModelHuhAuthorizationSynchronizesPromptIdentityPrivacyAndGeometry(t 
 }
 
 func TestAppModelHuhAuthorizationRoutesWholeValueEditingAndSubmit(t *testing.T) {
-	engine := app.NewEngine(authorizationAppState(21, "", false))
-	model := newAppModelForTest(t, engine, newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, authorizationAppState(21, "", false), newTestSession(t))
 
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Text: "a界"}))
 	model, _ = updateAppModel(t, model, tea.PasteMsg{Content: "🙂x"})
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: tea.KeyBackspace}))
-	if got := string(engine.Snapshot().Prompt.Input); got != "a界🙂" {
+	if got := string(model.Snapshot().Prompt.Input); got != "a界🙂" {
 		t.Fatalf("authoritative prompt input = %q, want a界🙂", got)
 	}
 	if got := model.authorizationInput.Value(); got != "a界🙂" {
@@ -110,7 +104,7 @@ func TestAppModelHuhAuthorizationRoutesWholeValueEditingAndSubmit(t *testing.T) 
 	if cmd == nil {
 		t.Fatal("authorization submit delivery command was dropped")
 	}
-	if engine.Snapshot().Prompt != nil {
+	if model.Snapshot().Prompt != nil {
 		t.Fatal("Enter no longer submits and clears authoritative prompt")
 	}
 	if got := model.authorizationInput; got.Identity() != 0 || got.Value() != "" || got.focused {
@@ -119,8 +113,7 @@ func TestAppModelHuhAuthorizationRoutesWholeValueEditingAndSubmit(t *testing.T) 
 }
 
 func TestAppModelHuhAuthorizationDoesNotRouteModifiedText(t *testing.T) {
-	engine := app.NewEngine(authorizationAppState(31, "keep", false))
-	model := newAppModelForTest(t, engine, newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, authorizationAppState(31, "keep", false), newTestSession(t))
 	for _, key := range []tea.Key{
 		{Text: "x", Code: 'x', Mod: tea.ModAlt},
 		{Text: "u", Code: 'u', Mod: tea.ModCtrl},
@@ -128,7 +121,7 @@ func TestAppModelHuhAuthorizationDoesNotRouteModifiedText(t *testing.T) {
 	} {
 		model, _ = updateAppModel(t, model, tea.KeyPressMsg(key))
 	}
-	if got := string(engine.Snapshot().Prompt.Input); got != "keep" {
+	if got := string(model.Snapshot().Prompt.Input); got != "keep" {
 		t.Fatalf("modified key changed prompt input: %q", got)
 	}
 }

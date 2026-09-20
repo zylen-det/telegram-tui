@@ -1,90 +1,77 @@
 package frontend
 
 import (
-	"context"
 	"image"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 func TestAppModelCommandMenuKeepsTypingInHuhComposerAndCompletes(t *testing.T) {
-	state := app.InitialState()
+	state := InitialState()
 	state.Width, state.Height = 100, 24
-	state.Layout = app.LayoutNormal
+	state.Layout = LayoutNormal
 	state.Connection = domain.ConnectionOnline
-	state.Focus = app.FocusComposer
+	state.Focus = FocusComposer
 	state.Chats = []domain.Chat{{ID: 9, Kind: domain.ChatPrivate, Title: "Bot", CanSend: true}}
-	state.BotCommandCatalogs[9] = app.BotCommandCatalogState{Loaded: true, Commands: []domain.BotCommand{{Name: "help"}, {Name: "hello"}}}
-	engine := app.NewEngine(state)
-	model := newAppModelForTest(t, engine, newBoundedAppRuntimeForModelTest(t))
+	state.BotCommandCatalogs[9] = BotCommandCatalogState{Loaded: true, Commands: []domain.BotCommand{{Name: "help"}, {Name: "hello"}}}
+	model := newAppModelForTest(t, state, newTestSession(t))
 
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Text: "/"}))
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Text: "h"}))
-	snapshot := engine.Snapshot()
-	if snapshot.Focus != app.FocusComposer || snapshot.Drafts[9] != "/h" || snapshot.CommandMenu == nil {
+	snapshot := model.Snapshot()
+	if snapshot.Focus != FocusComposer || snapshot.Drafts[9] != "/h" || snapshot.CommandMenu == nil {
 		t.Fatalf("typed menu state = focus:%v draft:%q menu:%#v", snapshot.Focus, snapshot.Drafts[9], snapshot.CommandMenu)
 	}
 
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: tea.KeyDown}))
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
-	snapshot = engine.Snapshot()
+	snapshot = model.Snapshot()
 	if snapshot.CommandMenu != nil || snapshot.Drafts[9] != "/help " || model.composerText.Value() != "/help " {
 		t.Fatalf("completed menu state = draft:%q host:%q menu:%#v", snapshot.Drafts[9], model.composerText.Value(), snapshot.CommandMenu)
 	}
 }
 
 func TestAppModelSlashDeliversBotCommandLoad(t *testing.T) {
-	state := app.InitialState()
+	state := InitialState()
 	state.Width, state.Height = 100, 24
-	state.Focus = app.FocusComposer
+	state.Focus = FocusComposer
 	state.Chats = []domain.Chat{{ID: 9, CanSend: true}}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	runtime := &AppRuntime{ctx: ctx, cancel: cancel, commands: make(chan app.Command, 2)}
-	model := newAppModelForTest(t, app.NewEngine(state), runtime)
-	_, cmd := updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Text: "/"}))
-	if cmd == nil {
-		t.Fatal("slash input returned no command delivery")
-	}
-	message := cmd()
-	batch, ok := message.(tea.BatchMsg)
-	if !ok {
-		t.Fatalf("slash command result = %T, want tea.BatchMsg", message)
-	}
-	for _, child := range batch {
-		if child != nil {
-			_ = child()
+
+	_, effects := updateState(state, ComposerValueChanged{ChatID: 9, Value: "/"})
+	found := false
+	for _, effect := range effects {
+		if load, ok := effect.(LoadBotCommands); ok {
+			if load.ChatID != 9 {
+				t.Fatalf("LoadBotCommands chat ID = %d, want 9", load.ChatID)
+			}
+			found = true
 		}
 	}
-	select {
-	case command := <-runtime.commands:
-		load, ok := command.(app.LoadBotCommands)
-		if !ok || load.ChatID != 9 {
-			t.Fatalf("delivered command = %#v", command)
-		}
-	default:
-		t.Fatal("slash input did not enqueue LoadBotCommands")
+	if !found {
+		t.Fatalf("slash input effects = %#v, want LoadBotCommands", effects)
+	}
+
+	model := newAppModelForTest(t, state, newTestSession(t))
+	if _, cmd := updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Text: "/"})); cmd == nil {
+		t.Fatal("slash input returned no command")
 	}
 }
-
 func TestCommandMenuKeyMappingOnlyInterceptsCompletionKeys(t *testing.T) {
 	cases := []struct {
 		key  tea.Key
-		want app.Action
+		want Action
 		ok   bool
 	}{
-		{tea.Key{Code: tea.KeyUp}, app.CommandMenuPrevious, true},
-		{tea.Key{Code: tea.KeyDown}, app.CommandMenuNext, true},
-		{tea.Key{Code: tea.KeyEnter}, app.CommandMenuActivate, true},
-		{tea.Key{Code: tea.KeyEscape}, app.CommandMenuDismiss, true},
-		{tea.Key{Text: "x"}, app.NoAction, false},
-		{tea.Key{Code: 'c', Mod: tea.ModCtrl}, app.NoAction, false},
+		{tea.Key{Code: tea.KeyUp}, CommandMenuPrevious, true},
+		{tea.Key{Code: tea.KeyDown}, CommandMenuNext, true},
+		{tea.Key{Code: tea.KeyEnter}, CommandMenuActivate, true},
+		{tea.Key{Code: tea.KeyEscape}, CommandMenuDismiss, true},
+		{tea.Key{Text: "x"}, NoAction, false},
+		{tea.Key{Code: 'c', Mod: tea.ModCtrl}, NoAction, false},
 	}
 	for _, test := range cases {
 		got, ok := mapCommandMenuKey(true, tea.KeyPressMsg(test.key))
@@ -99,8 +86,8 @@ func TestCommandMenuKeyMappingOnlyInterceptsCompletionKeys(t *testing.T) {
 
 func TestCommandMenuRendersAboveComposerWithTopmostMouseRows(t *testing.T) {
 	model := frameBaseModel(100, 24)
-	model.Focus = app.FocusComposer
-	model.CommandMenu = &app.CommandMenuState{
+	model.Focus = FocusComposer
+	model.CommandMenu = &CommandMenuState{
 		ChatID: 2, Selected: 1,
 		Candidates: []domain.BotCommand{{Name: "help", Description: "Show help"}, {Name: "start", Description: "Start bot"}},
 	}
@@ -118,10 +105,10 @@ func TestCommandMenuRendersAboveComposerWithTopmostMouseRows(t *testing.T) {
 			t.Errorf("frame missing %q", text)
 		}
 	}
-	var startHit *ui.Hit
+	var startHit *Hit
 	for index := range frame.Hits {
 		hit := &frame.Hits[index]
-		if hit.Click.Action == app.CommandMenuActivate && hit.Click.CommandIndex == 1 {
+		if hit.Click.Action == CommandMenuActivate && hit.Click.CommandIndex == 1 {
 			startHit = hit
 			break
 		}
@@ -130,24 +117,24 @@ func TestCommandMenuRendersAboveComposerWithTopmostMouseRows(t *testing.T) {
 		t.Fatal("command row click hit missing")
 	}
 	got, ok := frame.Hits.ActionAt(startHit.Rect.Min.X, startHit.Rect.Min.Y)
-	if !ok || got.Action != app.CommandMenuActivate || got.ChatID != 2 || got.CommandIndex != 1 {
+	if !ok || got.Action != CommandMenuActivate || got.ChatID != 2 || got.CommandIndex != 1 {
 		t.Fatalf("topmost row action = %#v, %t", got, ok)
 	}
 }
 
 func TestCommandMenuGeometryIsBoundedAtSupportedMinimum(t *testing.T) {
 	model := frameBaseModel(60, 18)
-	model.Focus = app.FocusComposer
+	model.Focus = FocusComposer
 	commands := make([]domain.BotCommand, 12)
 	for index := range commands {
 		commands[index] = domain.BotCommand{Name: "command"}
 	}
-	model.CommandMenu = &app.CommandMenuState{ChatID: 2, Candidates: commands, Selected: 9, First: 2}
+	model.CommandMenu = &CommandMenuState{ChatID: 2, Candidates: commands, Selected: 9, First: 2}
 	composer := composerSurfaceRect(model)
 	history := image.Rect(model.Layout.Conversation.Min.X+1, model.Layout.Conversation.Min.Y+1, model.Layout.Conversation.Max.X-1, composer.Min.Y)
 	surface := buildCommandMenuLayer(model, history, composer, newRenderStyles(false))
 	viewport := image.Rect(0, 0, model.Width, model.Height)
-	if surface.Layer == nil || !surface.Rect.In(viewport) || surface.Rect.Dy() > app.CommandMenuVisibleRows+2 {
+	if surface.Layer == nil || !surface.Rect.In(viewport) || surface.Rect.Dy() > CommandMenuVisibleRows+2 {
 		t.Fatalf("bounded command menu = %v viewport=%v", surface.Rect, viewport)
 	}
 }

@@ -7,7 +7,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
 	"github.com/zylen-det/telegram-tui/internal/frontend/components"
 )
@@ -44,18 +43,18 @@ type selectorIdentity struct {
 type selectorOption struct {
 	ID    string
 	Label string
-	Value app.ActionReceived
+	Value ActionReceived
 }
 
 // selectorHuhOptions converts stable options into Huh options preserving
 // order. The display label is the Huh key; the semantic payload is the Huh
 // value. nil/empty in returns nil/empty out. Rendering and mouse hit mapping
 // both go through this one function, so they can never disagree.
-func selectorHuhOptions(options []selectorOption) []huh.Option[app.ActionReceived] {
+func selectorHuhOptions(options []selectorOption) []huh.Option[ActionReceived] {
 	if len(options) == 0 {
 		return nil
 	}
-	converted := make([]huh.Option[app.ActionReceived], 0, len(options))
+	converted := make([]huh.Option[ActionReceived], 0, len(options))
 	for _, option := range options {
 		converted = append(converted, huh.NewOption(option.Label, option.Value))
 	}
@@ -64,7 +63,7 @@ func selectorHuhOptions(options []selectorOption) []huh.Option[app.ActionReceive
 
 // selectorOptionIndex returns the index of the first option whose semantic
 // payload exactly equals value, or -1 for nil/empty/missing.
-func selectorOptionIndex(options []selectorOption, value app.ActionReceived) int {
+func selectorOptionIndex(options []selectorOption, value ActionReceived) int {
 	for index, option := range options {
 		if option.Value == value {
 			return index
@@ -78,9 +77,9 @@ func selectorOptionIndex(options []selectorOption, value app.ActionReceived) int
 // options, and its focus state. Enter activation (Submit) is disabled here;
 // the AppModel owns activation. Down/up/j/k remain Huh navigation.
 type selectorHost struct {
-	field    *huh.Select[app.ActionReceived]
+	field    *huh.Select[ActionReceived]
 	identity selectorIdentity
-	value    app.ActionReceived
+	value    ActionReceived
 	options  []selectorOption
 	focused  bool
 	width    int
@@ -133,12 +132,12 @@ func clipSelectorHuhView(view string, width, height int) string {
 	return strings.Join(rows, "\n")
 }
 
-// newSelectorField constructs an actual *huh.Select[app.ActionReceived]
+// newSelectorField constructs an actual *huh.Select[ActionReceived]
 // bound to the host value, styled with the project theme, carrying a fresh
 // explicit keymap whose reserved navigation and activation bindings
 // (Next/Prev/Submit) are disabled, and clamped to the requested dimensions.
-func newSelectorField(value *app.ActionReceived, width, height int) *huh.Select[app.ActionReceived] {
-	f := huh.NewSelect[app.ActionReceived]()
+func newSelectorField(value *ActionReceived, width, height int) *huh.Select[ActionReceived] {
+	f := huh.NewSelect[ActionReceived]()
 	f.Value(value)
 	f.WithTheme(huhTheme())
 	km := huhKeyMap()
@@ -172,7 +171,7 @@ func newSelectorHost() *selectorHost {
 //   - same identity, options unchanged: accept a valid authoritative value
 //     change (legacy navigation/snapshot transition); an invalid
 //     authoritative preserves the current valid value, else first/zero.
-func (h *selectorHost) Sync(identity selectorIdentity, options []selectorOption, authoritative app.ActionReceived, focused bool, width, height int) tea.Cmd {
+func (h *selectorHost) Sync(identity selectorIdentity, options []selectorOption, authoritative ActionReceived, focused bool, width, height int) tea.Cmd {
 	return h.sync(identity, options, authoritative, focused, width, height, false)
 }
 
@@ -184,14 +183,14 @@ func (h *selectorHost) Sync(identity selectorIdentity, options []selectorOption,
 // empty transition/rebuild, focus, dimensions, keys, View, copies, and
 // geometry) is identical to Sync. An invalid authoritative never displaces a
 // valid current value or fallback.
-func (h *selectorHost) SyncAuthoritative(identity selectorIdentity, options []selectorOption, authoritative app.ActionReceived, focused bool, width, height int) tea.Cmd {
+func (h *selectorHost) SyncAuthoritative(identity selectorIdentity, options []selectorOption, authoritative ActionReceived, focused bool, width, height int) tea.Cmd {
 	return h.sync(identity, options, authoritative, focused, width, height, true)
 }
 
 // sync is the shared host synchronization mechanics behind Sync and
 // SyncAuthoritative. preferAuthoritative only affects the same-identity
 // changed non-empty options case.
-func (h *selectorHost) sync(identity selectorIdentity, options []selectorOption, authoritative app.ActionReceived, focused bool, width, height int, preferAuthoritative bool) tea.Cmd {
+func (h *selectorHost) sync(identity selectorIdentity, options []selectorOption, authoritative ActionReceived, focused bool, width, height int, preferAuthoritative bool) tea.Cmd {
 	width = max(1, width)
 	height = max(1, height)
 
@@ -204,7 +203,7 @@ func (h *selectorHost) sync(identity selectorIdentity, options []selectorOption,
 		// either the authoritative (if valid) or the current value;
 		// if that chosen value already equals the cached value, no work.
 		authoritativeIndex := selectorOptionIndex(options, authoritative)
-		var fastChosen app.ActionReceived
+		var fastChosen ActionReceived
 		switch {
 		case authoritativeIndex >= 0:
 			fastChosen = authoritative
@@ -234,7 +233,7 @@ func (h *selectorHost) sync(identity selectorIdentity, options []selectorOption,
 	h.options = newOptions
 
 	authoritativeIndex := selectorOptionIndex(newOptions, authoritative)
-	var chosen app.ActionReceived
+	var chosen ActionReceived
 	switch {
 	case !sameIdentity:
 		if authoritativeIndex >= 0 {
@@ -292,10 +291,10 @@ func (h *selectorHost) sync(identity selectorIdentity, options []selectorOption,
 // Update forwards a message to the embedded Select, retaining the returned
 // concrete pointer. It reports changed only on whole semantic payload
 // inequality. Enter is inert because Submit is disabled.
-func (h *selectorHost) Update(msg tea.Msg) (changed bool, value app.ActionReceived, cmd tea.Cmd) {
+func (h *selectorHost) Update(msg tea.Msg) (changed bool, value ActionReceived, cmd tea.Cmd) {
 	before := h.value
 	updated, cmd := h.field.Update(msg)
-	h.field = updated.(*huh.Select[app.ActionReceived])
+	h.field = updated.(*huh.Select[ActionReceived])
 	return h.value != before, h.value, cmd
 }
 
@@ -310,7 +309,7 @@ func (h *selectorHost) View() string {
 func (h *selectorHost) Identity() selectorIdentity { return h.identity }
 
 // Value returns the cached semantic selection.
-func (h *selectorHost) Value() app.ActionReceived { return h.value }
+func (h *selectorHost) Value() ActionReceived { return h.value }
 
 // Options returns a defensive copy of the cached options.
 func (h *selectorHost) Options() []selectorOption {

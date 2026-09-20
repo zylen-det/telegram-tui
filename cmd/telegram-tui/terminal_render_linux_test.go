@@ -14,9 +14,10 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/creack/pty/v2"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/auth"
+	"github.com/zylen-det/telegram-tui/internal/config"
 	"github.com/zylen-det/telegram-tui/internal/frontend"
+	"github.com/zylen-det/telegram-tui/internal/telegram"
 	"golang.org/x/term"
 )
 
@@ -54,7 +55,7 @@ func TestProductionPathRendersAuthorizationInRealPTY(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	engine, runtime, model := productionTestAuthorizationModel(t, ctx)
+	model := productionTestAuthorizationModel(t, ctx)
 	output := frontend.NewOutputOverlay(replica, nil, nil)
 	model.SetOutputOverlay(output)
 	program := newProductionProgram(ctx, replica, output, model)
@@ -74,7 +75,7 @@ func TestProductionPathRendersAuthorizationInRealPTY(t *testing.T) {
 	if !strings.Contains(plain, "Enter the numeric api_id") {
 		t.Fatal("production PTY frame omitted API ID guidance")
 	}
-	if state := engine.Snapshot(); state.Width != 100 || state.Height != 24 {
+	if state := model.Snapshot(); state.Width != 100 || state.Height != 24 {
 		t.Fatalf("production model size = %dx%d, want 100x24", state.Width, state.Height)
 	}
 
@@ -87,11 +88,6 @@ func TestProductionPathRendersAuthorizationInRealPTY(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		program.Kill()
 		t.Fatal("production Bubble Tea program did not stop")
-	}
-	select {
-	case <-runtime.Done():
-	default:
-		t.Fatal("runtime was still running after Program.Run returned")
 	}
 	after, err := term.GetState(int(replica.Fd()))
 	if err != nil {
@@ -137,29 +133,28 @@ func readPTYUntil(t *testing.T, primary *os.File, condition func(string) bool) s
 
 var _ io.ReadWriteCloser = (*frontend.OutputOverlay)(nil)
 
-type productionPTYHandler struct{}
+// productionPTYResolver asks the broker for the API ID so the production
+// authorization frame renders, then blocks until shutdown cancels its context.
+type productionPTYResolver struct{ broker *auth.Broker }
 
-func (productionPTYHandler) Handle(_ context.Context, command app.Command, emit func(app.Event)) {
-	switch command.(type) {
-	case app.LoadBootstrap:
-		emit(app.PromptRequested{Prompt: auth.Prompt{ID: 1, Kind: auth.PromptAPIID, Label: "Telegram API ID"}})
-	case app.BeginShutdown:
-		emit(app.ShutdownComplete{})
+func (r productionPTYResolver) Resolve(ctx context.Context) (config.Runtime, error) {
+	if _, err := r.broker.Ask(ctx, auth.Prompt{Kind: auth.PromptAPIID, Label: "Telegram API ID"}); err != nil {
+		return config.Runtime{}, err
 	}
+	return config.Runtime{APIID: 12345}, nil
 }
 
-func productionTestAuthorizationModel(t *testing.T, ctx context.Context) (*app.Engine, *frontend.AppRuntime, frontend.AppModel) {
+func productionTestAuthorizationModel(t *testing.T, ctx context.Context) frontend.AppModel {
 	t.Helper()
-	runtime, err := frontend.NewAppRuntime(ctx, app.NewExecutor(1, productionPTYHandler{}))
-	if err != nil {
-		t.Fatal("could not create production test runtime")
-	}
-	engine := app.NewEngine(app.InitialState())
-	model, err := frontend.NewAppModel(engine, runtime)
+	broker := auth.NewBroker()
+	handler := frontend.NewHandler(ctx, productionPTYResolver{broker: broker}, func(config.Runtime, auth.Prompter) (telegram.Client, error) {
+		return telegram.NewFake(telegram.FakeData{}), nil
+	}, broker, nil)
+	model, err := frontend.NewAppModel(frontend.InitialState(), handler)
 	if err != nil {
 		t.Fatal("could not create production test model")
 	}
-	return engine, runtime, model
+	return model
 }
 
 func newProductionProgram(ctx context.Context, input io.Reader, output io.Writer, model frontend.AppModel) *tea.Program {

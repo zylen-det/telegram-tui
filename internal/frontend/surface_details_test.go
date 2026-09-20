@@ -6,14 +6,12 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // detailsSurfaceCanvas composes a details surface under a viewport root and
 // returns the canvas plus the compositor for hit testing.
-func detailsSurfaceCanvas(model ui.ViewModel, surface surfaceResult) (*lipgloss.Canvas, *lipgloss.Compositor) {
+func detailsSurfaceCanvas(model ViewModel, surface surfaceResult) (*lipgloss.Canvas, *lipgloss.Compositor) {
 	root := lipgloss.NewLayer(lipgloss.NewStyle().Width(model.Width).Height(model.Height).Render("")).X(0).Y(0).Z(zFrame)
 	root.AddLayers(surface.Layer)
 	compositor := lipgloss.NewCompositor(root)
@@ -21,19 +19,19 @@ func detailsSurfaceCanvas(model ui.ViewModel, surface surfaceResult) (*lipgloss.
 }
 
 // detailsModel builds a wide-layout viewmodel with details open.
-func detailsModel(width, height int, active domain.Chat, row ui.ChatRow) ui.ViewModel {
-	return ui.ViewModel{
+func detailsModel(width, height int, active domain.Chat, row ChatRow) ViewModel {
+	return ViewModel{
 		Width:      width,
 		Height:     height,
-		Layout:     ui.ComputeLayout(width, height, true, app.FocusDetails),
-		Focus:      app.FocusDetails,
+		Layout:     ComputeLayout(width, height, true, FocusDetails),
+		Focus:      FocusDetails,
 		ActiveChat: active,
-		Chats:      []ui.ChatRow{row},
+		Chats:      []ChatRow{row},
 	}
 }
 
-func detailsRowFor(chat domain.Chat) ui.ChatRow {
-	return ui.ChatRow{Chat: chat, AvatarKey: "key"}
+func detailsRowFor(chat domain.Chat) ChatRow {
+	return ChatRow{Chat: chat, AvatarKey: "key"}
 }
 
 func TestDetailsPaneCloseIDsActionsAndHitParity(t *testing.T) {
@@ -63,13 +61,13 @@ func TestDetailsPaneCloseIDsActionsAndHitParity(t *testing.T) {
 	if paneHit == nil {
 		t.Fatal("no pane interaction")
 	}
-	if paneHit.Click.Action != app.FocusPane || paneHit.Click.TargetFocus != app.FocusDetails {
+	if paneHit.Click.Action != FocusPane || paneHit.Click.TargetFocus != FocusDetails {
 		t.Errorf("pane click = %#v", paneHit.Click)
 	}
 	if closeHit == nil {
 		t.Fatal("no close interaction")
 	}
-	if closeHit.Click.Action != app.ToggleDetails {
+	if closeHit.Click.Action != ToggleDetails {
 		t.Errorf("close click = %#v, want ToggleDetails", closeHit.Click)
 	}
 	if closeHit.Z != zControl {
@@ -98,7 +96,7 @@ func TestDetailsPaneCloseIDsActionsAndHitParity(t *testing.T) {
 
 func TestDetailsNoActiveState(t *testing.T) {
 	styles := newRenderStyles(false)
-	model := detailsModel(140, 30, domain.Chat{}, ui.ChatRow{})
+	model := detailsModel(140, 30, domain.Chat{}, ChatRow{})
 	surface := buildDetailsLayer(model, styles)
 	canvas, _ := detailsSurfaceCanvas(model, surface)
 	text := plainText(canvas.Render())
@@ -152,7 +150,7 @@ func TestDetailsCenteredAvatarTitleUsernameViewImage(t *testing.T) {
 	if viewHit == nil {
 		t.Fatal("no view-image interaction")
 	}
-	if viewHit.Click.Action != app.OpenDetailsAvatar {
+	if viewHit.Click.Action != OpenDetailsAvatar {
 		t.Errorf("view-image click = %#v, want OpenDetailsAvatar", viewHit.Click)
 	}
 	if viewHit.Z != zControl {
@@ -188,7 +186,7 @@ func TestDetailsActionSelectionUsesCursorPrefix(t *testing.T) {
 
 	// Unfocused pane shows no cursor prefix.
 	unfocused := detailsModel(140, 30, active, detailsRowFor(active))
-	unfocused.Focus = app.FocusConversation
+	unfocused.Focus = FocusConversation
 	unfocused.DetailsSelected = 1
 	uSurface := buildDetailsLayer(unfocused, styles)
 	uCanvas, _ := detailsSurfaceCanvas(unfocused, uSurface)
@@ -219,7 +217,7 @@ func TestDetailsAvatarRetryOnlyExact12x6AndWins(t *testing.T) {
 	if !retry.Rect.Eq(avatarRect) {
 		t.Errorf("retry rect = %v, want %v", retry.Rect, avatarRect)
 	}
-	if retry.Click.Action != app.Retry || retry.Click.AvatarKey != "key" {
+	if retry.Click.Action != Retry || retry.Click.AvatarKey != "key" {
 		t.Errorf("retry click = %#v, want Retry/key", retry.Click)
 	}
 	if retry.Z != zControl {
@@ -286,7 +284,7 @@ func TestDetailsFocusedUnfocusedBorder(t *testing.T) {
 	active := domain.Chat{ID: 5, Title: "Mina Chen"}
 
 	focused := detailsModel(140, 30, active, detailsRowFor(active))
-	focused.Focus = app.FocusDetails
+	focused.Focus = FocusDetails
 	fs := buildDetailsLayer(focused, styles)
 	fCanvas, _ := detailsSurfaceCanvas(focused, fs)
 	if got := colorOf(fCanvas.CellAt(focused.Layout.Details.Min.X, focused.Layout.Details.Min.Y).Style.Fg); got != rgba(focusedBorderColor) {
@@ -294,7 +292,7 @@ func TestDetailsFocusedUnfocusedBorder(t *testing.T) {
 	}
 
 	unfocused := detailsModel(140, 30, active, detailsRowFor(active))
-	unfocused.Focus = app.FocusConversation
+	unfocused.Focus = FocusConversation
 	us := buildDetailsLayer(unfocused, styles)
 	uCanvas, _ := detailsSurfaceCanvas(unfocused, us)
 	if got := colorOf(uCanvas.CellAt(unfocused.Layout.Details.Min.X, unfocused.Layout.Details.Min.Y).Style.Fg); got != rgba(borderColor) {

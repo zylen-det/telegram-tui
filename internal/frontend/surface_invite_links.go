@@ -5,9 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/telegram"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 func inviteLinksFrame(bounds image.Rectangle) image.Rectangle {
@@ -17,13 +15,13 @@ func inviteLinksFrame(bounds image.Rectangle) image.Rectangle {
 	return centeredSurfaceRectangle(bounds, min(64, bounds.Dx()), min(12, bounds.Dy())).Intersect(bounds)
 }
 
-func buildInviteLinksLayer(model ui.ViewModel, styles renderStyles) surfaceResult {
+func buildInviteLinksLayer(model ViewModel, styles renderStyles) surfaceResult {
 	links := model.InviteLinks
 	if links == nil {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
 	bounds := image.Rect(0, 0, model.Width, model.Height)
-	items := app.InviteLinkMenuItems(links)
+	items := InviteLinkMenuItems(links)
 	selected := links.Selected
 	title := "Invite links"
 	rows := make([]modalRowSpec, 0, len(items)+4)
@@ -71,7 +69,7 @@ func buildInviteLinksLayer(model ui.ViewModel, styles renderStyles) surfaceResul
 	return buildListModalWidth(bounds, title, rows, styles, inviteLinksFrame(bounds).Dx())
 }
 
-func visibleInviteLink(links *app.InviteLinksState, url string) *telegram.InviteLink {
+func visibleInviteLink(links *InviteLinksState, url string) *telegram.InviteLink {
 	if links.Primary != nil && links.Primary.URL == url {
 		return links.Primary
 	}

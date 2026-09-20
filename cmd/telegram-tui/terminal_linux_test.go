@@ -18,7 +18,6 @@ func TestProductionBubbleTeaOwnsTerminalLifecycle(t *testing.T) {
 		"tea.WithInput(options.stdin)",
 		"tea.WithOutput(output)",
 		"tea.WithoutSignalHandler()",
-		"frontend.NewAppRuntime(",
 		"frontend.NewAppModel(",
 		"kitty.NewManager(options.stdout)",
 	} {

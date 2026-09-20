@@ -5,13 +5,11 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 func TestListModalRowsMessageActionsCanonicalSemanticPayloads(t *testing.T) {
-	menu := &app.MessageActionMenu{
+	menu := &MessageActionMenu{
 		ChatID:    9,
 		MessageID: 22,
 		Capabilities: domain.MessageCapabilities{
@@ -24,15 +22,15 @@ func TestListModalRowsMessageActionsCanonicalSemanticPayloads(t *testing.T) {
 	}
 	got := selectorOptionsFromRows(messageActionRows(menu))
 	want := []selectorOption{
-		{ID: "action:view-image", Label: "View image", Value: app.ActionReceived{Action: app.ViewMessageMedia, ChatID: 9, MessageID: 22}},
-		{ID: "action:reply", Label: "Reply", Value: app.ActionReceived{Action: app.ReplyMessage, ChatID: 9, MessageID: 22}},
-		{ID: "action:forward", Label: "Forward", Value: app.ActionReceived{Action: app.ForwardMessageSource, ChatID: 9, MessageID: 22}},
-		{ID: "action:edit", Label: "Edit", Value: app.ActionReceived{Action: app.EditMessage, ChatID: 9, MessageID: 22}},
-		{ID: "action:copy", Label: "Copy", Value: app.ActionReceived{Action: app.CopyMessage, ChatID: 9, MessageID: 22}},
-		{ID: "action:react", Label: "React", Value: app.ActionReceived{Action: app.ReactMessage, ChatID: 9, MessageID: 22}},
-		{ID: "action:pin", Label: "Unpin", Value: app.ActionReceived{Action: app.PinMessage, ChatID: 9, MessageID: 22}},
-		{ID: "action:delete", Label: "Delete", Value: app.ActionReceived{Action: app.DeleteMessage, ChatID: 9, MessageID: 22}},
-		{ID: "action:delete-all", Label: "Delete for everyone", Value: app.ActionReceived{Action: app.DeleteForEveryone, ChatID: 9, MessageID: 22}},
+		{ID: "action:view-image", Label: "View image", Value: ActionReceived{Action: ViewMessageMedia, ChatID: 9, MessageID: 22}},
+		{ID: "action:reply", Label: "Reply", Value: ActionReceived{Action: ReplyMessage, ChatID: 9, MessageID: 22}},
+		{ID: "action:forward", Label: "Forward", Value: ActionReceived{Action: ForwardMessageSource, ChatID: 9, MessageID: 22}},
+		{ID: "action:edit", Label: "Edit", Value: ActionReceived{Action: EditMessage, ChatID: 9, MessageID: 22}},
+		{ID: "action:copy", Label: "Copy", Value: ActionReceived{Action: CopyMessage, ChatID: 9, MessageID: 22}},
+		{ID: "action:react", Label: "React", Value: ActionReceived{Action: ReactMessage, ChatID: 9, MessageID: 22}},
+		{ID: "action:pin", Label: "Unpin", Value: ActionReceived{Action: PinMessage, ChatID: 9, MessageID: 22}},
+		{ID: "action:delete", Label: "Delete", Value: ActionReceived{Action: DeleteMessage, ChatID: 9, MessageID: 22}},
+		{ID: "action:delete-all", Label: "Delete for everyone", Value: ActionReceived{Action: DeleteForEveryone, ChatID: 9, MessageID: 22}},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("compiled Message actions = %#v, want %#v", got, want)
@@ -50,7 +48,7 @@ func TestListModalRowsMessageActionsCanonicalSemanticPayloads(t *testing.T) {
 }
 
 func TestListModalRowsMessageActionLoadingErrorGating(t *testing.T) {
-	base := app.MessageActionMenu{
+	base := MessageActionMenu{
 		ChatID: 9, MessageID: 22, CanReact: true,
 		Capabilities: domain.MessageCapabilities{
 			Reply: true, Forward: true, Edit: true, Copy: true,
@@ -59,16 +57,16 @@ func TestListModalRowsMessageActionLoadingErrorGating(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		name string
-		menu app.MessageActionMenu
+		menu MessageActionMenu
 	}{
-		{name: "loading", menu: func() app.MessageActionMenu { m := base; m.Loading = true; return m }()},
-		{name: "error", menu: func() app.MessageActionMenu { m := base; m.Error = &domain.AppError{Message: "unavailable"}; return m }()},
+		{name: "loading", menu: func() MessageActionMenu { m := base; m.Loading = true; return m }()},
+		{name: "error", menu: func() MessageActionMenu { m := base; m.Error = &domain.AppError{Message: "unavailable"}; return m }()},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := selectorOptionsFromRows(messageActionRows(&tc.menu))
 			want := []selectorOption{
-				{ID: "action:reply", Label: "Reply", Value: app.ActionReceived{Action: app.ReplyMessage, ChatID: 9, MessageID: 22}},
-				{ID: "action:copy", Label: "Copy", Value: app.ActionReceived{Action: app.CopyMessage, ChatID: 9, MessageID: 22}},
+				{ID: "action:reply", Label: "Reply", Value: ActionReceived{Action: ReplyMessage, ChatID: 9, MessageID: 22}},
+				{ID: "action:copy", Label: "Copy", Value: ActionReceived{Action: CopyMessage, ChatID: 9, MessageID: 22}},
 			}
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("compiled gated options = %#v, want %#v", got, want)
@@ -81,16 +79,16 @@ func TestListModalRowsMessageActionLoadingErrorGating(t *testing.T) {
 }
 
 func TestListModalRowsReactionPaletteExactSemanticPayloads(t *testing.T) {
-	picker := &app.ReactionPicker{ChatID: 9, MessageID: 22}
+	picker := &ReactionPicker{ChatID: 9, MessageID: 22}
 	got := selectorOptionsFromRows(reactionRows(picker))
-	if len(got) != len(app.ReactionPalette) {
-		t.Fatalf("reaction options = %d, want %d", len(got), len(app.ReactionPalette))
+	if len(got) != len(ReactionPalette) {
+		t.Fatalf("reaction options = %d, want %d", len(got), len(ReactionPalette))
 	}
-	for index, emoji := range app.ReactionPalette {
+	for index, emoji := range ReactionPalette {
 		want := selectorOption{
 			ID:    "reaction:" + strconv.Itoa(index),
 			Label: emoji,
-			Value: app.ActionReceived{Action: app.Activate, ChatID: 9, MessageID: 22, Rune: rune(index + 0x10000)},
+			Value: ActionReceived{Action: Activate, ChatID: 9, MessageID: 22, Rune: rune(index + 0x10000)},
 		}
 		if got[index] != want {
 			t.Errorf("reaction option %d = %#v, want %#v", index, got[index], want)
@@ -102,18 +100,18 @@ func TestListModalRowsReactionPaletteExactSemanticPayloads(t *testing.T) {
 }
 
 func TestListModalRowsForwardUsesChatIdentityAcrossReorder(t *testing.T) {
-	picker := &app.ForwardPicker{SourceChatID: 9, SourceMessageID: 22}
-	first := []ui.ChatRow{
+	picker := &ForwardPicker{SourceChatID: 9, SourceMessageID: 22}
+	first := []ChatRow{
 		{Chat: domain.Chat{ID: 101, Title: "Alpha"}},
 		{Chat: domain.Chat{ID: 202, Title: "Bravo"}},
 	}
 	got := selectorOptionsFromRows(forwardRows(picker, first))
 	selected := got[1].Value
-	if selected != (app.ActionReceived{Action: app.Activate, ChatID: 202}) {
+	if selected != (ActionReceived{Action: Activate, ChatID: 202}) {
 		t.Fatalf("forward selected identity = %#v, want ChatID 202", selected)
 	}
 
-	reordered := []ui.ChatRow{first[1], first[0]}
+	reordered := []ChatRow{first[1], first[0]}
 	next := selectorOptionsFromRows(forwardRows(picker, reordered))
 	index := selectorOptionIndex(next, selected)
 	if index != 0 || next[index].ID != "forward:0:202" || next[index].Label != "Bravo" {
@@ -125,8 +123,8 @@ func TestListModalRowsForwardUsesChatIdentityAcrossReorder(t *testing.T) {
 }
 
 func TestSelectorOptionIndexRejectsMissingIdentity(t *testing.T) {
-	options := []selectorOption{{Value: app.ActionReceived{Action: app.CopyMessage, ChatID: 9, MessageID: 22}}}
-	if got := selectorOptionIndex(options, app.ActionReceived{Action: app.ReplyMessage, ChatID: 9, MessageID: 22}); got != -1 {
+	options := []selectorOption{{Value: ActionReceived{Action: CopyMessage, ChatID: 9, MessageID: 22}}}
+	if got := selectorOptionIndex(options, ActionReceived{Action: ReplyMessage, ChatID: 9, MessageID: 22}); got != -1 {
 		t.Fatalf("missing semantic identity index = %d, want -1", got)
 	}
 }
@@ -136,8 +134,8 @@ func TestSelectorOptionIndexRejectsMissingIdentity(t *testing.T) {
 // when it carries both an ID and a real action, order and exact semantic
 // payload are preserved, and nothing else is dropped or reordered.
 func TestSelectorOptionsFromRowsKeepsOnlyActionableDisplayedRows(t *testing.T) {
-	first := app.ActionReceived{Action: app.CopyMessage, ChatID: 9, MessageID: 22}
-	second := app.ActionReceived{Action: app.EditMessage, ChatID: 9, MessageID: 22}
+	first := ActionReceived{Action: CopyMessage, ChatID: 9, MessageID: 22}
+	second := ActionReceived{Action: EditMessage, ChatID: 9, MessageID: 22}
 	rows := []modalRowSpec{
 		{ID: "section", Label: "Chats", Action: first, Header: true},
 		{ID: "", Label: "Loading...", Action: first},
@@ -167,13 +165,13 @@ func TestSelectorOptionsFromRowsKeepsOnlyActionableDisplayedRows(t *testing.T) {
 	}
 	unselected := append([]modalRowSpec(nil), rows...)
 	unselected[4].Selected = false
-	if got := selectorRowsAuthoritative(unselected); got != (app.ActionReceived{}) {
+	if got := selectorRowsAuthoritative(unselected); got != (ActionReceived{}) {
 		t.Fatalf("unselected rows authoritative = %#v, want zero payload", got)
 	}
 	headerOnly := append([]modalRowSpec(nil), rows...)
 	headerOnly[0].Selected = true
 	headerOnly[4].Selected = false
-	if got := selectorRowsAuthoritative(headerOnly); got != (app.ActionReceived{}) {
+	if got := selectorRowsAuthoritative(headerOnly); got != (ActionReceived{}) {
 		t.Fatalf("header selection leaked into authoritative: %#v", got)
 	}
 	if !rowSelectable(rows[3]) || rowSelectable(rows[0]) || rowSelectable(rows[1]) || rowSelectable(rows[2]) {

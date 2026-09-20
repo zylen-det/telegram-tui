@@ -4,11 +4,10 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
 )
 
-func selectorRouteMenuState() app.State {
+func selectorRouteMenuState() State {
 	state := selectorSyncState()
 	state.MessageMenu.Loading = false
 	state.MessageMenu.Error = nil
@@ -17,30 +16,30 @@ func selectorRouteMenuState() app.State {
 		DeleteForSelf: true, DeleteForAll: true,
 	}
 	state.MessageMenu.PreferEdit = false
-	state.Focus = app.FocusModal
-	state.MessageMenu.PreviousFocus = app.FocusConversation
+	state.Focus = FocusModal
+	state.MessageMenu.PreviousFocus = FocusConversation
 	// Stable identity so MessagePropertiesLoaded does not flip Selection.
 	state.Chats = []domain.Chat{{ID: 9, Title: "self"}}
 	state.SelectedChat = 0
 	return state
 }
 
-func selectorRouteReactionState() app.State {
-	state := app.InitialState()
+func selectorRouteReactionState() State {
+	state := InitialState()
 	state.Width, state.Height = 80, 24
-	state.Focus = app.FocusReactionPicker
-	state.ReactionPicker = &app.ReactionPicker{
+	state.Focus = FocusReactionPicker
+	state.ReactionPicker = &ReactionPicker{
 		RequestID: 31, ChatID: 9, MessageID: 2, Selected: 0,
 	}
 	state.Chats = []domain.Chat{{ID: 9}}
 	return state
 }
 
-func selectorRouteForwardState() app.State {
-	state := app.InitialState()
+func selectorRouteForwardState() State {
+	state := InitialState()
 	state.Width, state.Height = 80, 24
-	state.Focus = app.FocusForwardPicker
-	state.ForwardPicker = &app.ForwardPicker{
+	state.Focus = FocusForwardPicker
+	state.ForwardPicker = &ForwardPicker{
 		RequestID: 41, SourceChatID: 9, SourceMessageID: 2, SelectedChat: 0,
 	}
 	state.Chats = []domain.Chat{
@@ -53,99 +52,95 @@ func selectorRouteForwardState() app.State {
 
 func TestAppModelSelectorRouteMenuNextPreviousClose(t *testing.T) {
 	state := selectorRouteMenuState()
-	engine := app.NewEngine(state)
 	// Pre-populate a message so Edit/Forward/Delete are eligible (Loading=false already).
 	state.Messages = map[domain.ChatID][]domain.Message{
 		9: {{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "hi"}},
 	}
-	engine = app.NewEngine(state)
-	model := newAppModelForTest(t, engine, newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, state, newTestSession(t))
 	model, _ = updateAppModel(t, model, tea.WindowSizeMsg{Width: 80, Height: 24})
 
-	start := engine.Snapshot().MessageMenu.Selected
-	total := menuVisibleOptions(engine.Snapshot().MessageMenu)
+	start := model.Snapshot().MessageMenu.Selected
+	total := menuVisibleOptions(model.Snapshot().MessageMenu)
 	// advance twice
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Text: "j"}))
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Text: "j"}))
 	wantAfter := (start + 2) % total
-	if got := engine.Snapshot().MessageMenu.Selected; got != wantAfter {
+	if got := model.Snapshot().MessageMenu.Selected; got != wantAfter {
 		t.Fatalf("after j j selected = %d, want %d", got, wantAfter)
 	}
 	// go back
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Text: "k"}))
 	wantBack := (start + 1) % total
-	if got := engine.Snapshot().MessageMenu.Selected; got != wantBack {
+	if got := model.Snapshot().MessageMenu.Selected; got != wantBack {
 		t.Fatalf("after k selected = %d, want %d", got, wantBack)
 	}
 
 	// Esc closes the menu and reverts focus.
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
-	if engine.Snapshot().MessageMenu != nil {
-		t.Fatalf("Esc left MessageMenu: %#v", engine.Snapshot().MessageMenu)
+	if model.Snapshot().MessageMenu != nil {
+		t.Fatalf("Esc left MessageMenu: %#v", model.Snapshot().MessageMenu)
 	}
-	if engine.Snapshot().Focus != app.FocusConversation {
-		t.Fatalf("Esc left focus: %v", engine.Snapshot().Focus)
+	if model.Snapshot().Focus != FocusConversation {
+		t.Fatalf("Esc left focus: %v", model.Snapshot().Focus)
 	}
 }
 
 func TestAppModelSelectorRouteReactionNextPreviousClose(t *testing.T) {
 	state := selectorRouteReactionState()
-	engine := app.NewEngine(state)
-	model := newAppModelForTest(t, engine, newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, state, newTestSession(t))
 	model, _ = updateAppModel(t, model, tea.WindowSizeMsg{Width: 80, Height: 24})
 
-	start := engine.Snapshot().ReactionPicker.Selected
-	palette := len(app.ReactionPalette)
+	start := model.Snapshot().ReactionPicker.Selected
+	palette := len(ReactionPalette)
 
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Text: "j"}))
-	if got := engine.Snapshot().ReactionPicker.Selected; got != (start+1)%palette {
+	if got := model.Snapshot().ReactionPicker.Selected; got != (start+1)%palette {
 		t.Fatalf("reaction j selected = %d, want %d", got, (start+1)%palette)
 	}
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Text: "j"}))
-	if got := engine.Snapshot().ReactionPicker.Selected; got != (start+2)%palette {
+	if got := model.Snapshot().ReactionPicker.Selected; got != (start+2)%palette {
 		t.Fatalf("reaction j x2 selected = %d, want %d", got, (start+2)%palette)
 	}
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Text: "k"}))
-	if got := engine.Snapshot().ReactionPicker.Selected; got != (start+1)%palette {
+	if got := model.Snapshot().ReactionPicker.Selected; got != (start+1)%palette {
 		t.Fatalf("reaction k selected = %d, want %d", got, (start+1)%palette)
 	}
 
 	// q closes; Esc also closes for Forward/Reaction tests.
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
-	if engine.Snapshot().ReactionPicker != nil || engine.Snapshot().Focus != app.FocusConversation {
-		t.Fatalf("Esc left state picker=%#v focus=%v", engine.Snapshot().ReactionPicker, engine.Snapshot().Focus)
+	if model.Snapshot().ReactionPicker != nil || model.Snapshot().Focus != FocusConversation {
+		t.Fatalf("Esc left state picker=%#v focus=%v", model.Snapshot().ReactionPicker, model.Snapshot().Focus)
 	}
 }
 
 func TestAppModelSelectorRouteForwardNextPreviousClose(t *testing.T) {
 	state := selectorRouteForwardState()
-	engine := app.NewEngine(state)
-	model := newAppModelForTest(t, engine, newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, state, newTestSession(t))
 	model, _ = updateAppModel(t, model, tea.WindowSizeMsg{Width: 80, Height: 24})
 
-	start := engine.Snapshot().ForwardPicker.SelectedChat
-	count := len(engine.Snapshot().Chats)
+	start := model.Snapshot().ForwardPicker.SelectedChat
+	count := len(model.Snapshot().Chats)
 
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Text: "j"}))
-	if got := engine.Snapshot().ForwardPicker.SelectedChat; got != (start+1)%count {
+	if got := model.Snapshot().ForwardPicker.SelectedChat; got != (start+1)%count {
 		t.Fatalf("forward j selected = %d, want %d", got, (start+1)%count)
 	}
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Text: "k"}))
-	if got := engine.Snapshot().ForwardPicker.SelectedChat; got != start%count {
+	if got := model.Snapshot().ForwardPicker.SelectedChat; got != start%count {
 		t.Fatalf("forward k selected = %d, want %d", got, start%count)
 	}
 
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
-	if engine.Snapshot().ForwardPicker != nil || engine.Snapshot().Focus != app.FocusConversation {
-		t.Fatalf("Esc left state picker=%#v focus=%v", engine.Snapshot().ForwardPicker, engine.Snapshot().Focus)
+	if model.Snapshot().ForwardPicker != nil || model.Snapshot().Focus != FocusConversation {
+		t.Fatalf("Esc left state picker=%#v focus=%v", model.Snapshot().ForwardPicker, model.Snapshot().Focus)
 	}
 }
 
 // menuVisibleOptions mirrors reducer.actionMenuItemCount exactly so the
 // frozen test's selector-cycle assertion stays consistent with the
-// authoritative engine reducer. Any drift between these two functions is a
+// authoritative reducer. Any drift between these two functions is a
 // production regression.
-func menuVisibleOptions(menu *app.MessageActionMenu) int {
+func menuVisibleOptions(menu *MessageActionMenu) int {
 	count := 0
 	if (menu.MediaFile.Downloaded && menu.MediaFile.LocalPath != "") ||
 		(menu.MediaFile.ID != 0 && menu.MediaFile.CanDownload) {
@@ -181,18 +176,18 @@ func menuVisibleOptions(menu *app.MessageActionMenu) int {
 func TestAppModelSelectorRouteMenuVisibleOptionsParity(t *testing.T) {
 	tests := []struct {
 		name string
-		menu *app.MessageActionMenu
+		menu *MessageActionMenu
 	}{
-		{name: "empty", menu: &app.MessageActionMenu{}},
-		{name: "downloadable media", menu: &app.MessageActionMenu{
+		{name: "empty", menu: &MessageActionMenu{}},
+		{name: "downloadable media", menu: &MessageActionMenu{
 			MediaFile: domain.MediaFileRef{ID: 44, CanDownload: true},
 		}},
-		{name: "downloaded media", menu: &app.MessageActionMenu{
+		{name: "downloaded media", menu: &MessageActionMenu{
 			MediaFile: domain.MediaFileRef{Downloaded: true, LocalPath: "/tmp/photo.jpg"},
 		}},
-		{name: "reaction settled", menu: &app.MessageActionMenu{CanReact: true}},
-		{name: "reaction loading hidden", menu: &app.MessageActionMenu{CanReact: true, Loading: true}},
-		{name: "all capabilities", menu: &app.MessageActionMenu{
+		{name: "reaction settled", menu: &MessageActionMenu{CanReact: true}},
+		{name: "reaction loading hidden", menu: &MessageActionMenu{CanReact: true, Loading: true}},
+		{name: "all capabilities", menu: &MessageActionMenu{
 			CanReact: true,
 			Capabilities: domain.MessageCapabilities{
 				Reply: true, Forward: true, Edit: true, Copy: true, Pin: true,
@@ -211,11 +206,10 @@ func TestAppModelSelectorRouteMenuVisibleOptionsParity(t *testing.T) {
 
 func TestAppModelSelectorRouteMenuQClose(t *testing.T) {
 	state := selectorRouteMenuState()
-	engine := app.NewEngine(state)
-	model := newAppModelForTest(t, engine, newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, state, newTestSession(t))
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Text: "q"}))
-	if engine.Snapshot().MessageMenu != nil || engine.Snapshot().Focus != app.FocusConversation {
-		t.Fatalf("q left state menu=%#v focus=%v", engine.Snapshot().MessageMenu, engine.Snapshot().Focus)
+	if model.Snapshot().MessageMenu != nil || model.Snapshot().Focus != FocusConversation {
+		t.Fatalf("q left state menu=%#v focus=%v", model.Snapshot().MessageMenu, model.Snapshot().Focus)
 	}
 }
 
@@ -228,16 +222,15 @@ func TestAppModelSelectorRouteMenuQClose(t *testing.T) {
 func TestAppModelSelectorRouteForwardEnterActivatesHighlightedChat(t *testing.T) {
 	state := selectorRouteForwardState()
 	state.ForwardPicker.SelectedChat = 1
-	engine := app.NewEngine(state)
-	model := newAppModelForTest(t, engine, newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, state, newTestSession(t))
 	model, _ = updateAppModel(t, model, tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
-	if engine.Snapshot().ForwardPicker != nil {
-		t.Fatalf("Enter did not dispatch Activate: ForwardPicker retained, state=%#v", engine.Snapshot().ForwardPicker)
+	if model.Snapshot().ForwardPicker != nil {
+		t.Fatalf("Enter did not dispatch Activate: ForwardPicker retained, state=%#v", model.Snapshot().ForwardPicker)
 	}
-	if engine.Snapshot().Focus != app.FocusConversation {
-		t.Fatalf("Enter did not flip focus: %v", engine.Snapshot().Focus)
+	if model.Snapshot().Focus != FocusConversation {
+		t.Fatalf("Enter did not flip focus: %v", model.Snapshot().Focus)
 	}
 }
 
@@ -254,8 +247,7 @@ func TestAppModelSelectorRouteMenuEnterResolvesSelectedAction(t *testing.T) {
 	state.Messages = map[domain.ChatID][]domain.Message{
 		9: {{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "hi"}},
 	}
-	engine := app.NewEngine(state)
-	model := newAppModelForTest(t, engine, newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, state, newTestSession(t))
 	model, _ = updateAppModel(t, model, tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	// j advances Selected to 1, then Enter must agree.
@@ -265,11 +257,11 @@ func TestAppModelSelectorRouteMenuEnterResolvesSelectedAction(t *testing.T) {
 	// because Reply is index 0 and Forward is index 1. That opens the forward
 	// picker for this exact source message. If Enter mapping is removed, the
 	// message menu remains open and this oracle fails.
-	got := engine.Snapshot()
+	got := model.Snapshot()
 	if got.MessageMenu != nil || got.ForwardPicker == nil {
 		t.Fatalf("Enter did not open ForwardPicker: menu=%#v picker=%#v", got.MessageMenu, got.ForwardPicker)
 	}
-	if got.ForwardPicker.SourceChatID != 9 || got.ForwardPicker.SourceMessageID != 2 || got.Focus != app.FocusForwardPicker {
+	if got.ForwardPicker.SourceChatID != 9 || got.ForwardPicker.SourceMessageID != 2 || got.Focus != FocusForwardPicker {
 		t.Fatalf("Enter opened wrong forward state: picker=%#v focus=%v", got.ForwardPicker, got.Focus)
 	}
 }
@@ -282,16 +274,15 @@ func TestAppModelSelectorRouteMenuEnterResolvesSelectedAction(t *testing.T) {
 func TestAppModelSelectorRouteReactionEnterResolvesPalette(t *testing.T) {
 	state := selectorRouteReactionState()
 	state.ReactionPicker.Selected = 2
-	engine := app.NewEngine(state)
-	model := newAppModelForTest(t, engine, newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, state, newTestSession(t))
 	model, _ = updateAppModel(t, model, tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
 	// Negative contract: the source message is intentionally absent. Activate
 	// must therefore close the picker synchronously and restore conversation
 	// focus. If Enter mapping is removed, both values remain unchanged.
-	if engine.Snapshot().ReactionPicker != nil || engine.Snapshot().Focus != app.FocusConversation {
-		t.Fatalf("Enter did not dispatch reaction Activate: picker=%#v focus=%v", engine.Snapshot().ReactionPicker, engine.Snapshot().Focus)
+	if model.Snapshot().ReactionPicker != nil || model.Snapshot().Focus != FocusConversation {
+		t.Fatalf("Enter did not dispatch reaction Activate: picker=%#v focus=%v", model.Snapshot().ReactionPicker, model.Snapshot().Focus)
 	}
 }
 
@@ -299,23 +290,22 @@ func TestAppModelSelectorRouteReactionEnterResolvesPalette(t *testing.T) {
 // equivalence explicit: an empty menu has zero actionable rows and navigation
 // is therefore a no-op.
 func TestAppModelSelectorRouteMenuEmptyHasZeroRows(t *testing.T) {
-	state := app.InitialState()
+	state := InitialState()
 	state.Width, state.Height = 80, 24
-	state.Focus = app.FocusModal
-	state.MessageMenu = &app.MessageActionMenu{
+	state.Focus = FocusModal
+	state.MessageMenu = &MessageActionMenu{
 		RequestID: 5, ChatID: 9, MessageID: 1, Loading: false,
 	}
-	engine := app.NewEngine(state)
-	model := newAppModelForTest(t, engine, newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, state, newTestSession(t))
 	model, _ = updateAppModel(t, model, tea.WindowSizeMsg{Width: 80, Height: 24})
-	if got := menuVisibleOptions(engine.Snapshot().MessageMenu); got != 0 {
+	if got := menuVisibleOptions(model.Snapshot().MessageMenu); got != 0 {
 		t.Fatalf("empty menu visible options = %d, want 0", got)
 	}
 
 	// actionMenuItemCount returns 0, so the reducer does not modulo and leaves
 	// Selected unchanged.
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Text: "j"}))
-	if got := engine.Snapshot().MessageMenu.Selected; got != 0 {
+	if got := model.Snapshot().MessageMenu.Selected; got != 0 {
 		t.Fatalf("empty menu j shifted Selected = %d, want 0", got)
 	}
 }

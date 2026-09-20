@@ -6,7 +6,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
 )
 
 type photoSendModalData struct {
@@ -64,7 +63,7 @@ func buildPhotoSendModalLayer(bounds image.Rectangle, data photoSendModalData, s
 		closeContent := renderLine(styles.Accent, "\u00d7", 1)
 		interactions = append(interactions, addInteractive(
 			root, frame.Min, closeLocal, "photo-send:close", zModalControl, closeContent,
-			app.ActionReceived{Action: app.Close}, app.ActionReceived{}, app.ActionReceived{},
+			ActionReceived{Action: Close}, ActionReceived{}, ActionReceived{},
 		))
 	}
 
@@ -108,7 +107,7 @@ func buildPhotoSendModalLayer(bounds image.Rectangle, data photoSendModalData, s
 	inputInteraction := addInteractive(
 		root, frame.Min, inputAbs.Sub(frame.Min), "photo-send:input", zModalControl,
 		inputContent,
-		app.ActionReceived{}, app.ActionReceived{}, app.ActionReceived{},
+		ActionReceived{}, ActionReceived{}, ActionReceived{},
 	)
 	interactions = append(interactions, inputInteraction)
 
@@ -134,7 +133,7 @@ func buildPhotoSendModalLayer(bounds image.Rectangle, data photoSendModalData, s
 		interactions = append(interactions, addInteractive(
 			root, frame.Min, cancelLocalForRender, "photo-send:cancel", zModalControl,
 			cancelContent,
-			app.ActionReceived{Action: app.Close}, app.ActionReceived{}, app.ActionReceived{},
+			ActionReceived{Action: Close}, ActionReceived{}, ActionReceived{},
 		))
 	}
 
@@ -150,8 +149,8 @@ func buildPhotoSendModalLayer(bounds image.Rectangle, data photoSendModalData, s
 				interactions = append(interactions, addInteractive(
 					root, frame.Min, sendLocalForRender, "photo-send:submit", zModalControl,
 					sendContent,
-					app.ActionReceived{Action: app.PhotoSendSubmit},
-					app.ActionReceived{}, app.ActionReceived{},
+					ActionReceived{Action: PhotoSendSubmit},
+					ActionReceived{}, ActionReceived{},
 				))
 			} else {
 				// Muted render when too narrow, no ID/interaction.

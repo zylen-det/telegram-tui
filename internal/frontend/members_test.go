@@ -9,18 +9,16 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
 	"github.com/zylen-det/telegram-tui/internal/media/pixel"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
-func membersViewModel() ui.ViewModel {
-	return ui.ViewModel{
+func membersViewModel() ViewModel {
+	return ViewModel{
 		Width: 100, Height: 30,
-		Layout: ui.Layout{Mode: app.LayoutWide},
-		Focus:  app.FocusMembers,
-		Members: &app.MembersState{
+		Layout: ViewLayout{Mode: LayoutWide},
+		Focus:  FocusMembers,
+		Members: &MembersState{
 			RequestID: 10, ChatID: 9,
 			Results: []domain.ChatMember{
 				{User: domain.User{ID: 1, Name: "Ada", Username: "ada"}, Role: domain.ChatMemberRoleOwner},
@@ -32,20 +30,20 @@ func membersViewModel() ui.ViewModel {
 }
 
 func TestMembersKeyMappings(t *testing.T) {
-	if got, ok := mapKeyPress(app.FocusDetails, tea.KeyPressMsg(tea.Key{Code: 'm', Text: "m"})); !ok || got.Action != app.OpenMembers {
+	if got, ok := mapKeyPress(FocusDetails, tea.KeyPressMsg(tea.Key{Code: 'm', Text: "m"})); !ok || got.Action != OpenMembers {
 		t.Fatalf("details m = (%#v,%t), want OpenMembers", got, ok)
 	}
-	cases := map[tea.Key]app.Action{
-		{Code: tea.KeyDown}:    app.SelectNext,
-		{Code: 'j', Text: "j"}: app.SelectNext,
-		{Code: tea.KeyUp}:      app.SelectPrevious,
-		{Code: 'k', Text: "k"}: app.SelectPrevious,
-		{Code: tea.KeyEnter}:   app.Activate,
-		{Code: tea.KeyEscape}:  app.Close,
-		{Code: 'q', Text: "q"}: app.Close,
+	cases := map[tea.Key]Action{
+		{Code: tea.KeyDown}:    SelectNext,
+		{Code: 'j', Text: "j"}: SelectNext,
+		{Code: tea.KeyUp}:      SelectPrevious,
+		{Code: 'k', Text: "k"}: SelectPrevious,
+		{Code: tea.KeyEnter}:   Activate,
+		{Code: tea.KeyEscape}:  Close,
+		{Code: 'q', Text: "q"}: Close,
 	}
 	for key, want := range cases {
-		got, ok := mapKeyPress(app.FocusMembers, tea.KeyPressMsg(key))
+		got, ok := mapKeyPress(FocusMembers, tea.KeyPressMsg(key))
 		if !ok || got.Action != want {
 			t.Fatalf("members key %#v = (%v,%t), want %v", key, got.Action, ok, want)
 		}
@@ -58,7 +56,7 @@ func TestMembersSelectorOptionsCarryChatUserIdentity(t *testing.T) {
 	if len(options) != 2 || options[0].ID != "member:1" || options[1].ID != "member:2" {
 		t.Fatalf("options = %#v", options)
 	}
-	if options[0].Value != (app.ActionReceived{Action: app.OpenMemberDetail, ChatID: 9, UserID: 1}) {
+	if options[0].Value != (ActionReceived{Action: OpenMemberDetail, ChatID: 9, UserID: 1}) {
 		t.Fatalf("option payload = %#v", options[0].Value)
 	}
 	if got := selectorOptionsFromRows(membersRows(nil)); got != nil {
@@ -111,14 +109,14 @@ func TestMembersLayerIsModalAndClosesUnderlyingHits(t *testing.T) {
 		t.Fatalf("error rows = %#v", rows)
 	}
 	rows := membersRows(model.Members)
-	if rows[0].Action != (app.ActionReceived{Action: app.OpenMemberDetail, ChatID: 9, UserID: 1}) {
+	if rows[0].Action != (ActionReceived{Action: OpenMemberDetail, ChatID: 9, UserID: 1}) {
 		t.Fatalf("row action = %#v", rows[0].Action)
 	}
 }
 
 func TestMemberDetailRowsShowInfoBackAndActions(t *testing.T) {
 	model := membersViewModel()
-	model.Members.Detail = &app.MemberDetail{UserID: 1, Name: "Ada", Username: "ada", Role: domain.ChatMemberRoleOwner}
+	model.Members.Detail = &MemberDetail{UserID: 1, Name: "Ada", Username: "ada", Role: domain.ChatMemberRoleOwner}
 	rows, headers := memberDetailRows(model.Members, nil)
 	// Name header + role header + Back + 5 actions.
 	if len(rows) != 8 || headers != 2 || !strings.Contains(rows[0].Label, "Ada") || !strings.Contains(rows[0].Label, "@ada") {
@@ -130,14 +128,14 @@ func TestMemberDetailRowsShowInfoBackAndActions(t *testing.T) {
 	if rows[2].ID != "member:back" || rows[2].Label != "‹ Back" {
 		t.Fatalf("back row = %#v", rows[2])
 	}
-	if rows[3].Label != "Copy username" || rows[3].Action.Action != app.CopyMemberUsername {
+	if rows[3].Label != "Copy username" || rows[3].Action.Action != CopyMemberUsername {
 		t.Fatalf("first action = %#v", rows[3])
 	}
-	if rows[3].Action != (app.ActionReceived{Action: app.CopyMemberUsername, ChatID: 9, UserID: 1}) {
+	if rows[3].Action != (ActionReceived{Action: CopyMemberUsername, ChatID: 9, UserID: 1}) {
 		t.Fatalf("copy action = %#v", rows[3].Action)
 	}
 	// Anonymous member hides Copy and has no role header.
-	model.Members.Detail = &app.MemberDetail{UserID: 2, Name: "Bob"}
+	model.Members.Detail = &MemberDetail{UserID: 2, Name: "Bob"}
 	rows, headers = memberDetailRows(model.Members, nil)
 	if len(rows) != 6 || headers != 1 || rows[1].Label != "‹ Back" || rows[2].Label != "Add to contacts" {
 		t.Fatalf("anonymous rows = %#v headers=%d", rows, headers)
@@ -151,7 +149,7 @@ func TestMemberDetailRowsShowInfoBackAndActions(t *testing.T) {
 	if _, headers := memberDetailRows(nil, nil); headers != 0 {
 		t.Fatal("nil detail rows should be nil")
 	}
-	if _, headers := memberDetailRows(&app.MembersState{}, nil); headers != 0 {
+	if _, headers := memberDetailRows(&MembersState{}, nil); headers != 0 {
 		t.Fatal("empty detail rows should be nil")
 	}
 }
@@ -178,10 +176,10 @@ func TestMemberDetailAvatarRowsCenteredAndCounted(t *testing.T) {
 	if memberAvatarLabels(pixel.Avatar{}, 40, false) != nil {
 		t.Fatal("empty avatar should yield no rows")
 	}
-	if got := memberDetailChromeRows(&app.MemberDetail{Role: domain.ChatMemberRoleAdministrator}, true); got != 2+memberDetailAvatarHeight {
+	if got := memberDetailChromeRows(&MemberDetail{Role: domain.ChatMemberRoleAdministrator}, true); got != 2+memberDetailAvatarHeight {
 		t.Fatalf("chrome rows = %d", got)
 	}
-	if got := memberDetailChromeRows(&app.MemberDetail{}, false); got != 1 {
+	if got := memberDetailChromeRows(&MemberDetail{}, false); got != 1 {
 		t.Fatalf("minimal chrome rows = %d", got)
 	}
 }
@@ -194,7 +192,7 @@ func TestMemberDetailLayerShowsAvatarAndKeepsSelection(t *testing.T) {
 		cells[i] = pixel.Cell{Rune: ' '}
 	}
 	model.MemberDetailAvatar = pixel.Avatar{Width: 6, Height: 6, Cells: cells}
-	model.Members.Detail = &app.MemberDetail{UserID: 1, Name: "Ada", Username: "ada"}
+	model.Members.Detail = &MemberDetail{UserID: 1, Name: "Ada", Username: "ada"}
 	layer := buildMembersLayer(model, styles, "")
 	if layer.Layer == nil || !layer.IsModal {
 		t.Fatal("detail layer should be modal")
@@ -207,7 +205,7 @@ func TestMemberDetailLayerShowsAvatarAndKeepsSelection(t *testing.T) {
 }
 
 func TestMessageMenuUserInfoRowAfterCopy(t *testing.T) {
-	menu := &app.MessageActionMenu{
+	menu := &MessageActionMenu{
 		ChatID: 9, MessageID: 22, UserID: 7,
 		Capabilities: domain.MessageCapabilities{Copy: true},
 	}
@@ -215,11 +213,11 @@ func TestMessageMenuUserInfoRowAfterCopy(t *testing.T) {
 	if len(options) != 2 || options[0].ID != "action:copy" || options[1].ID != "action:user-info" {
 		t.Fatalf("options = %#v", options)
 	}
-	if options[1].Value != (app.ActionReceived{Action: app.ViewUserInfo, ChatID: 9, MessageID: 22}) {
+	if options[1].Value != (ActionReceived{Action: ViewUserInfo, ChatID: 9, MessageID: 22}) {
 		t.Fatalf("user info option = %#v", options[1].Value)
 	}
 	styles := newRenderStyles(false)
-	model := ui.ViewModel{Width: 80, Height: 24, MessageMenu: menu}
+	model := ViewModel{Width: 80, Height: 24, MessageMenu: menu}
 	surface := buildActionModalLayer(model, styles)
 	if len(surface.Interactions) != 3 {
 		t.Fatalf("interactions = %#v", surface.Interactions)
@@ -227,7 +225,7 @@ func TestMessageMenuUserInfoRowAfterCopy(t *testing.T) {
 	if surface.Interactions[2].ID != "action:user-info" {
 		t.Fatalf("row order = %#v", surface.Interactions)
 	}
-	anonymous := &app.MessageActionMenu{ChatID: 9, MessageID: 22, Capabilities: domain.MessageCapabilities{Copy: true}}
+	anonymous := &MessageActionMenu{ChatID: 9, MessageID: 22, Capabilities: domain.MessageCapabilities{Copy: true}}
 	if got := selectorOptionsFromRows(messageActionRows(anonymous)); len(got) != 1 {
 		t.Fatalf("anonymous options = %#v", got)
 	}
@@ -235,13 +233,13 @@ func TestMessageMenuUserInfoRowAfterCopy(t *testing.T) {
 
 func TestMemberDetailViewAvatarRowAndOption(t *testing.T) {
 	model := membersViewModel()
-	model.Members.Detail = &app.MemberDetail{UserID: 1, Name: "Ada", Username: "ada", Avatar: domain.AvatarRef{UniqueID: "a1"}}
+	model.Members.Detail = &MemberDetail{UserID: 1, Name: "Ada", Username: "ada", Avatar: domain.AvatarRef{UniqueID: "a1"}}
 	rows, _ := memberDetailRows(model.Members, nil)
 	// Header + Back + View avatar + Copy + 4 contact/block actions.
 	if len(rows) != 8 || rows[2].Label != "View avatar" {
 		t.Fatalf("rows = %#v", rows)
 	}
-	if rows[2].Action != (app.ActionReceived{Action: app.ViewMemberAvatar, ChatID: 9, UserID: 1}) {
+	if rows[2].Action != (ActionReceived{Action: ViewMemberAvatar, ChatID: 9, UserID: 1}) {
 		t.Fatalf("view action = %#v", rows[2].Action)
 	}
 	options := selectorOptionsFromRows(rows)
@@ -252,14 +250,14 @@ func TestMemberDetailViewAvatarRowAndOption(t *testing.T) {
 
 func TestMemberAvatarModalStaysTopmostOverMembers(t *testing.T) {
 	model := membersViewModel()
-	model.Focus = app.FocusModal
-	model.Modal = &app.ModalState{Title: "Ada", Path: "/tmp/avatar.png"}
+	model.Focus = FocusModal
+	model.Modal = &ModalState{Title: "Ada", Path: "/tmp/avatar.png"}
 	frame := composeApplication(model, time.UTC)
 	for _, hit := range frame.Hits {
 		switch hit.Click.Action {
-		case app.OpenMemberDetail, app.CloseMemberDetail, app.ViewMemberAvatar,
-			app.CopyMemberUsername, app.AddMemberContact, app.RemoveMemberContact,
-			app.BlockMember, app.UnblockMember:
+		case OpenMemberDetail, CloseMemberDetail, ViewMemberAvatar,
+			CopyMemberUsername, AddMemberContact, RemoveMemberContact,
+			BlockMember, UnblockMember:
 			t.Fatalf("member action leaked under avatar modal: %#v", hit.Click)
 		}
 	}
@@ -270,13 +268,13 @@ func TestMemberAvatarModalStaysTopmostOverMembers(t *testing.T) {
 
 func TestMemberDetailSelectorOptionsMirrorRows(t *testing.T) {
 	model := membersViewModel()
-	model.Members.Detail = &app.MemberDetail{UserID: 1, Name: "Ada", Username: "ada"}
+	model.Members.Detail = &MemberDetail{UserID: 1, Name: "Ada", Username: "ada"}
 	rows, _ := memberDetailRows(model.Members, nil)
 	options := selectorOptionsFromRows(rows)
 	if len(options) != 6 || options[0].ID != "member:back" || options[1].ID != "member-action:copy-username" {
 		t.Fatalf("options = %#v", options)
 	}
-	if options[0].Value != (app.ActionReceived{Action: app.CloseMemberDetail, ChatID: 9}) {
+	if options[0].Value != (ActionReceived{Action: CloseMemberDetail, ChatID: 9}) {
 		t.Fatalf("back option = %#v", options[0].Value)
 	}
 }
@@ -284,7 +282,7 @@ func TestMemberDetailSelectorOptionsMirrorRows(t *testing.T) {
 func TestMembersLayerUsesDetailTitle(t *testing.T) {
 	styles := newRenderStyles(true)
 	model := membersViewModel()
-	model.Members.Detail = &app.MemberDetail{UserID: 1, Name: "Ada", Username: "ada"}
+	model.Members.Detail = &MemberDetail{UserID: 1, Name: "Ada", Username: "ada"}
 	if got := membersTitle(model.Members); got != "Ada" {
 		t.Fatalf("title = %q", got)
 	}
@@ -308,14 +306,14 @@ func TestMemberDetailAvatarResolvesFromCache(t *testing.T) {
 	for i := range cells {
 		cells[i] = pixel.Cell{Rune: 'x'}
 	}
-	state := app.InitialState()
-	state.Focus = app.FocusMembers
-	state.Members = &app.MembersState{
+	state := InitialState()
+	state.Focus = FocusMembers
+	state.Members = &MembersState{
 		ChatID: 9,
-		Detail: &app.MemberDetail{UserID: 1, Name: "Ada", AvatarKey: "avatar-1:chat-list"},
+		Detail: &MemberDetail{UserID: 1, Name: "Ada", AvatarKey: "avatar-1:chat-list"},
 	}
-	state.Avatars["avatar-1:chat-list"] = app.AvatarState{Cells: pixel.Avatar{Width: 6, Height: 6, Cells: cells}}
-	model := ui.Select(state, time.UTC)
+	state.Avatars["avatar-1:chat-list"] = AvatarState{Cells: pixel.Avatar{Width: 6, Height: 6, Cells: cells}}
+	model := Select(state, time.UTC)
 	if len(model.MemberDetailAvatar.Cells) != 36 {
 		t.Fatalf("avatar cells = %d", len(model.MemberDetailAvatar.Cells))
 	}
@@ -328,19 +326,19 @@ func TestMemberDetailAvatarResolvesFromCache(t *testing.T) {
 	entry := loading.Avatars["avatar-1:chat-list"]
 	entry.Loading = true
 	loading.Avatars["avatar-1:chat-list"] = entry
-	if got := ui.Select(loading, time.UTC); len(got.MemberDetailAvatar.Cells) != 0 {
+	if got := Select(loading, time.UTC); len(got.MemberDetailAvatar.Cells) != 0 {
 		t.Fatalf("loading avatar = %d cells", len(got.MemberDetailAvatar.Cells))
 	}
 }
 
 func TestMembersViewModelClonesWithoutAliasing(t *testing.T) {
-	state := app.InitialState()
-	state.Focus = app.FocusMembers
-	state.Members = &app.MembersState{
+	state := InitialState()
+	state.Focus = FocusMembers
+	state.Members = &MembersState{
 		ChatID:  9,
 		Results: []domain.ChatMember{{User: domain.User{ID: 1, Name: "x"}}},
 	}
-	model := ui.Select(state, time.UTC)
+	model := Select(state, time.UTC)
 	if model.Members == nil || len(model.Members.Results) != 1 {
 		t.Fatalf("projection = %#v", model.Members)
 	}

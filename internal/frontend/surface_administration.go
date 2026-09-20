@@ -4,9 +4,7 @@ import (
 	"image"
 	"strconv"
 
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/telegram"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 func administrationFrame(bounds image.Rectangle) image.Rectangle {
@@ -16,7 +14,7 @@ func administrationFrame(bounds image.Rectangle) image.Rectangle {
 	return centeredSurfaceRectangle(bounds, min(72, bounds.Dx()), min(14, bounds.Dy())).Intersect(bounds)
 }
 
-func buildAdministrationLayer(model ui.ViewModel, styles renderStyles) surfaceResult {
+func buildAdministrationLayer(model ViewModel, styles renderStyles) surfaceResult {
 	admin := model.Administration
 	if admin == nil {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
@@ -25,8 +23,8 @@ func buildAdministrationLayer(model ui.ViewModel, styles renderStyles) surfaceRe
 	rows := []modalRowSpec{{Label: administrationIntro(admin), Header: true}}
 	selectedRow := -1
 	actionIndex := 0
-	for index, item := range app.AdministrationMenuItems(admin) {
-		if item.Header || item.Action.Action == app.NoAction {
+	for index, item := range AdministrationMenuItems(admin) {
+		if item.Header || item.Action.Action == NoAction {
 			rows = append(rows, modalRowSpec{Label: sanitizeDisplayString(item.Label), Header: true})
 			continue
 		}
@@ -63,40 +61,40 @@ func buildAdministrationLayer(model ui.ViewModel, styles renderStyles) surfaceRe
 	return buildListModalWidth(bounds, title, rows, styles, administrationFrame(bounds).Dx())
 }
 
-func administrationTitle(mode app.AdministrationMode) string {
+func administrationTitle(mode AdministrationMode) string {
 	switch mode {
-	case app.AdministrationDefaultPermissions:
+	case AdministrationDefaultPermissions:
 		return "Group permissions"
-	case app.AdministrationMemberMenu:
+	case AdministrationMemberMenu:
 		return "Manage member"
-	case app.AdministrationAdminRightsEditor:
+	case AdministrationAdminRightsEditor:
 		return "Administrator rights"
-	case app.AdministrationRestrictionsEditor:
+	case AdministrationRestrictionsEditor:
 		return "Member permissions"
-	case app.AdministrationConfirmation:
+	case AdministrationConfirmation:
 		return "Confirm member action"
 	default:
 		return "Administration"
 	}
 }
 
-func administrationIntro(admin *app.AdministrationState) string {
+func administrationIntro(admin *AdministrationState) string {
 	if admin == nil {
 		return ""
 	}
 	switch admin.Mode {
-	case app.AdministrationDefaultPermissions:
+	case AdministrationDefaultPermissions:
 		return "Allowed actions for ordinary members"
-	case app.AdministrationMemberMenu:
+	case AdministrationMemberMenu:
 		if admin.ReturnMembers != nil && admin.ReturnMembers.Detail != nil {
 			return sanitizeDisplayString(admin.ReturnMembers.Detail.Name)
 		}
 		return "Member actions"
-	case app.AdministrationAdminRightsEditor:
+	case AdministrationAdminRightsEditor:
 		return "Select rights for this administrator"
-	case app.AdministrationRestrictionsEditor:
+	case AdministrationRestrictionsEditor:
 		return "Allowed actions for this member"
-	case app.AdministrationConfirmation:
+	case AdministrationConfirmation:
 		return memberActionConsequence(admin.PendingAction)
 	default:
 		return ""

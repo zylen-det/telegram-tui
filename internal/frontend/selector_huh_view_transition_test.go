@@ -9,9 +9,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 func renderedListModal(t *testing.T, surface surfaceResult) string {
@@ -21,11 +19,11 @@ func renderedListModal(t *testing.T, surface surfaceResult) string {
 }
 
 func TestSelectorHuhViewInjectionReplacesActionRowsPreservesChromeStatusAndHits(t *testing.T) {
-	menu := &app.MessageActionMenu{
+	menu := &MessageActionMenu{
 		ChatID: 9, MessageID: 2, Loading: true,
 		Capabilities: domain.MessageCapabilities{Reply: true, Copy: true},
 	}
-	model := ui.ViewModel{Width: 80, Height: 24, MessageMenu: menu}
+	model := ViewModel{Width: 80, Height: 24, MessageMenu: menu}
 	styles := newRenderStyles(false)
 	legacy := buildActionModalLayer(model, styles)
 	injected := buildActionModalLayer(model, styles, "HUH_ACTION_ONE\nHUH_ACTION_TWO\nOVERFLOW_FORBIDDEN")
@@ -62,24 +60,24 @@ func TestSelectorHuhViewInjectionReplacesActionRowsPreservesChromeStatusAndHits(
 
 func TestSelectorHuhViewInjectionReplacesReactionAndForwardRows(t *testing.T) {
 	styles := newRenderStyles(false)
-	reaction := ui.ViewModel{
+	reaction := ViewModel{
 		Width: 80, Height: 24,
-		ReactionPicker: &app.ReactionPicker{ChatID: 9, MessageID: 2, Selected: 1},
+		ReactionPicker: &ReactionPicker{ChatID: 9, MessageID: 2, Selected: 1},
 	}
 	reactionRendered := renderedListModal(t, buildReactionPickerLayer(reaction, styles, "HUH_REACTION_ONLY"))
 	if !strings.Contains(reactionRendered, "HUH_REACTION_ONLY") {
 		t.Fatalf("reaction Huh view missing\n%s", reactionRendered)
 	}
-	for _, emoji := range app.ReactionPalette {
+	for _, emoji := range ReactionPalette {
 		if strings.Contains(reactionRendered, emoji) {
 			t.Fatalf("reaction legacy row %q survived injection\n%s", emoji, reactionRendered)
 		}
 	}
 
-	forward := ui.ViewModel{
+	forward := ViewModel{
 		Width: 80, Height: 24,
-		ForwardPicker: &app.ForwardPicker{SourceChatID: 9, SourceMessageID: 2, SelectedChat: 0},
-		Chats: []ui.ChatRow{
+		ForwardPicker: &ForwardPicker{SourceChatID: 9, SourceMessageID: 2, SelectedChat: 0},
+		Chats: []ChatRow{
 			{Chat: domain.Chat{ID: 11, Title: "LEGACY_ALPHA_FORBIDDEN"}},
 			{Chat: domain.Chat{ID: 22, Title: "LEGACY_BETA_FORBIDDEN"}},
 		},
@@ -98,11 +96,11 @@ func TestSelectorHuhViewInjectionReplacesReactionAndForwardRows(t *testing.T) {
 }
 
 func TestSelectorEmptyInjectedHuhViewNeverFallsBackButOmittedRetainsCompatibility(t *testing.T) {
-	menu := &app.MessageActionMenu{
+	menu := &MessageActionMenu{
 		ChatID: 9, MessageID: 2,
 		Capabilities: domain.MessageCapabilities{Reply: true, Copy: true},
 	}
-	model := ui.ViewModel{Width: 80, Height: 24, MessageMenu: menu}
+	model := ViewModel{Width: 80, Height: 24, MessageMenu: menu}
 	styles := newRenderStyles(false)
 
 	emptyInjected := renderedListModal(t, buildActionModalLayer(model, styles, ""))
@@ -117,7 +115,7 @@ func TestSelectorEmptyInjectedHuhViewNeverFallsBackButOmittedRetainsCompatibilit
 
 func TestSelectorCompositionBundlePresenceDistinguishesEmptyFromOmitted(t *testing.T) {
 	model := frameBaseModel(80, 24)
-	model.MessageMenu = &app.MessageActionMenu{
+	model.MessageMenu = &MessageActionMenu{
 		ChatID: 9, MessageID: 2,
 		Capabilities: domain.MessageCapabilities{Reply: true, Copy: true},
 	}
@@ -132,14 +130,14 @@ func TestSelectorCompositionBundlePresenceDistinguishesEmptyFromOmitted(t *testi
 }
 
 func TestAppModelSelectorHuhViewFlowsThroughProductionComposition(t *testing.T) {
-	state := app.InitialState()
+	state := InitialState()
 	state.Width, state.Height = 80, 24
-	state.Focus = app.FocusModal
-	state.MessageMenu = &app.MessageActionMenu{
+	state.Focus = FocusModal
+	state.MessageMenu = &MessageActionMenu{
 		RequestID: 7, ChatID: 9, MessageID: 2,
 		Capabilities: domain.MessageCapabilities{Reply: true, Copy: true},
 	}
-	model := newAppModelForTest(t, app.NewEngine(state), newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, state, newTestSession(t))
 	_ = model.syncListModalController()
 	plain := ansi.Strip(model.View().Content)
 	if !strings.Contains(plain, "Reply") || !strings.Contains(plain, "Copy") {
@@ -148,23 +146,23 @@ func TestAppModelSelectorHuhViewFlowsThroughProductionComposition(t *testing.T) 
 }
 
 func TestAppModelSelectorViewDoesNotSynchronizeHost(t *testing.T) {
-	state := app.InitialState()
+	state := InitialState()
 	state.Width, state.Height = 80, 24
-	state.Focus = app.FocusModal
-	state.MessageMenu = &app.MessageActionMenu{
+	state.Focus = FocusModal
+	state.MessageMenu = &MessageActionMenu{
 		RequestID: 7, ChatID: 9, MessageID: 2,
 		Capabilities: domain.MessageCapabilities{Copy: true},
 	}
-	model := newAppModelForTest(t, app.NewEngine(state), newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, state, newTestSession(t))
 	_ = model.syncListModalController()
 	wantIdentity := model.listModals.host.Identity()
 
 	next := state
-	next.MessageMenu = &app.MessageActionMenu{
+	next.MessageMenu = &MessageActionMenu{
 		RequestID: 8, ChatID: 9, MessageID: 3,
 		Capabilities: domain.MessageCapabilities{Reply: true},
 	}
-	model.engine = app.NewEngine(next)
+	model.state = &next
 	_ = model.View()
 	if got := model.listModals.host.Identity(); got != wantIdentity {
 		t.Fatalf("View synchronized/mutated selector host: got=%#v want=%#v", got, wantIdentity)
@@ -173,17 +171,17 @@ func TestAppModelSelectorViewDoesNotSynchronizeHost(t *testing.T) {
 
 func TestSelectorCompositionRoutesInjectionToReactionAndForwardBuilders(t *testing.T) {
 	reaction := frameBaseModel(80, 24)
-	reaction.Focus = app.FocusReactionPicker
-	reaction.ReactionPicker = &app.ReactionPicker{ChatID: 9, MessageID: 2, Selected: 0}
+	reaction.Focus = FocusReactionPicker
+	reaction.ReactionPicker = &ReactionPicker{ChatID: 9, MessageID: 2, Selected: 0}
 	reactionPlain := ansi.Strip(composeApplication(reaction, time.Local, editorViews{Selector: "ROUTED_REACTION"}).Content)
 	if !strings.Contains(reactionPlain, "ROUTED_REACTION") {
 		t.Fatalf("composeApplication did not route injection to Reaction builder\n%s", reactionPlain)
 	}
 
 	forward := frameBaseModel(80, 24)
-	forward.Focus = app.FocusForwardPicker
-	forward.ForwardPicker = &app.ForwardPicker{SourceChatID: 9, SourceMessageID: 2, SelectedChat: 0}
-	forward.Chats = []ui.ChatRow{{Chat: domain.Chat{ID: 11, Title: "LEGACY_FORWARD_FORBIDDEN"}}}
+	forward.Focus = FocusForwardPicker
+	forward.ForwardPicker = &ForwardPicker{SourceChatID: 9, SourceMessageID: 2, SelectedChat: 0}
+	forward.Chats = []ChatRow{{Chat: domain.Chat{ID: 11, Title: "LEGACY_FORWARD_FORBIDDEN"}}}
 	forwardPlain := ansi.Strip(composeApplication(forward, time.Local, editorViews{Selector: "ROUTED_FORWARD"}).Content)
 	if !strings.Contains(forwardPlain, "ROUTED_FORWARD") || strings.Contains(forwardPlain, "LEGACY_FORWARD_FORBIDDEN") {
 		t.Fatalf("composeApplication did not route injection to Forward builder\n%s", forwardPlain)

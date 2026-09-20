@@ -8,17 +8,15 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
-func chatSearchViewModel() ui.ViewModel {
-	return ui.ViewModel{
+func chatSearchViewModel() ViewModel {
+	return ViewModel{
 		Width: 100, Height: 30,
-		Layout: ui.Layout{Mode: app.LayoutWide},
-		Focus:  app.FocusChatSearchResults,
-		ChatSearch: &app.ChatSearchState{
+		Layout: ViewLayout{Mode: LayoutWide},
+		Focus:  FocusChatSearchResults,
+		ChatSearch: &ChatSearchState{
 			RequestID:   7,
 			Input:       []rune("@botfather"),
 			Query:       "botfather",
@@ -31,44 +29,44 @@ func chatSearchViewModel() ui.ViewModel {
 
 func TestChatSearchKeyMappings(t *testing.T) {
 	slash := tea.Key{Text: "/", Code: '/'}
-	if got, ok := mapKeyPress(app.FocusChats, tea.KeyPressMsg(slash)); !ok || got.Action != app.OpenChatSearch {
+	if got, ok := mapKeyPress(FocusChats, tea.KeyPressMsg(slash)); !ok || got.Action != OpenChatSearch {
 		t.Fatalf("chats / = (%#v,%t)", got, ok)
 	}
-	if got, ok := mapKeyPress(app.FocusConversation, tea.KeyPressMsg(slash)); !ok || got.Action != app.OpenMessageSearch {
+	if got, ok := mapKeyPress(FocusConversation, tea.KeyPressMsg(slash)); !ok || got.Action != OpenMessageSearch {
 		t.Fatalf("conversation / must stay message search, got (%#v,%t)", got, ok)
 	}
-	cases := map[tea.Key]app.Action{
-		{Code: tea.KeyDown}:    app.SelectNext,
-		{Code: 'j', Text: "j"}: app.SelectNext,
-		{Code: tea.KeyUp}:      app.SelectPrevious,
-		{Code: 'k', Text: "k"}: app.SelectPrevious,
-		{Code: tea.KeyEnter}:   app.Activate,
-		{Code: tea.KeyEscape}:  app.Close,
-		{Code: 'q', Text: "q"}: app.Close,
-		{Code: '/', Text: "/"}: app.OpenChatSearch,
+	cases := map[tea.Key]Action{
+		{Code: tea.KeyDown}:    SelectNext,
+		{Code: 'j', Text: "j"}: SelectNext,
+		{Code: tea.KeyUp}:      SelectPrevious,
+		{Code: 'k', Text: "k"}: SelectPrevious,
+		{Code: tea.KeyEnter}:   Activate,
+		{Code: tea.KeyEscape}:  Close,
+		{Code: 'q', Text: "q"}: Close,
+		{Code: '/', Text: "/"}: OpenChatSearch,
 	}
 	for key, want := range cases {
-		got, ok := mapKeyPress(app.FocusChatSearchResults, tea.KeyPressMsg(key))
+		got, ok := mapKeyPress(FocusChatSearchResults, tea.KeyPressMsg(key))
 		if !ok || got.Action != want {
 			t.Fatalf("chat results key %#v = (%v,%t), want %v", key, got.Action, ok, want)
 		}
 	}
-	if got, ok := mapKeyPress(app.FocusChatSearchInput, tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter})); !ok || got.Action != app.Activate {
+	if got, ok := mapKeyPress(FocusChatSearchInput, tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter})); !ok || got.Action != Activate {
 		t.Fatalf("chat input enter = (%#v,%t), want Activate", got, ok)
 	}
 	for _, key := range []tea.Key{{Code: tea.KeyDown}, {Code: tea.KeyUp}, {Code: tea.KeyEscape}} {
-		want := app.SelectNext
+		want := SelectNext
 		if key.Code == tea.KeyUp {
-			want = app.SelectPrevious
+			want = SelectPrevious
 		}
 		if key.Code == tea.KeyEscape {
-			want = app.Close
+			want = Close
 		}
-		if got, ok := mapKeyPress(app.FocusChatSearchInput, tea.KeyPressMsg(key)); !ok || got.Action != want {
+		if got, ok := mapKeyPress(FocusChatSearchInput, tea.KeyPressMsg(key)); !ok || got.Action != want {
 			t.Fatalf("chat input key %#v = (%v,%t), want %v", key, got.Action, ok, want)
 		}
 	}
-	if !editableFocus(app.FocusChatSearchInput) {
+	if !editableFocus(FocusChatSearchInput) {
 		t.Fatal("chat search input must be editable")
 	}
 }
@@ -84,28 +82,28 @@ func TestChatSearchRowsCarryChatIdentity(t *testing.T) {
 	if len(options) != 1 || options[0].ID != "chat-search:pub:99" {
 		t.Fatalf("options = %#v", options)
 	}
-	if options[0].Value != (app.ActionReceived{Action: app.SelectChat, ChatID: 99}) {
+	if options[0].Value != (ActionReceived{Action: SelectChat, ChatID: 99}) {
 		t.Fatalf("option payload = %#v", options[0].Value)
 	}
-	if got := selectorOptionsFromRows(buildUnifiedChatSearchRows(ui.ViewModel{}, time.UTC)); got != nil {
+	if got := selectorOptionsFromRows(buildUnifiedChatSearchRows(ViewModel{}, time.UTC)); got != nil {
 		t.Fatalf("nil search options = %#v", got)
 	}
-	zero := ui.ViewModel{ChatSearch: &app.ChatSearchState{PublicChats: []domain.Chat{{ID: 0}}}}
+	zero := ViewModel{ChatSearch: &ChatSearchState{PublicChats: []domain.Chat{{ID: 0}}}}
 	if got := selectorOptionsFromRows(buildUnifiedChatSearchRows(zero, time.UTC)); len(got) != 0 {
 		t.Fatalf("zero-ID result must not become an option: %#v", got)
 	}
 	// Unified order is local chats, global messages, public chats; message
 	// options carry both chat and message identity.
-	unified := &app.ChatSearchState{
+	unified := &ChatSearchState{
 		LocalChats:     []domain.Chat{{ID: 7, Title: "Local"}},
 		GlobalMessages: []domain.Message{{ID: 5, ChatID: 7, Kind: domain.MessageText, Text: "hi"}},
 		PublicChats:    []domain.Chat{{ID: 99, Title: "Pub"}},
 	}
-	got := selectorOptionsFromRows(buildUnifiedChatSearchRows(ui.ViewModel{ChatSearch: unified}, time.UTC))
+	got := selectorOptionsFromRows(buildUnifiedChatSearchRows(ViewModel{ChatSearch: unified}, time.UTC))
 	if len(got) != 3 || got[0].ID != "chat-search:local:7" || got[1].ID != "chat-search:msg:7:5" || got[2].ID != "chat-search:pub:99" {
 		t.Fatalf("unified options = %#v", got)
 	}
-	if got[1].Value != (app.ActionReceived{Action: app.SelectMessage, ChatID: 7, MessageID: 5}) {
+	if got[1].Value != (ActionReceived{Action: SelectMessage, ChatID: 7, MessageID: 5}) {
 		t.Fatalf("message option payload = %#v", got[1].Value)
 	}
 }
@@ -166,7 +164,7 @@ func TestChatSearchLayerIsModalAndClosesUnderlyingHits(t *testing.T) {
 	if len(rows) != 2 || !rows[0].Header || !strings.Contains(rows[0].Label, "Public chats") {
 		t.Fatalf("public header = %#v", rows)
 	}
-	if rows[1].Action != (app.ActionReceived{Action: app.SelectChat, ChatID: 99}) {
+	if rows[1].Action != (ActionReceived{Action: SelectChat, ChatID: 99}) {
 		t.Fatalf("row action = %#v", rows[1].Action)
 	}
 }
@@ -184,10 +182,10 @@ func TestChatSearchInputGeometryIsBounded(t *testing.T) {
 }
 
 func TestChatSearchViewModelClonesWithoutAliasing(t *testing.T) {
-	state := app.InitialState()
-	state.Focus = app.FocusChatSearchResults
-	state.ChatSearch = &app.ChatSearchState{Input: []rune("ab"), PublicChats: []domain.Chat{{ID: 99, Title: "Bot"}}}
-	model := ui.Select(state, time.UTC)
+	state := InitialState()
+	state.Focus = FocusChatSearchResults
+	state.ChatSearch = &ChatSearchState{Input: []rune("ab"), PublicChats: []domain.Chat{{ID: 99, Title: "Bot"}}}
+	model := Select(state, time.UTC)
 	if model.ChatSearch == nil || string(model.ChatSearch.Input) != "ab" || len(model.ChatSearch.PublicChats) != 1 {
 		t.Fatalf("projection = %#v", model.ChatSearch)
 	}
@@ -199,11 +197,11 @@ func TestChatSearchViewModelClonesWithoutAliasing(t *testing.T) {
 }
 
 func TestChatSearchRowsOrderLocalMessagesPublic(t *testing.T) {
-	model := ui.ViewModel{
+	model := ViewModel{
 		Width: 100, Height: 30,
-		Layout: ui.Layout{Mode: app.LayoutWide},
-		Focus:  app.FocusChatSearchInput,
-		ChatSearch: &app.ChatSearchState{
+		Layout: ViewLayout{Mode: LayoutWide},
+		Focus:  FocusChatSearchInput,
+		ChatSearch: &ChatSearchState{
 			Input:          []rune("x"),
 			Query:          "x",
 			Submitted:      true,
@@ -218,17 +216,17 @@ func TestChatSearchRowsOrderLocalMessagesPublic(t *testing.T) {
 	}
 	for index, want := range []string{"Chats", "Messages", "Public chats"} {
 		header := rows[index*2]
-		if !header.Header || !strings.Contains(header.Label, want) || header.Action.Action != app.NoAction {
+		if !header.Header || !strings.Contains(header.Label, want) || header.Action.Action != NoAction {
 			t.Fatalf("header %d = %#v, want %q", index, header, want)
 		}
 	}
-	if !strings.HasPrefix(rows[1].ID, "chat-search:local:") || rows[1].Action != (app.ActionReceived{Action: app.SelectChat, ChatID: 7}) {
+	if !strings.HasPrefix(rows[1].ID, "chat-search:local:") || rows[1].Action != (ActionReceived{Action: SelectChat, ChatID: 7}) {
 		t.Fatalf("local row = %#v", rows[1])
 	}
-	if !strings.HasPrefix(rows[3].ID, "chat-search:msg:") || rows[3].Action != (app.ActionReceived{Action: app.SelectMessage, ChatID: 7, MessageID: 5}) {
+	if !strings.HasPrefix(rows[3].ID, "chat-search:msg:") || rows[3].Action != (ActionReceived{Action: SelectMessage, ChatID: 7, MessageID: 5}) {
 		t.Fatalf("message row = %#v", rows[3])
 	}
-	if !strings.HasPrefix(rows[5].ID, "chat-search:pub:") || rows[5].Action != (app.ActionReceived{Action: app.SelectChat, ChatID: 99}) {
+	if !strings.HasPrefix(rows[5].ID, "chat-search:pub:") || rows[5].Action != (ActionReceived{Action: SelectChat, ChatID: 99}) {
 		t.Fatalf("public row = %#v", rows[5])
 	}
 	// Unified layer renders the same rows while the input stays focused.
@@ -238,7 +236,7 @@ func TestChatSearchRowsOrderLocalMessagesPublic(t *testing.T) {
 	}
 	// The input echo and section headers live inside the modal, in both
 	// results and input focus.
-	for _, focus := range []app.Focus{app.FocusChatSearchResults, app.FocusChatSearchInput} {
+	for _, focus := range []Focus{FocusChatSearchResults, FocusChatSearchInput} {
 		inputModel := model
 		inputModel.Focus = focus
 		frame := composeApplication(inputModel, time.UTC)
@@ -274,8 +272,8 @@ func TestWindowUnifiedChatSearchRowsKeepsHeaderAndSelection(t *testing.T) {
 	for id := int64(1); id <= 5; id++ {
 		msgs = append(msgs, domain.Message{ID: domain.MessageID(id), ChatID: 9, Kind: domain.MessageText, Text: "hit"})
 	}
-	model := ui.ViewModel{
-		ChatSearch: &app.ChatSearchState{
+	model := ViewModel{
+		ChatSearch: &ChatSearchState{
 			Input:          []rune("x"),
 			Query:          "x",
 			Submitted:      true,

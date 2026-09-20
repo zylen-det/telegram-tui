@@ -8,14 +8,12 @@ import (
 
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // chatSurfaceCanvas composes a chats surface under a viewport root and returns
 // the canvas plus the compositor for hit testing.
-func chatSurfaceCanvas(model ui.ViewModel, surface surfaceResult) (*lipgloss.Canvas, *lipgloss.Compositor) {
+func chatSurfaceCanvas(model ViewModel, surface surfaceResult) (*lipgloss.Canvas, *lipgloss.Compositor) {
 	root := lipgloss.NewLayer(lipgloss.NewStyle().Width(model.Width).Height(model.Height).Render("")).X(0).Y(0).Z(zFrame)
 	root.AddLayers(surface.Layer)
 	compositor := lipgloss.NewCompositor(root)
@@ -25,7 +23,7 @@ func chatSurfaceCanvas(model ui.ViewModel, surface surfaceResult) (*lipgloss.Can
 // chatRowSurface builds a standalone chat row surface at its absolute rect and
 // composes it under a viewport root, returning the canvas, compositor, and the
 // raw surface result.
-func chatRowSurface(row ui.ChatRow, rect image.Rectangle, location *time.Location, styles renderStyles) (*lipgloss.Canvas, *lipgloss.Compositor, surfaceResult) {
+func chatRowSurface(row ChatRow, rect image.Rectangle, location *time.Location, styles renderStyles) (*lipgloss.Canvas, *lipgloss.Compositor, surfaceResult) {
 	surface := buildChatRowLayer(row, rect, location, styles)
 	root := lipgloss.NewLayer(lipgloss.NewStyle().Width(rect.Max.X + 2).Height(rect.Max.Y + 2).Render("")).X(0).Y(0).Z(zFrame)
 	root.AddLayers(surface.Layer)
@@ -33,19 +31,19 @@ func chatRowSurface(row ui.ChatRow, rect image.Rectangle, location *time.Locatio
 	return lipgloss.NewCanvas(rect.Max.X+2, rect.Max.Y+2).Compose(compositor), compositor, surface
 }
 
-func chatRowSurfaceRender(row ui.ChatRow, rect image.Rectangle, location *time.Location, styles renderStyles) string {
+func chatRowSurfaceRender(row ChatRow, rect image.Rectangle, location *time.Location, styles renderStyles) string {
 	surface := buildChatRowLayer(row, rect, location, styles)
 	root := lipgloss.NewLayer(lipgloss.NewStyle().Width(rect.Max.X + 2).Height(rect.Max.Y + 2).Render("")).X(0).Y(0).Z(zFrame)
 	root.AddLayers(surface.Layer)
 	return lipgloss.NewCompositor(root).Render()
 }
 
-func chatTestModel(width, height int, chats []ui.ChatRow, loading, loaded bool, chatErr *domain.AppError) ui.ViewModel {
-	return ui.ViewModel{
+func chatTestModel(width, height int, chats []ChatRow, loading, loaded bool, chatErr *domain.AppError) ViewModel {
+	return ViewModel{
 		Width:        width,
 		Height:       height,
-		Layout:       ui.ComputeLayout(width, height, false, app.FocusChats),
-		Focus:        app.FocusChats,
+		Layout:       ComputeLayout(width, height, false, FocusChats),
+		Focus:        FocusChats,
 		Chats:        chats,
 		ChatsLoading: loading,
 		ChatsLoaded:  loaded,
@@ -53,8 +51,8 @@ func chatTestModel(width, height int, chats []ui.ChatRow, loading, loaded bool, 
 	}
 }
 
-func chatRowFor(title string, id int, selected bool) ui.ChatRow {
-	return ui.ChatRow{
+func chatRowFor(title string, id int, selected bool) ChatRow {
+	return ChatRow{
 		Chat: domain.Chat{
 			ID:            domain.ChatID(id),
 			Title:         title,
@@ -163,13 +161,13 @@ func TestChatRowFullHitActionAndWheel(t *testing.T) {
 	if !interaction.Rect.Eq(rect) {
 		t.Errorf("interaction rect = %v, want %v", interaction.Rect, rect)
 	}
-	if interaction.Click.Action != app.SelectChat || interaction.Click.ChatID != 7 {
+	if interaction.Click.Action != SelectChat || interaction.Click.ChatID != 7 {
 		t.Errorf("click = %#v, want SelectChat/7", interaction.Click)
 	}
-	if interaction.WheelUp.Action != app.SelectPrevious {
+	if interaction.WheelUp.Action != SelectPrevious {
 		t.Errorf("wheel up = %#v, want SelectPrevious", interaction.WheelUp)
 	}
-	if interaction.WheelDown.Action != app.SelectNext {
+	if interaction.WheelDown.Action != SelectNext {
 		t.Errorf("wheel down = %#v, want SelectNext", interaction.WheelDown)
 	}
 
@@ -209,7 +207,7 @@ func TestChatRowAvatarRetryWinsOverRow(t *testing.T) {
 	if retry.Z != zControl {
 		t.Errorf("retry Z = %d, want %d", retry.Z, zControl)
 	}
-	if retry.Click.Action != app.Retry || retry.Click.AvatarKey != "key" {
+	if retry.Click.Action != Retry || retry.Click.AvatarKey != "key" {
 		t.Errorf("retry click = %#v, want Retry/key", retry.Click)
 	}
 
@@ -254,7 +252,7 @@ func TestChatRowAvatarContentSurvivesNesting(t *testing.T) {
 func TestChatsPaneFocusHitRoundedTitleAndStates(t *testing.T) {
 	styles := newRenderStyles(false)
 
-	model := chatTestModel(100, 24, []ui.ChatRow{
+	model := chatTestModel(100, 24, []ChatRow{
 		chatRowFor("Mina Chen", 1, false),
 		chatRowFor("Weekend dev", 2, true),
 	}, false, true, nil)
@@ -279,7 +277,7 @@ func TestChatsPaneFocusHitRoundedTitleAndStates(t *testing.T) {
 	if paneHit == nil {
 		t.Fatal("no pane interaction")
 	}
-	if paneHit.Click.Action != app.FocusPane || paneHit.Click.TargetFocus != app.FocusChats {
+	if paneHit.Click.Action != FocusPane || paneHit.Click.TargetFocus != FocusChats {
 		t.Errorf("pane click = %#v", paneHit.Click)
 	}
 	text := plainText(canvas.Render())
@@ -330,7 +328,7 @@ func TestChatsPaneCapacityAndStartKeepsSelectedVisible(t *testing.T) {
 	styles := newRenderStyles(false)
 	// 100x24 normal layout: Chats = (0,1,30,24), inner height 22, row height 4
 	// -> capacity 5. Build 8 chats with the selected one at index 6.
-	chats := make([]ui.ChatRow, 8)
+	chats := make([]ChatRow, 8)
 	for i := range chats {
 		chats[i] = chatRowFor("Chat "+string(rune('A'+i)), i+1, false)
 	}

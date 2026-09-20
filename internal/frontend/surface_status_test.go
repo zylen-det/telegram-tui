@@ -7,23 +7,22 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // statusCanvas composes a compositor rooted at (0,0) containing the status
 // layer onto a canvas sized to the model viewport.
-func statusCanvas(model ui.ViewModel, surface surfaceResult) *lipgloss.Canvas {
+func statusCanvas(model ViewModel, surface surfaceResult) *lipgloss.Canvas {
 	root := lipgloss.NewLayer(lipgloss.NewStyle().Width(model.Width).Height(model.Height).Render("")).X(0).Y(0).Z(zFrame)
 	root.AddLayers(surface.Layer)
 	compositor := lipgloss.NewCompositor(root)
 	return lipgloss.NewCanvas(model.Width, model.Height).Compose(compositor)
 }
 
-func statusModel(width int) ui.ViewModel {
-	return ui.ViewModel{
+func statusModel(width int) ViewModel {
+	return ViewModel{
 		Width:      width,
 		Height:     18,
-		Layout:     ui.ComputeLayout(width, 18, false, 0),
+		Layout:     ComputeLayout(width, 18, false, 0),
 		Connection: domain.ConnectionOnline,
 	}
 }
@@ -183,10 +182,10 @@ func TestStatusNarrowBrandStaysWithinRect(t *testing.T) {
 		{width: 5, want: " tele"},
 		{width: 10, want: " teonline"},
 	} {
-		model := ui.ViewModel{
+		model := ViewModel{
 			Width:      test.width,
 			Height:     1,
-			Layout:     ui.Layout{Status: image.Rect(0, 0, test.width, 1)},
+			Layout:     ViewLayout{Status: image.Rect(0, 0, test.width, 1)},
 			Connection: domain.ConnectionOnline,
 		}
 		surface := buildStatusLayer(model, newRenderStyles(false))

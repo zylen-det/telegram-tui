@@ -9,9 +9,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/auth"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 func renderAuthorizationSurface(t *testing.T, data authorizationData, injected ...string) (string, surfaceResult) {
@@ -98,15 +96,14 @@ func TestAuthorizationHuhViewFlowsFromAppModelThroughProductionComposition(t *te
 }
 
 func TestAppModelAuthorizationViewUsesPasswordHuhPrivacy(t *testing.T) {
-	state := app.InitialState()
+	state := InitialState()
 	state.Width, state.Height = 100, 24
-	state.Focus = app.FocusAuth
-	state.Prompt = &app.PromptState{
+	state.Focus = FocusAuth
+	state.Prompt = &PromptState{
 		Prompt: auth.Prompt{ID: 91, Kind: auth.PromptPassword, Label: "Password", Secret: true},
 		Input:  []rune("distinct🙂secret"),
 	}
-	engine := app.NewEngine(state)
-	model := newAppModelForTest(t, engine, newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, state, newTestSession(t))
 	_ = model.syncAuthorizationInputHost()
 	view := model.View()
 	plain := ansi.Strip(view.Content)
@@ -123,7 +120,7 @@ func TestAppModelAuthorizationViewUsesPasswordHuhPrivacy(t *testing.T) {
 		t.Fatalf("AppModel authorization View omitted the non-empty Huh password mask\n%s", plain)
 	}
 
-	selected := ui.Select(engine.Snapshot(), time.Local)
+	selected := Select(model.Snapshot(), time.Local)
 	frame := composeApplication(selected, time.Local, editorViews{Authorization: model.authorizationInput.View()})
 	if frame.Cursor.Visible {
 		t.Fatalf("production authorization frame exposes terminal cursor: %+v", frame.Cursor)

@@ -6,8 +6,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // buildComposerLayer builds the composer surface for the given absolute
@@ -15,7 +13,7 @@ import (
 // interaction rectangles are absolute; all children are positioned in local
 // coordinates relative to the fixed-size root.
 func buildComposerLayer(
-	model ui.ViewModel,
+	model ViewModel,
 	rect image.Rectangle,
 	styles renderStyles,
 	composerView ...string,
@@ -48,7 +46,7 @@ func buildComposerLayer(
 			ID:    "composer",
 			Rect:  rect,
 			Z:     zPaneBackground,
-			Click: app.ActionReceived{Action: app.FocusPane, TargetFocus: app.FocusComposer},
+			Click: ActionReceived{Action: FocusPane, TargetFocus: FocusComposer},
 		})
 	}
 
@@ -100,7 +98,7 @@ func buildComposerLayer(
 			cancelContent := renderLine(styles.Accent, cancelText, cancelLocal.Dx())
 			interactions = append(interactions, addInteractive(
 				root, rect.Min, cancelLocal, "composer:cancel-reply", zControl, cancelContent,
-				app.ActionReceived{Action: app.CancelReply}, app.ActionReceived{}, app.ActionReceived{},
+				ActionReceived{Action: CancelReply}, ActionReceived{}, ActionReceived{},
 			))
 		}
 		contentTop++
@@ -123,7 +121,7 @@ func buildComposerLayer(
 			cancelContent := renderLine(styles.Accent, cancelText, cancelLocal.Dx())
 			interactions = append(interactions, addInteractive(
 				root, rect.Min, cancelLocal, "composer:cancel-edit", zControl, cancelContent,
-				app.ActionReceived{Action: app.CancelEdit}, app.ActionReceived{}, app.ActionReceived{},
+				ActionReceived{Action: CancelEdit}, ActionReceived{}, ActionReceived{},
 			))
 		}
 		contentTop++
@@ -149,7 +147,7 @@ func buildComposerLayer(
 		sendContent := renderLine(styles.Accent, sendText, sendLocal.Dx())
 		interactions = append(interactions, addInteractive(
 			root, rect.Min, sendLocal, "composer:send", zControl, sendContent,
-			app.ActionReceived{Action: app.ComposerSubmit}, app.ActionReceived{}, app.ActionReceived{},
+			ActionReceived{Action: ComposerSubmit}, ActionReceived{}, ActionReceived{},
 		))
 	}
 
@@ -159,7 +157,7 @@ func buildComposerLayer(
 		photoContent := renderLine(styles.Accent, photoText, photoLocal.Dx())
 		interactions = append(interactions, addInteractive(
 			root, rect.Min, photoLocal, "composer:photo", zControl, photoContent,
-			app.ActionReceived{Action: app.OpenPhotoSend}, app.ActionReceived{}, app.ActionReceived{},
+			ActionReceived{Action: OpenPhotoSend}, ActionReceived{}, ActionReceived{},
 		))
 	}
 	if controls.hasSticker {
@@ -167,7 +165,7 @@ func buildComposerLayer(
 		stickerContent := renderLine(styles.Accent, stickerText, stickerLocal.Dx())
 		interactions = append(interactions, addInteractive(
 			root, rect.Min, stickerLocal, "composer:sticker", zControl, stickerContent,
-			app.ActionReceived{Action: app.OpenStickerPicker}, app.ActionReceived{}, app.ActionReceived{},
+			ActionReceived{Action: OpenStickerPicker}, ActionReceived{}, ActionReceived{},
 		))
 	}
 

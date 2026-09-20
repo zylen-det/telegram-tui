@@ -7,9 +7,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // mediaModalCanvas composes a full-size styled Base root with the modal layer
@@ -27,7 +25,7 @@ func mediaModalCanvas(bounds image.Rectangle, surface surfaceResult) (*lipgloss.
 }
 
 // mediaModal builds the media modal surface/overlay and a composed canvas.
-func mediaModal(bounds image.Rectangle, model ui.ViewModel) (surfaceResult, overlayRequest, *lipgloss.Compositor, *lipgloss.Canvas) {
+func mediaModal(bounds image.Rectangle, model ViewModel) (surfaceResult, overlayRequest, *lipgloss.Compositor, *lipgloss.Canvas) {
 	surface, request := buildMediaModalLayer(model, newRenderStyles(false))
 	compositor, canvas := mediaModalCanvas(bounds, surface)
 	if compositor.Render() == "" {
@@ -37,12 +35,12 @@ func mediaModal(bounds image.Rectangle, model ui.ViewModel) (surfaceResult, over
 }
 
 // readyMediaModel returns a modal in the ready state at a valid viewport.
-func readyMediaModel() ui.ViewModel {
-	return ui.ViewModel{
+func readyMediaModel() ViewModel {
+	return ViewModel{
 		Width:      80,
 		Height:     24,
-		Focus:      app.FocusModal,
-		Modal:      &app.ModalState{Title: "Weekend 開發群", Path: "/tmp/photo.png"},
+		Focus:      FocusModal,
+		Modal:      &ModalState{Title: "Weekend 開發群", Path: "/tmp/photo.png"},
 		ActiveChat: domain.Chat{ID: 77},
 	}
 }
@@ -60,11 +58,11 @@ func mediaInteraction(t *testing.T, surface surfaceResult, id string) layerInter
 
 func TestMediaModalLayerNilAndEmptySafeZeroRequest(t *testing.T) {
 	styles := newRenderStyles(false)
-	for _, model := range []ui.ViewModel{
+	for _, model := range []ViewModel{
 		{Width: 80, Height: 24}, // nil Modal
-		{Width: 0, Height: 0, Modal: &app.ModalState{Path: "/tmp/p.png"}},
-		{Width: 80, Height: 0, Modal: &app.ModalState{Path: "/tmp/p.png"}},
-		{Width: 0, Height: 24, Modal: &app.ModalState{Path: "/tmp/p.png"}},
+		{Width: 0, Height: 0, Modal: &ModalState{Path: "/tmp/p.png"}},
+		{Width: 80, Height: 0, Modal: &ModalState{Path: "/tmp/p.png"}},
+		{Width: 0, Height: 24, Modal: &ModalState{Path: "/tmp/p.png"}},
 	} {
 		surface, request := buildMediaModalLayer(model, styles)
 		if surface.Layer != nil {
@@ -166,7 +164,7 @@ func TestMediaModalLayerTitleCJKFE0FZWJClipsBeforeCloseAndCloseParity(t *testing
 	if close.Z != zModalControl {
 		t.Errorf("close Z = %d, want %d", close.Z, zModalControl)
 	}
-	if close.Click.Action != app.Close {
+	if close.Click.Action != Close {
 		t.Errorf("close action = %#v, want Close", close.Click)
 	}
 	if close.Virtual {
@@ -224,7 +222,7 @@ func TestMediaModalLayerOutsideInteractionsExactNoVisual(t *testing.T) {
 		if !interaction.Virtual {
 			t.Errorf("%s must be Virtual", want.id)
 		}
-		if interaction.Click.Action != app.Close {
+		if interaction.Click.Action != Close {
 			t.Errorf("%s action = %#v, want Close", want.id, interaction.Click)
 		}
 		if interaction.Z != zModalControl {
@@ -286,7 +284,7 @@ func TestMediaModalLayerReadyRequestMetadata(t *testing.T) {
 }
 
 func TestMediaModalLayerReadyFalseIndependently(t *testing.T) {
-	build := func(mutate func(*ui.ViewModel)) (ui.ViewModel, bool) {
+	build := func(mutate func(*ViewModel)) (ViewModel, bool) {
 		model := readyMediaModel()
 		mutate(&model)
 		_, request, _, _ := mediaModal(image.Rect(0, 0, model.Width, model.Height), model)
@@ -297,11 +295,11 @@ func TestMediaModalLayerReadyFalseIndependently(t *testing.T) {
 
 	cases := []struct {
 		name   string
-		mutate func(*ui.ViewModel)
+		mutate func(*ViewModel)
 	}{
-		{"empty path", func(m *ui.ViewModel) { m.Modal.Path = "" }},
-		{"loading", func(m *ui.ViewModel) { m.Modal.Loading = true }},
-		{"error", func(m *ui.ViewModel) { m.Modal.Error = &domain.AppError{Kind: domain.ErrorMedia, Message: "boom"} }},
+		{"empty path", func(m *ViewModel) { m.Modal.Path = "" }},
+		{"loading", func(m *ViewModel) { m.Modal.Loading = true }},
+		{"error", func(m *ViewModel) { m.Modal.Error = &domain.AppError{Kind: domain.ErrorMedia, Message: "boom"} }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -347,7 +345,7 @@ func TestMediaModalLayerReadyFalseIndependently(t *testing.T) {
 	// Prompt nonnil.
 	t.Run("prompt", func(t *testing.T) {
 		model := readyMediaModel()
-		model.Prompt = &app.PromptState{}
+		model.Prompt = &PromptState{}
 		_, request := buildMediaModalLayer(model, newRenderStyles(false))
 		if request.Ready {
 			t.Errorf("prompt should not be Ready")
@@ -356,7 +354,7 @@ func TestMediaModalLayerReadyFalseIndependently(t *testing.T) {
 	// FocusAuth.
 	t.Run("auth", func(t *testing.T) {
 		model := readyMediaModel()
-		model.Focus = app.FocusAuth
+		model.Focus = FocusAuth
 		_, request := buildMediaModalLayer(model, newRenderStyles(false))
 		if request.Ready {
 			t.Errorf("auth focus should not be Ready")
@@ -425,7 +423,7 @@ func TestMediaModalLayerErrorShellAndRetry(t *testing.T) {
 
 	// Exact Retry interaction.
 	retry := mediaInteraction(t, surface, "media:retry")
-	if retry.Click.Action != app.Retry {
+	if retry.Click.Action != Retry {
 		t.Errorf("retry action = %#v, want Retry", retry.Click)
 	}
 	if retry.Z != zModalControl {
@@ -515,7 +513,7 @@ func TestMediaModalLayerInteractionsMatchHitsAndCompile(t *testing.T) {
 			for _, hit := range hits {
 				if hit.Rect.Eq(interaction.Rect) {
 					found = true
-					if hit.Click.Action != app.Close {
+					if hit.Click.Action != Close {
 						t.Errorf("virtual %q hit click = %#v, want Close", interaction.ID, hit.Click)
 					}
 				}
@@ -534,10 +532,10 @@ func TestMediaModalLayerTinyPositiveViewportsSafeNeverReady(t *testing.T) {
 	styles := newRenderStyles(false)
 	for _, w := range []int{1, 2, 3, 4, 5, 8} {
 		for _, h := range []int{1, 2, 3, 4, 5, 8} {
-			model := ui.ViewModel{
+			model := ViewModel{
 				Width:  w,
 				Height: h,
-				Modal:  &app.ModalState{Path: "/tmp/p.png"},
+				Modal:  &ModalState{Path: "/tmp/p.png"},
 			}
 			surface, request := buildMediaModalLayer(model, styles)
 			if request.Ready {

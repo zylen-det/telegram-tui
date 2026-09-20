@@ -5,9 +5,7 @@ import (
 	"image/color"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/auth"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 func (m Model) View() tea.View {
@@ -47,15 +45,16 @@ func (m Model) render() (string, int, int) {
 }
 
 func (m AppModel) View() tea.View {
-	// Snapshot the engine once, select the view model, and compose the frame.
-	state := m.engine.Snapshot()
-	model := ui.Select(state, m.location)
+	// Snapshot the owned state once, select the view model, and compose the
+	// frame.
+	state := m.Snapshot()
+	model := Select(state, m.location)
 	var titleView, descriptionView string
 	if state.ChatSettings != nil {
-		if state.ChatSettings.Mode == app.ChatSettingsTitleEditor && m.chatTitleInput.Identity() == state.ChatSettings.TitleEditorID {
+		if state.ChatSettings.Mode == ChatSettingsTitleEditor && m.chatTitleInput.Identity() == state.ChatSettings.TitleEditorID {
 			titleView = m.chatTitleInput.View()
 		}
-		if state.ChatSettings.Mode == app.ChatSettingsDescriptionEditor && m.chatDescriptionInput.Identity() == state.ChatSettings.DescriptionEditorID {
+		if state.ChatSettings.Mode == ChatSettingsDescriptionEditor && m.chatDescriptionInput.Identity() == state.ChatSettings.DescriptionEditorID {
 			descriptionView = m.chatDescriptionInput.View()
 		}
 	}

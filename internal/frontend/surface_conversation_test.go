@@ -9,14 +9,12 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // conversationSurface composes a conversation root returned by
 // buildConversationLayer under one full-size viewport root/compositor/canvas.
-func conversationSurface(model ui.ViewModel, styles renderStyles, composerView ...string) (*lipgloss.Canvas, *lipgloss.Compositor, surfaceResult) {
+func conversationSurface(model ViewModel, styles renderStyles, composerView ...string) (*lipgloss.Canvas, *lipgloss.Compositor, surfaceResult) {
 	result := buildConversationLayer(model, time.Local, styles, composerView...)
 	root := lipgloss.NewLayer(renderEmptyBox(styles.Base, model.Width, model.Height)).X(0).Y(0).Z(zFrame)
 	if result.Layer != nil {
@@ -28,12 +26,12 @@ func conversationSurface(model ui.ViewModel, styles renderStyles, composerView .
 }
 
 // conversationModel builds a wide/normal layout viewmodel with an active chat.
-func conversationModel(width, height int, active domain.Chat) ui.ViewModel {
-	return ui.ViewModel{
+func conversationModel(width, height int, active domain.Chat) ViewModel {
+	return ViewModel{
 		Width:      width,
 		Height:     height,
-		Layout:     ui.ComputeLayout(width, height, false, app.FocusConversation),
-		Focus:      app.FocusConversation,
+		Layout:     ComputeLayout(width, height, false, FocusConversation),
+		Focus:      FocusConversation,
 		ActiveChat: active,
 	}
 }
@@ -82,17 +80,17 @@ func TestConversationLayerExactRectRootIDTitleAndFocus(t *testing.T) {
 	styles := newRenderStyles(false)
 	for _, tc := range []struct {
 		name    string
-		focus   app.Focus
+		focus   Focus
 		wantFoc bool
 	}{
-		{"conversation-focus", app.FocusConversation, true},
-		{"composer-focus", app.FocusComposer, true},
-		{"details-focus", app.FocusDetails, false},
+		{"conversation-focus", FocusConversation, true},
+		{"composer-focus", FocusComposer, true},
+		{"details-focus", FocusDetails, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			model := conversationModel(120, 30, writable(1))
 			model.Focus = tc.focus
-			model.Layout = ui.ComputeLayout(model.Width, model.Height, false, tc.focus)
+			model.Layout = ComputeLayout(model.Width, model.Height, false, tc.focus)
 			surface := buildConversationLayer(model, time.Local, styles)
 
 			wantRect := model.Layout.Conversation
@@ -112,7 +110,7 @@ func TestConversationLayerExactRectRootIDTitleAndFocus(t *testing.T) {
 			if paneHit == nil {
 				t.Fatal("no pane interaction")
 			}
-			if paneHit.Click.Action != app.FocusPane || paneHit.Click.TargetFocus != app.FocusConversation {
+			if paneHit.Click.Action != FocusPane || paneHit.Click.TargetFocus != FocusConversation {
 				t.Errorf("pane click = %#v", paneHit.Click)
 			}
 			if !paneHit.Rect.Eq(wantRect) {
@@ -180,7 +178,7 @@ func TestConversationLayerInfoGeometryAndWins(t *testing.T) {
 	if !info.Rect.Eq(wantAbs) {
 		t.Fatalf("info rect = %v, want %v", info.Rect, wantAbs)
 	}
-	if info.Click.Action != app.ToggleDetails {
+	if info.Click.Action != ToggleDetails {
 		t.Errorf("info click = %+v, want ToggleDetails", info.Click)
 	}
 	if info.Z != zControl {
@@ -225,7 +223,7 @@ func TestConversationLayerInfoOmitted(t *testing.T) {
 	// Details open.
 	model = conversationModel(120, 30, writable(1))
 	model.DetailsOpen = true
-	model.Layout = ui.ComputeLayout(model.Width, model.Height, true, app.FocusConversation)
+	model.Layout = ComputeLayout(model.Width, model.Height, true, FocusConversation)
 	surface = buildConversationLayer(model, time.Local, styles)
 	if interactionByID(surface, "conversation:info") != nil {
 		t.Errorf("info present with details open")
@@ -298,10 +296,10 @@ func TestConversationLayerActiveHistoryComposerActionsAndNesting(t *testing.T) {
 	if history == nil {
 		t.Fatal("no history interaction")
 	}
-	if history.Click.Action != app.FocusPane || history.Click.TargetFocus != app.FocusConversation {
+	if history.Click.Action != FocusPane || history.Click.TargetFocus != FocusConversation {
 		t.Errorf("history click = %#v", history.Click)
 	}
-	if history.WheelUp.Action != app.PageUp || history.WheelDown.Action != app.PageDown {
+	if history.WheelUp.Action != PageUp || history.WheelDown.Action != PageDown {
 		t.Errorf("history wheels = %#v/%#v", history.WheelUp, history.WheelDown)
 	}
 
@@ -309,14 +307,14 @@ func TestConversationLayerActiveHistoryComposerActionsAndNesting(t *testing.T) {
 	if composer == nil {
 		t.Fatal("no composer interaction")
 	}
-	if composer.Click.Action != app.FocusPane || composer.Click.TargetFocus != app.FocusComposer {
+	if composer.Click.Action != FocusPane || composer.Click.TargetFocus != FocusComposer {
 		t.Errorf("composer click = %#v", composer.Click)
 	}
 	send := interactionByID(result, "composer:send")
 	if send == nil {
 		t.Fatal("no send interaction for writable chat")
 	}
-	if send.Click.Action != app.ComposerSubmit {
+	if send.Click.Action != ComposerSubmit {
 		t.Errorf("send click = %+v, want ComposerSubmit", send.Click)
 	}
 
@@ -334,8 +332,8 @@ func TestConversationLayerInteractionsAbsoluteHitParityUnique(t *testing.T) {
 	styles := newRenderStyles(false)
 	model := conversationModel(120, 30, writable(1))
 	model.HistoryDone = true
-	model.Focus = app.FocusComposer
-	model.ReplyTarget = &app.ReplyTarget{ChatID: 1, Sender: "s", Preview: "p"}
+	model.Focus = FocusComposer
+	model.ReplyTarget = &ReplyTarget{ChatID: 1, Sender: "s", Preview: "p"}
 	model.Draft = "hello draft"
 	_, compositor, result := conversationSurface(model, styles)
 
@@ -482,7 +480,7 @@ func renderRows(c *lipgloss.Canvas, y int) []string {
 func TestConversationLayerHuhComposerVisibleWithTerminalCursorHidden(t *testing.T) {
 	styles := newRenderStyles(false)
 	model := conversationModel(120, 30, writable(1))
-	model.Focus = app.FocusComposer
+	model.Focus = FocusComposer
 	canvas, _, result := conversationSurface(model, styles, "HUH_CONVERSATION")
 	if !strings.Contains(plainText(canvas.Render()), "HUH_CONVERSATION") {
 		t.Fatal("Huh composer content missing from conversation layer")
@@ -501,7 +499,7 @@ func TestConversationLayerDetailsOpenKeepsPaneHistoryComposer(t *testing.T) {
 	model := conversationModel(140, 30, writable(1))
 	model.DetailsOpen = true
 	model.HistoryDone = true
-	model.Layout = ui.ComputeLayout(model.Width, model.Height, true, app.FocusConversation)
+	model.Layout = ComputeLayout(model.Width, model.Height, true, FocusConversation)
 	_, _, result := conversationSurface(model, styles)
 
 	if interactionByID(result, "conversation:info") != nil {
@@ -525,7 +523,7 @@ func TestConversationLayerTopClippedMessageReachable(t *testing.T) {
 	long := testMessage(10, 7, strings.Repeat("word ", 300))
 	topGroup := styledMessageGroup("Mina", false, long)
 	bottomGroup := styledMessageGroup("Lou", false, testMessage(11, 7, "bottom"))
-	model.Groups = []ui.RenderedMessageGroup{topGroup, bottomGroup}
+	model.Groups = []RenderedMessageGroup{topGroup, bottomGroup}
 
 	rect := model.Layout.Conversation
 	inner := image.Rect(rect.Min.X+1, rect.Min.Y+1, rect.Max.X-1, rect.Max.Y-1)

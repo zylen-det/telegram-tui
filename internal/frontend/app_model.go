@@ -8,15 +8,13 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
-// AppModel adapts Bubble Tea messages to the application's event loop.
+// AppModel is the Bubble Tea application model and owns the current State.
 type AppModel struct {
-	engine               *app.Engine
-	runtime              *AppRuntime
+	state                *State
+	session              *Handler
 	location             *time.Location
 	surface              *surfaceState
 	overlay              *OutputOverlay
@@ -46,29 +44,23 @@ func (m *AppModel) SetOutputOverlay(overlay *OutputOverlay) {
 	m.overlay = overlay
 }
 
-type appEventMsg struct {
-	event app.Event
-}
-
-type appRuntimeStoppedMsg struct{}
-
 type toastExpiredMsg struct{ generation uint64 }
 
 // ProcessQuitMsg asks AppModel to begin the application's graceful shutdown.
 // Production signal handling sends this message instead of quitting Bubble Tea.
 type ProcessQuitMsg struct{}
 
-// NewAppModel creates an app-backed Bubble Tea authorization model.
-func NewAppModel(engine *app.Engine, runtime *AppRuntime) (AppModel, error) {
-	if engine == nil {
-		return AppModel{}, errors.New("frontend: nil app engine")
+// NewAppModel creates an app-backed Bubble Tea model owning initial as its
+// current application state. The supplied value is copied into a distinct
+// pointer so later reductions mutate only this model's state.
+func NewAppModel(initial State, session *Handler) (AppModel, error) {
+	if session == nil {
+		return AppModel{}, errors.New("frontend: nil effect session")
 	}
-	if runtime == nil {
-		return AppModel{}, errors.New("frontend: nil app runtime")
-	}
+	state := initial
 	return AppModel{
-		engine:               engine,
-		runtime:              runtime,
+		state:                &state,
+		session:              session,
 		location:             time.Local,
 		surface:              &surfaceState{},
 		metadata:             &appModelMetadata{},
@@ -83,33 +75,57 @@ func NewAppModel(engine *app.Engine, runtime *AppRuntime) (AppModel, error) {
 	}, nil
 }
 
+// apply reduces one event against the owned state, storing the result through
+// the shared pointer, and returns the commands the reducer emitted.
+func (m AppModel) applyMessage(event Event) []Effect {
+	state, commands := updateState(*m.state, event)
+	*m.state = state
+	return commands
+}
+
+// Snapshot returns the current application state value. Callers that read more
+// than one field take a single snapshot and reuse it.
+func (m AppModel) Snapshot() State {
+	if m.state == nil {
+		return InitialState()
+	}
+	return *m.state
+}
+
 func (m AppModel) Init() tea.Cmd {
-	return m.commandsAndWait(m.engine.Apply(app.Started{}))
+	// Starting the client is one command; the Telegram update and authorization
+	// prompt streams each have exactly one outstanding subscription command,
+	// re-armed by Update as each stream item is handled.
+	return tea.Batch(
+		m.deliver(m.applyMessage(Started{})),
+		waitForUpdate(m.session.Updates()),
+		waitForPrompt(m.session.PromptStream()),
+	)
 }
 
 func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case ProcessQuitMsg:
-		return m, m.commandsAndWait(m.engine.Apply(app.ActionReceived{Action: app.Quit}))
+		return m, m.deliver(m.applyMessage(ActionReceived{Action: Quit}))
 	case tea.FocusMsg:
-		return m, m.deliver(m.engine.Apply(app.TerminalFocusChanged{Focused: true}))
+		return m, m.deliver(m.applyMessage(TerminalFocusChanged{Focused: true}))
 	case tea.BlurMsg:
-		return m, m.deliver(m.engine.Apply(app.TerminalFocusChanged{Focused: false}))
+		return m, m.deliver(m.applyMessage(TerminalFocusChanged{Focused: false}))
 	case tea.WindowSizeMsg:
-		return m, tea.Batch(m.deliver(m.engine.Apply(app.Resized{
+		return m, tea.Batch(m.deliver(m.applyMessage(Resized{
 			Width:  max(0, msg.Width),
 			Height: max(0, msg.Height),
 		})), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost(), m.syncChatSettingsInputHosts(), m.syncListModalController())
 	case tea.PasteMsg:
-		if focus := m.engine.Snapshot().Focus; focus == app.FocusComposer {
+		if focus := m.Snapshot().Focus; focus == FocusComposer {
 			var preSync tea.Cmd
-			if snapForID := m.engine.Snapshot(); snapForID.SelectedChat >= 0 && snapForID.SelectedChat < len(snapForID.Chats) {
+			if snapForID := m.Snapshot(); snapForID.SelectedChat >= 0 && snapForID.SelectedChat < len(snapForID.Chats) {
 				wantID := snapForID.Chats[snapForID.SelectedChat].ID
 				var wantEdit domain.MessageID
 				if snapForID.EditTarget != nil && snapForID.EditTarget.ChatID == wantID {
 					wantEdit = snapForID.EditTarget.MessageID
 				}
-				wantFocused := snapForID.Focus == app.FocusComposer
+				wantFocused := snapForID.Focus == FocusComposer
 				if m.composerText.Identity() != (composerTextIdentity{ChatID: wantID, EditMessageID: wantEdit}) || m.composerText.focused != wantFocused {
 					preSync = m.syncComposerTextHost()
 				}
@@ -117,9 +133,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				preSync = m.syncComposerTextHost()
 			}
 			changed, value, cmd := m.composerText.Update(msg)
-			var commands []app.Command
+			var commands []Effect
 			if changed {
-				commands = m.engine.Apply(app.ComposerValueChanged{
+				commands = m.applyMessage(ComposerValueChanged{
 					ChatID:        m.composerText.Identity().ChatID,
 					EditMessageID: m.composerText.Identity().EditMessageID,
 					Value:         value,
@@ -127,11 +143,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Batch(preSync, m.deliver(commands), cmd)
 		}
-		if focus := m.engine.Snapshot().Focus; focus == app.FocusAuth {
+		if focus := m.Snapshot().Focus; focus == FocusAuth {
 			preSync := m.syncAuthorizationInputHost()
 			changed, value, cmd := m.authorizationInput.Update(msg)
 			if changed {
-				commands := m.engine.Apply(app.PromptValueChanged{
+				commands := m.applyMessage(PromptValueChanged{
 					PromptID: m.authorizationInput.Identity(),
 					Value:    value,
 				})
@@ -139,7 +155,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Batch(preSync, cmd, m.syncPhotoPathInputHost(), m.syncListModalController())
 		}
-		if focus := m.engine.Snapshot().Focus; focus == app.FocusPhotoSend {
+		if focus := m.Snapshot().Focus; focus == FocusPhotoSend {
 			preSync := m.syncPhotoPathInputHost()
 			paste := msg
 			paste.Content = strings.Map(func(r rune) rune {
@@ -150,7 +166,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}, msg.Content)
 			changed, value, cmd := m.photoPathInput.Update(paste)
 			if changed {
-				commands := m.engine.Apply(app.PhotoPathValueChanged{
+				commands := m.applyMessage(PhotoPathValueChanged{
 					ChatID: m.photoPathInput.Identity(),
 					Value:  value,
 				})
@@ -158,7 +174,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Batch(preSync, cmd, m.syncPhotoPathInputHost(), m.syncListModalController())
 		}
-		if focus := m.engine.Snapshot().Focus; focus == app.FocusSearchInput {
+		if focus := m.Snapshot().Focus; focus == FocusSearchInput {
 			preSync := m.syncMessageSearchInputHost()
 			paste := msg
 			paste.Content = strings.Map(func(r rune) rune {
@@ -169,12 +185,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}, msg.Content)
 			changed, value, cmd := m.messageSearchInput.Update(paste)
 			if changed {
-				commands := m.engine.Apply(app.MessageSearchValueChanged{ChatID: m.messageSearchInput.Identity(), Value: value})
+				commands := m.applyMessage(MessageSearchValueChanged{ChatID: m.messageSearchInput.Identity(), Value: value})
 				return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncMessageSearchInputHost(), m.syncListModalController())
 			}
 			return m, tea.Batch(preSync, cmd, m.syncMessageSearchInputHost(), m.syncListModalController())
 		}
-		if focus := m.engine.Snapshot().Focus; focus == app.FocusChatSearchInput {
+		if focus := m.Snapshot().Focus; focus == FocusChatSearchInput {
 			preSync := m.syncChatSearchInputHost()
 			paste := msg
 			paste.Content = strings.Map(func(r rune) rune {
@@ -185,14 +201,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}, msg.Content)
 			changed, value, cmd := m.chatSearchInput.Update(paste)
 			if changed {
-				commands := m.engine.Apply(app.ChatSearchValueChanged{Value: value})
+				commands := m.applyMessage(ChatSearchValueChanged{Value: value})
 				return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncChatSearchInputHost(), m.syncListModalController())
 			}
 			return m, tea.Batch(preSync, cmd, m.syncChatSearchInputHost(), m.syncListModalController())
 		}
-		if focus := m.engine.Snapshot().Focus; focus == app.FocusChatSettingsInput {
+		if focus := m.Snapshot().Focus; focus == FocusChatSettingsInput {
 			preSync := m.syncChatSettingsInputHosts()
-			snap := m.engine.Snapshot()
+			snap := m.Snapshot()
 			host, field, editorID := m.chatSettingsEditor(snap.ChatSettings)
 			if host == nil {
 				return m, preSync
@@ -200,7 +216,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			changed, value, cmd := host.Update(msg)
 			if changed {
 				if snap.ChatSettings != nil {
-					commands := m.engine.Apply(app.ChatSettingsValueChanged{ChatID: snap.ChatSettings.ChatID, Field: field, EditorID: editorID, Value: value})
+					commands := m.applyMessage(ChatSettingsValueChanged{ChatID: snap.ChatSettings.ChatID, Field: field, EditorID: editorID, Value: value})
 					return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncChatSettingsInputHosts(), m.syncListModalController())
 				}
 			}
@@ -208,26 +224,26 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case tea.KeyPressMsg:
-		snapshot := m.engine.Snapshot()
+		snapshot := m.Snapshot()
 		focus := snapshot.Focus
 		if received, ok := mapCommandMenuKey(snapshot.CommandMenu != nil, msg); ok {
-			commands := m.engine.Apply(received)
+			commands := m.applyMessage(received)
 			return m, tea.Batch(m.deliver(commands), m.syncComposerTextHost())
 		}
 		if received, ok := mapKeyPress(focus, msg); ok {
-			if snap := m.engine.Snapshot(); snap.StickerPicker != nil {
+			if snap := m.Snapshot(); snap.StickerPicker != nil {
 				switch received.Action {
-				case app.StickerMoveLeft, app.StickerMoveRight, app.StickerMoveUp, app.StickerMoveDown, app.StickerActivate, app.Close:
+				case StickerMoveLeft, StickerMoveRight, StickerMoveUp, StickerMoveDown, StickerActivate, Close:
 					received.RequestID = snap.StickerPicker.RequestID
 				}
 			}
 			switch received.Action {
-			case app.ComposerBackspace, app.ComposerNewline:
-				if focus == app.FocusAuth {
+			case ComposerBackspace, ComposerNewline:
+				if focus == FocusAuth {
 					preSync := m.syncAuthorizationInputHost()
 					changed, value, cmd := m.authorizationInput.Update(msg)
 					if changed {
-						commands := m.engine.Apply(app.PromptValueChanged{
+						commands := m.applyMessage(PromptValueChanged{
 							PromptID: m.authorizationInput.Identity(),
 							Value:    value,
 						})
@@ -235,11 +251,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					return m, tea.Batch(preSync, cmd, m.syncPhotoPathInputHost(), m.syncListModalController())
 				}
-				if focus == app.FocusPhotoSend {
+				if focus == FocusPhotoSend {
 					preSync := m.syncPhotoPathInputHost()
 					changed, value, cmd := m.photoPathInput.Update(msg)
 					if changed {
-						commands := m.engine.Apply(app.PhotoPathValueChanged{
+						commands := m.applyMessage(PhotoPathValueChanged{
 							ChatID: m.photoPathInput.Identity(),
 							Value:  value,
 						})
@@ -247,27 +263,27 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					return m, tea.Batch(preSync, cmd, m.syncPhotoPathInputHost(), m.syncListModalController())
 				}
-				if focus == app.FocusSearchInput {
+				if focus == FocusSearchInput {
 					preSync := m.syncMessageSearchInputHost()
 					changed, value, cmd := m.messageSearchInput.Update(msg)
 					if changed {
-						commands := m.engine.Apply(app.MessageSearchValueChanged{ChatID: m.messageSearchInput.Identity(), Value: value})
+						commands := m.applyMessage(MessageSearchValueChanged{ChatID: m.messageSearchInput.Identity(), Value: value})
 						return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncMessageSearchInputHost(), m.syncListModalController())
 					}
 					return m, tea.Batch(preSync, cmd, m.syncMessageSearchInputHost(), m.syncListModalController())
 				}
-				if focus == app.FocusChatSearchInput {
+				if focus == FocusChatSearchInput {
 					preSync := m.syncChatSearchInputHost()
 					changed, value, cmd := m.chatSearchInput.Update(msg)
 					if changed {
-						commands := m.engine.Apply(app.ChatSearchValueChanged{Value: value})
+						commands := m.applyMessage(ChatSearchValueChanged{Value: value})
 						return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncChatSearchInputHost(), m.syncListModalController())
 					}
 					return m, tea.Batch(preSync, cmd, m.syncChatSearchInputHost(), m.syncListModalController())
 				}
-				if focus == app.FocusChatSettingsInput {
+				if focus == FocusChatSettingsInput {
 					preSync := m.syncChatSettingsInputHosts()
-					snap := m.engine.Snapshot()
+					snap := m.Snapshot()
 					host, field, editorID := m.chatSettingsEditor(snap.ChatSettings)
 					if host == nil {
 						return m, preSync
@@ -275,17 +291,17 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					changed, value, cmd := host.Update(msg)
 					if changed {
 						if snap.ChatSettings != nil {
-							commands := m.engine.Apply(app.ChatSettingsValueChanged{ChatID: snap.ChatSettings.ChatID, Field: field, EditorID: editorID, Value: value})
+							commands := m.applyMessage(ChatSettingsValueChanged{ChatID: snap.ChatSettings.ChatID, Field: field, EditorID: editorID, Value: value})
 							return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncChatSettingsInputHosts(), m.syncListModalController())
 						}
 					}
 					return m, tea.Batch(preSync, cmd, m.syncChatSettingsInputHosts(), m.syncListModalController())
 				}
-				if focus != app.FocusComposer {
-					return m, m.deliver(m.engine.Apply(received))
+				if focus != FocusComposer {
+					return m, m.deliver(m.applyMessage(received))
 				}
-				if focus != app.FocusComposer {
-					return m, m.deliver(m.engine.Apply(received))
+				if focus != FocusComposer {
+					return m, m.deliver(m.applyMessage(received))
 				}
 				// Ensure host identity/focus matches authoritative snapshot before
 				// handling input (first key after startup/chat switch/focus change).
@@ -293,13 +309,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// or focus actually differs, so long-press repeats stay lightweight
 				// like crush's textarea.
 				var preSync tea.Cmd
-				if snapForID := m.engine.Snapshot(); snapForID.SelectedChat >= 0 && snapForID.SelectedChat < len(snapForID.Chats) {
+				if snapForID := m.Snapshot(); snapForID.SelectedChat >= 0 && snapForID.SelectedChat < len(snapForID.Chats) {
 					wantID := snapForID.Chats[snapForID.SelectedChat].ID
 					var wantEdit domain.MessageID
 					if snapForID.EditTarget != nil && snapForID.EditTarget.ChatID == wantID {
 						wantEdit = snapForID.EditTarget.MessageID
 					}
-					wantFocused := snapForID.Focus == app.FocusComposer
+					wantFocused := snapForID.Focus == FocusComposer
 					if m.composerText.Identity() != (composerTextIdentity{ChatID: wantID, EditMessageID: wantEdit}) || m.composerText.focused != wantFocused {
 						preSync = m.syncComposerTextHost()
 					}
@@ -307,33 +323,33 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					preSync = m.syncComposerTextHost()
 				}
 				changed, value, cmd := m.composerText.Update(msg)
-				var commands []app.Command
+				var commands []Effect
 				if changed {
 					// Keep authoritative Draft/Edit in sync for persistence,
 					// but avoid heavy Select/Sync per keystroke (crush-like).
-					commands = m.engine.Apply(app.ComposerValueChanged{
+					commands = m.applyMessage(ComposerValueChanged{
 						ChatID:        m.composerText.Identity().ChatID,
 						EditMessageID: m.composerText.Identity().EditMessageID,
 						Value:         value,
 					})
 				}
 				return m, tea.Batch(preSync, m.deliver(commands), cmd)
-			case app.ComposerSubmit:
-				return m, tea.Batch(m.deliver(m.engine.Apply(received)), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncListModalController())
+			case ComposerSubmit:
+				return m, tea.Batch(m.deliver(m.applyMessage(received)), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncListModalController())
 			default:
-				commands := m.engine.Apply(received)
+				commands := m.applyMessage(received)
 				return m, tea.Batch(m.deliver(commands), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost(), m.syncListModalController())
 			}
 		}
-		if focus == app.FocusComposer && textInputAllowed(msg.Key()) {
+		if focus == FocusComposer && textInputAllowed(msg.Key()) {
 			var preSync tea.Cmd
-			if snapForID := m.engine.Snapshot(); snapForID.SelectedChat >= 0 && snapForID.SelectedChat < len(snapForID.Chats) {
+			if snapForID := m.Snapshot(); snapForID.SelectedChat >= 0 && snapForID.SelectedChat < len(snapForID.Chats) {
 				wantID := snapForID.Chats[snapForID.SelectedChat].ID
 				var wantEdit domain.MessageID
 				if snapForID.EditTarget != nil && snapForID.EditTarget.ChatID == wantID {
 					wantEdit = snapForID.EditTarget.MessageID
 				}
-				wantFocused := snapForID.Focus == app.FocusComposer
+				wantFocused := snapForID.Focus == FocusComposer
 				if m.composerText.Identity() != (composerTextIdentity{ChatID: wantID, EditMessageID: wantEdit}) || m.composerText.focused != wantFocused {
 					preSync = m.syncComposerTextHost()
 				}
@@ -341,9 +357,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				preSync = m.syncComposerTextHost()
 			}
 			changed, value, cmd := m.composerText.Update(msg)
-			var commands []app.Command
+			var commands []Effect
 			if changed {
-				commands = m.engine.Apply(app.ComposerValueChanged{
+				commands = m.applyMessage(ComposerValueChanged{
 					ChatID:        m.composerText.Identity().ChatID,
 					EditMessageID: m.composerText.Identity().EditMessageID,
 					Value:         value,
@@ -351,11 +367,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Batch(preSync, m.deliver(commands), cmd)
 		}
-		if focus == app.FocusAuth && textInputAllowed(msg.Key()) {
+		if focus == FocusAuth && textInputAllowed(msg.Key()) {
 			preSync := m.syncAuthorizationInputHost()
 			changed, value, cmd := m.authorizationInput.Update(msg)
 			if changed {
-				commands := m.engine.Apply(app.PromptValueChanged{
+				commands := m.applyMessage(PromptValueChanged{
 					PromptID: m.authorizationInput.Identity(),
 					Value:    value,
 				})
@@ -363,11 +379,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Batch(preSync, cmd, m.syncPhotoPathInputHost(), m.syncListModalController())
 		}
-		if focus == app.FocusPhotoSend && photoEditKeyAllowed(msg.Key()) {
+		if focus == FocusPhotoSend && photoEditKeyAllowed(msg.Key()) {
 			preSync := m.syncPhotoPathInputHost()
 			changed, value, cmd := m.photoPathInput.Update(msg)
 			if changed {
-				commands := m.engine.Apply(app.PhotoPathValueChanged{
+				commands := m.applyMessage(PhotoPathValueChanged{
 					ChatID: m.photoPathInput.Identity(),
 					Value:  value,
 				})
@@ -375,27 +391,27 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Batch(preSync, cmd, m.syncPhotoPathInputHost(), m.syncListModalController())
 		}
-		if focus == app.FocusSearchInput && textInputAllowed(msg.Key()) {
+		if focus == FocusSearchInput && textInputAllowed(msg.Key()) {
 			preSync := m.syncMessageSearchInputHost()
 			changed, value, cmd := m.messageSearchInput.Update(msg)
 			if changed {
-				commands := m.engine.Apply(app.MessageSearchValueChanged{ChatID: m.messageSearchInput.Identity(), Value: value})
+				commands := m.applyMessage(MessageSearchValueChanged{ChatID: m.messageSearchInput.Identity(), Value: value})
 				return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncMessageSearchInputHost(), m.syncListModalController())
 			}
 			return m, tea.Batch(preSync, cmd, m.syncMessageSearchInputHost(), m.syncListModalController())
 		}
-		if focus == app.FocusChatSearchInput && textInputAllowed(msg.Key()) {
+		if focus == FocusChatSearchInput && textInputAllowed(msg.Key()) {
 			preSync := m.syncChatSearchInputHost()
 			changed, value, cmd := m.chatSearchInput.Update(msg)
 			if changed {
-				commands := m.engine.Apply(app.ChatSearchValueChanged{Value: value})
+				commands := m.applyMessage(ChatSearchValueChanged{Value: value})
 				return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncChatSearchInputHost(), m.syncListModalController())
 			}
 			return m, tea.Batch(preSync, cmd, m.syncChatSearchInputHost(), m.syncListModalController())
 		}
-		if focus == app.FocusChatSettingsInput && textInputAllowed(msg.Key()) {
+		if focus == FocusChatSettingsInput && textInputAllowed(msg.Key()) {
 			preSync := m.syncChatSettingsInputHosts()
-			snap := m.engine.Snapshot()
+			snap := m.Snapshot()
 			host, field, editorID := m.chatSettingsEditor(snap.ChatSettings)
 			if host == nil {
 				return m, preSync
@@ -403,7 +419,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			changed, value, cmd := host.Update(msg)
 			if changed {
 				if snap.ChatSettings != nil {
-					commands := m.engine.Apply(app.ChatSettingsValueChanged{ChatID: snap.ChatSettings.ChatID, Field: field, EditorID: editorID, Value: value})
+					commands := m.applyMessage(ChatSettingsValueChanged{ChatID: snap.ChatSettings.ChatID, Field: field, EditorID: editorID, Value: value})
 					return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncChatSettingsInputHosts(), m.syncListModalController())
 				}
 			}
@@ -412,30 +428,39 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.MouseClickMsg:
 		if received, ok := mapMouseClick(msg, m.hitRegions()); ok {
-			commands := m.engine.Apply(received)
+			commands := m.applyMessage(received)
 			return m, tea.Batch(m.deliver(commands), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost(), m.syncChatSettingsInputHosts(), m.syncListModalController())
 		}
 		return m, nil
 	case tea.MouseWheelMsg:
 		if received, ok := mapMouseWheel(msg, m.hitRegions()); ok {
-			commands := m.engine.Apply(received)
+			commands := m.applyMessage(received)
 			return m, tea.Batch(m.deliver(commands), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost(), m.syncChatSettingsInputHosts(), m.syncListModalController())
 		}
 		return m, nil
 	case toastExpiredMsg:
-		commands := m.engine.Apply(app.ToastExpired{Generation: msg.generation})
+		commands := m.applyMessage(ToastExpired{Generation: msg.generation})
 		return m, tea.Batch(m.deliver(commands), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost(), m.syncChatSettingsInputHosts(), m.syncListModalController())
-	case appEventMsg:
-		commands := m.engine.Apply(msg.event)
-		if complete, ok := msg.event.(app.ShutdownComplete); ok {
-			m.recordShutdownError(complete.Error)
-			return m, m.shutdownAndQuit()
-		}
-		return m, tea.Batch(m.commandsAndWait(commands), m.toastExpiryCommand(), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost(), m.syncChatSettingsInputHosts(), m.syncListModalController())
-	case appRuntimeStoppedMsg:
-		return m, tea.Quit
 	default:
-		return m, nil
+		commands := m.applyMessage(msg)
+		if complete, ok := msg.(ShutdownComplete); ok {
+			m.recordShutdownError(complete.Error)
+			return m, tea.Quit
+		}
+		return m, tea.Batch(m.deliver(commands), m.resubscribe(msg), m.toastExpiryCommand(), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost(), m.syncChatSettingsInputHosts(), m.syncListModalController())
+	}
+}
+
+// resubscribe re-arms the single outstanding subscription command for a stream
+// item. Stream closure messages do not re-arm.
+func (m AppModel) resubscribe(msg tea.Msg) tea.Cmd {
+	switch msg.(type) {
+	case TelegramEvent:
+		return waitForUpdate(m.session.Updates())
+	case PromptRequested:
+		return waitForPrompt(m.session.PromptStream())
+	default:
+		return nil
 	}
 }
 
@@ -474,16 +499,18 @@ func photoEditKeyAllowed(key tea.Key) bool {
 	return key.Mod&^tea.ModShift == 0
 }
 
-func (m AppModel) commandsAndWait(commands []app.Command) tea.Cmd {
-	return tea.Batch(m.deliver(commands), m.runtime.waitEvent())
-}
-
-func (m AppModel) deliver(commands []app.Command) tea.Cmd {
-	return m.runtime.deliver(commands)
+func (m AppModel) deliver(commands []Effect) tea.Cmd {
+	cmds := make([]tea.Cmd, 0, len(commands))
+	for _, effect := range commands {
+		if cmd := m.session.Cmd(effect); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m AppModel) toastExpiryCommand() tea.Cmd {
-	state := m.engine.Snapshot()
+	state := m.Snapshot()
 	if state.Toast == nil || state.ToastDuration <= 0 || state.ToastGeneration == 0 {
 		return nil
 	}
@@ -492,7 +519,7 @@ func (m AppModel) toastExpiryCommand() tea.Cmd {
 }
 
 func (m AppModel) syncComposerTextHost() tea.Cmd {
-	snap := m.engine.Snapshot()
+	snap := m.Snapshot()
 
 	// Determine active chat identity.
 	var (
@@ -511,9 +538,9 @@ func (m AppModel) syncComposerTextHost() tea.Cmd {
 	}
 
 	// Focused iff authoritative focus is composer.
-	focused := snap.Focus == app.FocusComposer
+	focused := snap.Focus == FocusComposer
 
-	model := ui.Select(snap, m.location)
+	model := Select(snap, m.location)
 	composerRect := composerSurfaceRect(model)
 	textRect := composerTextRect(model, composerRect)
 
@@ -540,7 +567,7 @@ func (m AppModel) syncComposerTextHost() tea.Cmd {
 }
 
 func (m AppModel) syncAuthorizationInputHost() tea.Cmd {
-	snap := m.engine.Snapshot()
+	snap := m.Snapshot()
 
 	var (
 		promptID uint64
@@ -553,14 +580,14 @@ func (m AppModel) syncAuthorizationInputHost() tea.Cmd {
 		secret = snap.Prompt.Prompt.Secret
 	}
 
-	focused := snap.Prompt != nil && snap.Focus == app.FocusAuth
+	focused := snap.Prompt != nil && snap.Focus == FocusAuth
 	width := authorizationInputRect(image.Rect(0, 0, max(0, snap.Width), max(0, snap.Height))).Dx()
 
 	return m.authorizationInput.Sync(promptID, value, focused, secret, width)
 }
 
 func (m *AppModel) syncPhotoPathInputHost() tea.Cmd {
-	snap := m.engine.Snapshot()
+	snap := m.Snapshot()
 
 	var (
 		chatID domain.ChatID
@@ -571,52 +598,52 @@ func (m *AppModel) syncPhotoPathInputHost() tea.Cmd {
 		value = string(snap.PhotoSend.Input)
 	}
 
-	focused := snap.PhotoSend != nil && snap.Focus == app.FocusPhotoSend
+	focused := snap.PhotoSend != nil && snap.Focus == FocusPhotoSend
 	width := photoSendInputRect(image.Rect(0, 0, max(0, snap.Width), max(0, snap.Height))).Dx()
 
 	return m.photoPathInput.Sync(chatID, value, focused, width)
 }
 
 func (m *AppModel) syncMessageSearchInputHost() tea.Cmd {
-	snap := m.engine.Snapshot()
+	snap := m.Snapshot()
 	var chatID domain.ChatID
 	var value string
 	if snap.MessageSearch != nil {
 		chatID = snap.MessageSearch.ChatID
 		value = string(snap.MessageSearch.Input)
 	}
-	focused := snap.MessageSearch != nil && snap.Focus == app.FocusSearchInput
+	focused := snap.MessageSearch != nil && snap.Focus == FocusSearchInput
 	width := messageSearchInputRect(image.Rect(0, 0, max(0, snap.Width), max(0, snap.Height))).Dx()
 	return m.messageSearchInput.Sync(chatID, value, focused, width)
 }
 
 func (m *AppModel) syncChatSearchInputHost() tea.Cmd {
-	snap := m.engine.Snapshot()
+	snap := m.Snapshot()
 	var value string
 	if snap.ChatSearch != nil {
 		value = string(snap.ChatSearch.Input)
 	}
-	focused := snap.ChatSearch != nil && snap.Focus == app.FocusChatSearchInput
+	focused := snap.ChatSearch != nil && snap.Focus == FocusChatSearchInput
 	width := chatSearchInputRect(image.Rect(0, 0, max(0, snap.Width), max(0, snap.Height))).Dx()
 	return m.chatSearchInput.Sync(value, focused, width)
 }
 
-func (m *AppModel) chatSettingsEditor(settings *app.ChatSettingsState) (*chatSettingsInputHost, app.ChatSettingField, uint64) {
+func (m *AppModel) chatSettingsEditor(settings *ChatSettingsState) (*chatSettingsInputHost, ChatSettingField, uint64) {
 	if settings == nil {
 		return nil, 0, 0
 	}
 	switch settings.Mode {
-	case app.ChatSettingsTitleEditor:
-		return m.chatTitleInput, app.ChatSettingTitle, settings.TitleEditorID
-	case app.ChatSettingsDescriptionEditor:
-		return m.chatDescriptionInput, app.ChatSettingDescription, settings.DescriptionEditorID
+	case ChatSettingsTitleEditor:
+		return m.chatTitleInput, ChatSettingTitle, settings.TitleEditorID
+	case ChatSettingsDescriptionEditor:
+		return m.chatDescriptionInput, ChatSettingDescription, settings.DescriptionEditorID
 	default:
 		return nil, 0, 0
 	}
 }
 
 func (m *AppModel) syncChatSettingsInputHosts() tea.Cmd {
-	snap := m.engine.Snapshot()
+	snap := m.Snapshot()
 	var titleID, descriptionID uint64
 	var title, description string
 	var titleFocused, descriptionFocused bool
@@ -625,8 +652,8 @@ func (m *AppModel) syncChatSettingsInputHosts() tea.Cmd {
 		descriptionID = snap.ChatSettings.DescriptionEditorID
 		title = string(snap.ChatSettings.TitleInput)
 		description = string(snap.ChatSettings.DescriptionInput)
-		titleFocused = snap.Focus == app.FocusChatSettingsInput && snap.ChatSettings.Mode == app.ChatSettingsTitleEditor
-		descriptionFocused = snap.Focus == app.FocusChatSettingsInput && snap.ChatSettings.Mode == app.ChatSettingsDescriptionEditor
+		titleFocused = snap.Focus == FocusChatSettingsInput && snap.ChatSettings.Mode == ChatSettingsTitleEditor
+		descriptionFocused = snap.Focus == FocusChatSettingsInput && snap.ChatSettings.Mode == ChatSettingsDescriptionEditor
 	}
 	width := max(1, snap.Width/2)
 	return tea.Batch(
@@ -644,21 +671,13 @@ func (m *AppModel) syncChatSettingsInputHosts() tea.Cmd {
 //
 // The reducer-driven selection model stays untouched: the host is a render and
 // geometry mirror of authoritative state, never an input owner. When no list
-// modal is active this skips the heavy ui.Select projection (clones
+// modal is active this skips the heavy Select projection (clones
 // chats/avatars/groups) that composer typing would otherwise run at 30 Hz.
 func (m AppModel) syncListModalController() tea.Cmd {
-	snap := m.engine.Snapshot()
+	snap := m.Snapshot()
 	bounds := image.Rect(0, 0, max(0, snap.Width), max(0, snap.Height))
 	if !listModalSnapshotActive(snap) {
 		return m.listModals.Reset(bounds)
 	}
-	return m.listModals.Sync(ui.Select(snap, m.location), m.location)
-}
-
-func (m AppModel) shutdownAndQuit() tea.Cmd {
-	return func() tea.Msg {
-		m.runtime.Close()
-		m.runtime.Wait()
-		return tea.QuitMsg{}
-	}
+	return m.listModals.Sync(Select(snap, m.location), m.location)
 }

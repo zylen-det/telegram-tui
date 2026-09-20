@@ -5,14 +5,13 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
 )
 
 func TestHuhSelectorHostViewUsesEveryRequestedRowForOptions(t *testing.T) {
 	options := []selectorOption{
-		{ID: "alpha", Label: "Alpha", Value: app.ActionReceived{Action: app.CopyMessage, ChatID: 1}},
-		{ID: "beta", Label: "Beta", Value: app.ActionReceived{Action: app.ReplyMessage, ChatID: 1}},
-		{ID: "gamma", Label: "Gamma", Value: app.ActionReceived{Action: app.EditMessage, ChatID: 1}},
+		{ID: "alpha", Label: "Alpha", Value: ActionReceived{Action: CopyMessage, ChatID: 1}},
+		{ID: "beta", Label: "Beta", Value: ActionReceived{Action: ReplyMessage, ChatID: 1}},
+		{ID: "gamma", Label: "Gamma", Value: ActionReceived{Action: EditMessage, ChatID: 1}},
 	}
 	host := newSelectorHost()
 	_ = host.Sync(selectorIdentity{Kind: selectorMessageActions, RequestID: 1}, options, options[0].Value, true, 24, 3)
@@ -37,8 +36,8 @@ func TestHuhSelectorHostViewUsesEveryRequestedRowForOptions(t *testing.T) {
 
 func TestNewSelectorFieldCompensatesRequestedVisibleHeight(t *testing.T) {
 	options := []selectorOption{
-		{ID: "first", Label: "First", Value: app.ActionReceived{Action: app.CopyMessage, ChatID: 1}},
-		{ID: "second", Label: "Second", Value: app.ActionReceived{Action: app.ReplyMessage, ChatID: 1}},
+		{ID: "first", Label: "First", Value: ActionReceived{Action: CopyMessage, ChatID: 1}},
+		{ID: "second", Label: "Second", Value: ActionReceived{Action: ReplyMessage, ChatID: 1}},
 	}
 	value := options[0].Value
 	field := newSelectorField(&value, 12, 2)
@@ -54,12 +53,12 @@ func TestNewSelectorFieldCompensatesRequestedVisibleHeight(t *testing.T) {
 func TestHuhSelectorEmptyRebuildRetainsCompensatedFieldHeight(t *testing.T) {
 	identity := selectorIdentity{Kind: selectorMessageActions, RequestID: 3}
 	options := []selectorOption{
-		{ID: "first", Label: "First", Value: app.ActionReceived{Action: app.CopyMessage, ChatID: 1}},
-		{ID: "second", Label: "Second", Value: app.ActionReceived{Action: app.ReplyMessage, ChatID: 1}},
+		{ID: "first", Label: "First", Value: ActionReceived{Action: CopyMessage, ChatID: 1}},
+		{ID: "second", Label: "Second", Value: ActionReceived{Action: ReplyMessage, ChatID: 1}},
 	}
 	host := newSelectorHost()
 	_ = host.Sync(identity, options, options[0].Value, true, 12, 2)
-	_ = host.Sync(identity, nil, app.ActionReceived{}, true, 12, 2)
+	_ = host.Sync(identity, nil, ActionReceived{}, true, 12, 2)
 
 	// Probe the fresh replacement field directly before another Sync can
 	// reapply dimensions. This isolates the empty-transition constructor path.
@@ -74,8 +73,8 @@ func TestHuhSelectorEmptyRebuildRetainsCompensatedFieldHeight(t *testing.T) {
 
 func TestHuhSelectorHostViewClipsInternalPaddingAndWideANSI(t *testing.T) {
 	options := []selectorOption{
-		{ID: "wide", Label: "界界界", Value: app.ActionReceived{Action: app.CopyMessage, ChatID: 1}},
-		{ID: "second", Label: "Second", Value: app.ActionReceived{Action: app.ReplyMessage, ChatID: 1}},
+		{ID: "wide", Label: "界界界", Value: ActionReceived{Action: CopyMessage, ChatID: 1}},
+		{ID: "second", Label: "Second", Value: ActionReceived{Action: ReplyMessage, ChatID: 1}},
 	}
 	host := newSelectorHost()
 	_ = host.Sync(selectorIdentity{Kind: selectorMessageActions, RequestID: 2}, options, options[0].Value, true, 8, 2)

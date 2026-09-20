@@ -4,18 +4,16 @@ import (
 	"sync"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/zylen-det/telegram-tui/internal/app"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 type surfaceState struct {
 	mu   sync.RWMutex
-	hits ui.HitMap
+	hits HitMap
 }
 
-func editableFocus(focus app.Focus) bool {
-	return focus == app.FocusAuth || focus == app.FocusComposer || focus == app.FocusPhotoSend ||
-		focus == app.FocusSearchInput || focus == app.FocusChatSearchInput || focus == app.FocusChatSettingsInput
+func editableFocus(focus Focus) bool {
+	return focus == FocusAuth || focus == FocusComposer || focus == FocusPhotoSend ||
+		focus == FocusSearchInput || focus == FocusChatSearchInput || focus == FocusChatSettingsInput
 }
 
 func textInputAllowed(key tea.Key) bool {
@@ -25,93 +23,93 @@ func textInputAllowed(key tea.Key) bool {
 	return key.Mod & ^tea.ModShift == 0
 }
 
-func mapKeyPress(focus app.Focus, msg tea.KeyPressMsg) (app.ActionReceived, bool) {
+func mapKeyPress(focus Focus, msg tea.KeyPressMsg) (ActionReceived, bool) {
 	key := msg.Key()
 	key.Mod &^= tea.ModCapsLock | tea.ModNumLock | tea.ModScrollLock
 	if key.Mod == tea.ModCtrl && (key.Code == 'c' || key.Code == 'C') {
-		return actionReceived(app.Quit)
+		return actionReceived(Quit)
 	}
 	if key.Code == tea.KeyTab && key.Mod == tea.ModShift {
-		return actionReceived(app.FocusPrevious)
+		return actionReceived(FocusPrevious)
 	}
-	if focus == app.FocusComposer && key.Code == tea.KeyEnter && key.Mod == tea.ModShift {
-		return actionReceived(app.ComposerNewline)
+	if focus == FocusComposer && key.Code == tea.KeyEnter && key.Mod == tea.ModShift {
+		return actionReceived(ComposerNewline)
 	}
 
 	// Composer media shortcuts are handled before generic editable rejection.
-	if focus == app.FocusComposer && key.Mod == tea.ModCtrl && (key.Code == 'o' || key.Code == 'O') {
-		return actionReceived(app.OpenPhotoSend)
+	if focus == FocusComposer && key.Mod == tea.ModCtrl && (key.Code == 'o' || key.Code == 'O') {
+		return actionReceived(OpenPhotoSend)
 	}
-	if focus == app.FocusComposer && key.Mod == tea.ModCtrl && (key.Code == 's' || key.Code == 'S') {
-		return actionReceived(app.OpenStickerPicker)
+	if focus == FocusComposer && key.Mod == tea.ModCtrl && (key.Code == 's' || key.Code == 'S') {
+		return actionReceived(OpenStickerPicker)
 	}
 
 	// Live global search navigates while the input stays focused: arrows move
 	// the selection, Enter activates, Esc closes. Printable runes fall through
 	// to the editable handler below so typing never leaves the input.
-	if focus == app.FocusChatSearchInput && key.Mod == 0 {
+	if focus == FocusChatSearchInput && key.Mod == 0 {
 		switch key.Code {
 		case tea.KeyUp:
-			return actionReceived(app.SelectPrevious)
+			return actionReceived(SelectPrevious)
 		case tea.KeyDown:
-			return actionReceived(app.SelectNext)
+			return actionReceived(SelectNext)
 		case tea.KeyEnter:
-			return actionReceived(app.Activate)
+			return actionReceived(Activate)
 		case tea.KeyEscape:
-			return actionReceived(app.Close)
+			return actionReceived(Close)
 		}
 	}
 
 	if editableFocus(focus) {
 		if key.Mod != 0 {
-			return app.ActionReceived{}, false
+			return ActionReceived{}, false
 		}
 		switch key.Code {
 		case tea.KeyEnter:
 			switch focus {
-			case app.FocusComposer:
-				return actionReceived(app.ComposerSubmit)
-			case app.FocusPhotoSend:
-				return actionReceived(app.PhotoSendSubmit)
-			case app.FocusSearchInput:
-				return actionReceived(app.SubmitMessageSearch)
-			case app.FocusChatSearchInput:
-				return actionReceived(app.Activate)
-			case app.FocusChatSettingsInput:
-				return actionReceived(app.SaveChatSetting)
+			case FocusComposer:
+				return actionReceived(ComposerSubmit)
+			case FocusPhotoSend:
+				return actionReceived(PhotoSendSubmit)
+			case FocusSearchInput:
+				return actionReceived(SubmitMessageSearch)
+			case FocusChatSearchInput:
+				return actionReceived(Activate)
+			case FocusChatSettingsInput:
+				return actionReceived(SaveChatSetting)
 			default:
-				return actionReceived(app.ComposerSubmit)
+				return actionReceived(ComposerSubmit)
 			}
 		case tea.KeyBackspace:
-			return actionReceived(app.ComposerBackspace)
+			return actionReceived(ComposerBackspace)
 		case tea.KeyEscape:
 			switch focus {
-			case app.FocusPhotoSend:
-				return actionReceived(app.Close)
+			case FocusPhotoSend:
+				return actionReceived(Close)
 			default:
-				return actionReceived(app.Close)
+				return actionReceived(Close)
 			}
 		default:
-			return app.ActionReceived{}, false
+			return ActionReceived{}, false
 		}
 	}
 
-	if focus == app.FocusStickerPicker && key.Mod == 0 {
+	if focus == FocusStickerPicker && key.Mod == 0 {
 		switch {
 		case key.Code == tea.KeyEscape:
-			return actionReceived(app.Close)
+			return actionReceived(Close)
 		case keyText(key) == "h" || key.Code == tea.KeyLeft:
-			return actionReceived(app.StickerMoveLeft)
+			return actionReceived(StickerMoveLeft)
 		case keyText(key) == "l" || key.Code == tea.KeyRight:
-			return actionReceived(app.StickerMoveRight)
+			return actionReceived(StickerMoveRight)
 		case keyText(key) == "k" || key.Code == tea.KeyUp:
-			return actionReceived(app.StickerMoveUp)
+			return actionReceived(StickerMoveUp)
 		case keyText(key) == "j" || key.Code == tea.KeyDown:
-			return actionReceived(app.StickerMoveDown)
+			return actionReceived(StickerMoveDown)
 		case key.Code == tea.KeyEnter:
-			return actionReceived(app.StickerActivate)
+			return actionReceived(StickerActivate)
 		default:
-			return app.ActionReceived{}, false
+			return ActionReceived{}, false
 		}
 	}
 
@@ -119,104 +117,104 @@ func mapKeyPress(focus app.Focus, msg tea.KeyPressMsg) (app.ActionReceived, bool
 		// Forward and reaction pickers historically reject every modified key;
 		// the other list surfaces let modified keys reach the global bindings.
 		if key.Mod != 0 {
-			if focus == app.FocusForwardPicker || focus == app.FocusReactionPicker {
-				return app.ActionReceived{}, false
+			if focus == FocusForwardPicker || focus == FocusReactionPicker {
+				return ActionReceived{}, false
 			}
 		} else if received, ok := mapListNavigationKey(focus, key); ok {
 			return received, true
-		} else if focus != app.FocusModal {
+		} else if focus != FocusModal {
 			// Every list except the legacy generic modal owns unmodified keys that
 			// it does not map. FocusModal intentionally retains global fallthrough.
-			return app.ActionReceived{}, false
+			return ActionReceived{}, false
 		}
 	}
-	if focus == app.FocusDetails && key.Mod == 0 && keyText(key) == "m" {
-		return actionReceived(app.OpenMembers)
+	if focus == FocusDetails && key.Mod == 0 && keyText(key) == "m" {
+		return actionReceived(OpenMembers)
 	}
-	if focus == app.FocusDetails && key.Mod == 0 && keyText(key) == "l" {
-		return actionReceived(app.OpenInviteLinks)
+	if focus == FocusDetails && key.Mod == 0 && keyText(key) == "l" {
+		return actionReceived(OpenInviteLinks)
 	}
-	if focus == app.FocusChats && key.Mod == 0 {
+	if focus == FocusChats && key.Mod == 0 {
 		switch keyText(key) {
 		case "/":
-			return actionReceived(app.OpenChatSearch)
+			return actionReceived(OpenChatSearch)
 		case "u":
-			return actionReceived(app.SelectNextUnread)
+			return actionReceived(SelectNextUnread)
 		case "m":
-			return actionReceived(app.SelectNextMention)
+			return actionReceived(SelectNextMention)
 		}
 	}
-	if focus == app.FocusConversation && key.Mod == 0 {
+	if focus == FocusConversation && key.Mod == 0 {
 		switch keyText(key) {
 		case "/":
-			return actionReceived(app.OpenMessageSearch)
+			return actionReceived(OpenMessageSearch)
 		case "p":
-			return actionReceived(app.OpenPinnedMessages)
+			return actionReceived(OpenPinnedMessages)
 		case "t":
-			return actionReceived(app.OpenTopics)
+			return actionReceived(OpenTopics)
 		case "j":
-			return actionReceived(app.SelectNextMessage)
+			return actionReceived(SelectNextMessage)
 		case "k":
-			return actionReceived(app.SelectPreviousMessage)
+			return actionReceived(SelectPreviousMessage)
 		case "c":
-			return actionReceived(app.CopyMessage)
+			return actionReceived(CopyMessage)
 		case "r":
-			return actionReceived(app.ReplyMessage)
+			return actionReceived(ReplyMessage)
 		case "e":
-			return actionReceived(app.EditMessage)
+			return actionReceived(EditMessage)
 		case "q":
-			return actionReceived(app.Close)
+			return actionReceived(Close)
 		}
 		if key.Code == tea.KeyEnter {
-			return actionReceived(app.OpenMessageActionMenu)
+			return actionReceived(OpenMessageActionMenu)
 		}
 		if key.Code == tea.KeyDown {
-			return actionReceived(app.SelectNextMessage)
+			return actionReceived(SelectNextMessage)
 		}
 		if key.Code == tea.KeyUp {
-			return actionReceived(app.SelectPreviousMessage)
+			return actionReceived(SelectPreviousMessage)
 		}
 	}
 	switch {
 	case key.Mod == 0 && (key.Code == tea.KeyDown || keyText(key) == "j"):
-		return actionReceived(app.SelectNext)
+		return actionReceived(SelectNext)
 	case key.Mod == 0 && (key.Code == tea.KeyUp || keyText(key) == "k"):
-		return actionReceived(app.SelectPrevious)
+		return actionReceived(SelectPrevious)
 	case key.Mod == 0 && (key.Code == tea.KeyTab || key.Code == tea.KeyRight || keyText(key) == "l"):
-		return actionReceived(app.FocusNext)
+		return actionReceived(FocusNext)
 	case key.Mod == 0 && (key.Code == tea.KeyLeft || keyText(key) == "h"):
-		return actionReceived(app.FocusPrevious)
+		return actionReceived(FocusPrevious)
 	case key.Mod == 0 && key.Code == tea.KeyEnter:
-		return actionReceived(app.Activate)
+		return actionReceived(Activate)
 	case key.Mod == 0 && (keyText(key) == "i" || key.Code == tea.KeyF2):
-		return actionReceived(app.ToggleDetails)
+		return actionReceived(ToggleDetails)
 	case key.Mod == 0 && key.Code == tea.KeyEscape:
-		return actionReceived(app.Close)
+		return actionReceived(Close)
 	case (key.Mod == tea.ModCtrl && keyText(key) == "u") || (key.Mod == 0 && key.Code == tea.KeyPgUp):
-		return actionReceived(app.PageUp)
+		return actionReceived(PageUp)
 	case (key.Mod == tea.ModCtrl && keyText(key) == "d") || (key.Mod == 0 && key.Code == tea.KeyPgDown):
-		return actionReceived(app.PageDown)
+		return actionReceived(PageDown)
 	default:
-		return app.ActionReceived{}, false
+		return ActionReceived{}, false
 	}
 }
 
 // isListNavigationFocus identifies the list-like surfaces that share the same
 // close, previous, next, and activate controls. Keeping this list in one place
 // makes a new ordinary list focus a one-entry frontend change.
-func isListNavigationFocus(focus app.Focus) bool {
+func isListNavigationFocus(focus Focus) bool {
 	switch focus {
-	case app.FocusModal,
-		app.FocusForwardPicker,
-		app.FocusReactionPicker,
-		app.FocusSearchResults,
-		app.FocusChatSearchResults,
-		app.FocusChatActions,
-		app.FocusMembers,
-		app.FocusInviteLinks,
-		app.FocusAdministration,
-		app.FocusPinnedResults,
-		app.FocusTopics:
+	case FocusModal,
+		FocusForwardPicker,
+		FocusReactionPicker,
+		FocusSearchResults,
+		FocusChatSearchResults,
+		FocusChatActions,
+		FocusMembers,
+		FocusInviteLinks,
+		FocusAdministration,
+		FocusPinnedResults,
+		FocusTopics:
 		return true
 	default:
 		return false
@@ -225,47 +223,47 @@ func isListNavigationFocus(focus app.Focus) bool {
 
 // mapListNavigationKey maps the common unmodified list controls. Search result
 // lists add their own slash action while retaining the shared navigation.
-func mapListNavigationKey(focus app.Focus, key tea.Key) (app.ActionReceived, bool) {
+func mapListNavigationKey(focus Focus, key tea.Key) (ActionReceived, bool) {
 	switch {
 	case key.Code == tea.KeyEscape:
-		return actionReceived(app.Close)
-	case keyText(key) == "q" && focus != app.FocusForwardPicker && focus != app.FocusReactionPicker:
-		return actionReceived(app.Close)
-	case keyText(key) == "/" && focus == app.FocusSearchResults:
-		return actionReceived(app.OpenMessageSearch)
-	case keyText(key) == "/" && focus == app.FocusChatSearchResults:
-		return actionReceived(app.OpenChatSearch)
+		return actionReceived(Close)
+	case keyText(key) == "q" && focus != FocusForwardPicker && focus != FocusReactionPicker:
+		return actionReceived(Close)
+	case keyText(key) == "/" && focus == FocusSearchResults:
+		return actionReceived(OpenMessageSearch)
+	case keyText(key) == "/" && focus == FocusChatSearchResults:
+		return actionReceived(OpenChatSearch)
 	case keyText(key) == "j" || key.Code == tea.KeyDown:
-		return actionReceived(app.SelectNext)
+		return actionReceived(SelectNext)
 	case keyText(key) == "k" || key.Code == tea.KeyUp:
-		return actionReceived(app.SelectPrevious)
+		return actionReceived(SelectPrevious)
 	case key.Code == tea.KeyEnter:
-		return actionReceived(app.Activate)
+		return actionReceived(Activate)
 	default:
-		return app.ActionReceived{}, false
+		return ActionReceived{}, false
 	}
 }
 
-func mapCommandMenuKey(active bool, msg tea.KeyPressMsg) (app.ActionReceived, bool) {
+func mapCommandMenuKey(active bool, msg tea.KeyPressMsg) (ActionReceived, bool) {
 	if !active {
-		return app.ActionReceived{}, false
+		return ActionReceived{}, false
 	}
 	key := msg.Key()
 	key.Mod &^= tea.ModCapsLock | tea.ModNumLock | tea.ModScrollLock
 	if key.Mod != 0 {
-		return app.ActionReceived{}, false
+		return ActionReceived{}, false
 	}
 	switch key.Code {
 	case tea.KeyEscape:
-		return actionReceived(app.CommandMenuDismiss)
+		return actionReceived(CommandMenuDismiss)
 	case tea.KeyEnter:
-		return actionReceived(app.CommandMenuActivate)
+		return actionReceived(CommandMenuActivate)
 	case tea.KeyUp:
-		return actionReceived(app.CommandMenuPrevious)
+		return actionReceived(CommandMenuPrevious)
 	case tea.KeyDown, tea.KeyTab:
-		return actionReceived(app.CommandMenuNext)
+		return actionReceived(CommandMenuNext)
 	default:
-		return app.ActionReceived{}, false
+		return ActionReceived{}, false
 	}
 }
 
@@ -279,29 +277,29 @@ func keyText(key tea.Key) string {
 	return ""
 }
 
-func mapMouseClick(msg tea.MouseClickMsg, hits ui.HitMap) (app.ActionReceived, bool) {
+func mapMouseClick(msg tea.MouseClickMsg, hits HitMap) (ActionReceived, bool) {
 	if msg.Button != tea.MouseLeft {
-		return app.ActionReceived{}, false
+		return ActionReceived{}, false
 	}
 	return hits.ActionAt(msg.X, msg.Y)
 }
 
-func mapMouseWheel(msg tea.MouseWheelMsg, hits ui.HitMap) (app.ActionReceived, bool) {
+func mapMouseWheel(msg tea.MouseWheelMsg, hits HitMap) (ActionReceived, bool) {
 	switch msg.Button {
 	case tea.MouseWheelUp:
 		return hits.WheelAt(msg.X, msg.Y, true)
 	case tea.MouseWheelDown:
 		return hits.WheelAt(msg.X, msg.Y, false)
 	default:
-		return app.ActionReceived{}, false
+		return ActionReceived{}, false
 	}
 }
 
-func actionReceived(action app.Action) (app.ActionReceived, bool) {
-	return app.ActionReceived{Action: action}, true
+func actionReceived(action Action) (ActionReceived, bool) {
+	return ActionReceived{Action: action}, true
 }
 
-func (m AppModel) setHitRegions(hits ui.HitMap) {
+func (m AppModel) setHitRegions(hits HitMap) {
 	if m.surface == nil {
 		return
 	}
@@ -310,12 +308,12 @@ func (m AppModel) setHitRegions(hits ui.HitMap) {
 	m.surface.mu.Unlock()
 }
 
-func (m AppModel) hitRegions() ui.HitMap {
+func (m AppModel) hitRegions() HitMap {
 	if m.surface == nil {
 		return nil
 	}
 	m.surface.mu.RLock()
-	hits := append(ui.HitMap(nil), m.surface.hits...)
+	hits := append(HitMap(nil), m.surface.hits...)
 	m.surface.mu.RUnlock()
 	return hits
 }

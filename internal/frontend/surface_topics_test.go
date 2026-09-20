@@ -6,23 +6,21 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 func TestTopicsKeyMappings(t *testing.T) {
-	cases := map[tea.Key]app.Action{
-		{Code: 'q', Text: "q"}: app.Close,
-		{Code: tea.KeyEscape}:  app.Close,
-		{Code: 'j', Text: "j"}: app.SelectNext,
-		{Code: tea.KeyDown}:    app.SelectNext,
-		{Code: 'k', Text: "k"}: app.SelectPrevious,
-		{Code: tea.KeyUp}:      app.SelectPrevious,
-		{Code: tea.KeyEnter}:   app.Activate,
+	cases := map[tea.Key]Action{
+		{Code: 'q', Text: "q"}: Close,
+		{Code: tea.KeyEscape}:  Close,
+		{Code: 'j', Text: "j"}: SelectNext,
+		{Code: tea.KeyDown}:    SelectNext,
+		{Code: 'k', Text: "k"}: SelectPrevious,
+		{Code: tea.KeyUp}:      SelectPrevious,
+		{Code: tea.KeyEnter}:   Activate,
 	}
 	for key, want := range cases {
-		got, ok := mapKeyPress(app.FocusTopics, tea.KeyPressMsg(key))
+		got, ok := mapKeyPress(FocusTopics, tea.KeyPressMsg(key))
 		if !ok || got.Action != want {
 			t.Fatalf("topics key %#v = (%v,%t), want %v", key, got.Action, ok, want)
 		}
@@ -33,32 +31,32 @@ func TestTopicsKeyMappings(t *testing.T) {
 		{Code: 'l', Text: "l"},
 		{Code: 'x', Text: "x"},
 	} {
-		if got, ok := mapKeyPress(app.FocusTopics, tea.KeyPressMsg(reserved)); ok {
+		if got, ok := mapKeyPress(FocusTopics, tea.KeyPressMsg(reserved)); ok {
 			t.Fatalf("reserved topics key %#v mapped to %v", reserved, got.Action)
 		}
 	}
 }
 
 func TestConversationTopicsShortcut(t *testing.T) {
-	got, ok := mapKeyPress(app.FocusConversation, tea.KeyPressMsg(tea.Key{Code: 't', Text: "t"}))
-	if !ok || got.Action != app.OpenTopics {
+	got, ok := mapKeyPress(FocusConversation, tea.KeyPressMsg(tea.Key{Code: 't', Text: "t"}))
+	if !ok || got.Action != OpenTopics {
 		t.Fatalf("conversation t = (%v,%t), want OpenTopics", got.Action, ok)
 	}
 	// Existing shortcuts are untouched.
-	if got, ok := mapKeyPress(app.FocusConversation, tea.KeyPressMsg(tea.Key{Code: '/', Text: "/"})); !ok || got.Action != app.OpenMessageSearch {
+	if got, ok := mapKeyPress(FocusConversation, tea.KeyPressMsg(tea.Key{Code: '/', Text: "/"})); !ok || got.Action != OpenMessageSearch {
 		t.Fatalf("conversation / = (%v,%t), want OpenMessageSearch", got.Action, ok)
 	}
-	if got, ok := mapKeyPress(app.FocusConversation, tea.KeyPressMsg(tea.Key{Code: 'p', Text: "p"})); !ok || got.Action != app.OpenPinnedMessages {
+	if got, ok := mapKeyPress(FocusConversation, tea.KeyPressMsg(tea.Key{Code: 'p', Text: "p"})); !ok || got.Action != OpenPinnedMessages {
 		t.Fatalf("conversation p = (%v,%t), want OpenPinnedMessages", got.Action, ok)
 	}
 }
 
-func topicsViewModel() ui.ViewModel {
-	return ui.ViewModel{
+func topicsViewModel() ViewModel {
+	return ViewModel{
 		Width: 100, Height: 30,
-		Layout: ui.Layout{Mode: app.LayoutWide},
-		Focus:  app.FocusTopics,
-		Topics: &app.TopicListState{
+		Layout: ViewLayout{Mode: LayoutWide},
+		Focus:  FocusTopics,
+		Topics: &TopicListState{
 			RequestID: 7, ChatID: 9,
 			Results: []domain.ForumTopic{
 				{ID: 1, ChatID: 9, Name: "General", UnreadCount: 3},
@@ -78,13 +76,13 @@ func TestTopicsSelectorOptionsCarryChatTopicIdentity(t *testing.T) {
 	if options[0].ID != "topic:all" || options[0].Label != "All messages" {
 		t.Fatalf("option 0 = %#v", options[0])
 	}
-	if options[0].Value != (app.ActionReceived{Action: app.SelectTopic, ChatID: 9, TopicID: 0}) {
+	if options[0].Value != (ActionReceived{Action: SelectTopic, ChatID: 9, TopicID: 0}) {
 		t.Fatalf("option 0 payload = %#v", options[0].Value)
 	}
 	if options[1].ID != "topic:1" || options[1].Label != "General (unread 3)" {
 		t.Fatalf("option 1 = %#v", options[1])
 	}
-	if options[1].Value != (app.ActionReceived{Action: app.SelectTopic, ChatID: 9, TopicID: 1}) {
+	if options[1].Value != (ActionReceived{Action: SelectTopic, ChatID: 9, TopicID: 1}) {
 		t.Fatalf("option 1 payload = %#v", options[1].Value)
 	}
 	if options[2].ID != "topic:2" {
@@ -94,7 +92,7 @@ func TestTopicsSelectorOptionsCarryChatTopicIdentity(t *testing.T) {
 		!strings.Contains(options[2].Label, "\U0001F512") || !strings.Contains(options[2].Label, "…") {
 		t.Fatalf("option 2 label = %q", options[2].Label)
 	}
-	if options[2].Value != (app.ActionReceived{Action: app.SelectTopic, ChatID: 9, TopicID: 2}) {
+	if options[2].Value != (ActionReceived{Action: SelectTopic, ChatID: 9, TopicID: 2}) {
 		t.Fatalf("option 2 payload = %#v", options[2].Value)
 	}
 	if got := selectorOptionsFromRows(topicsRows(nil)); got != nil {
@@ -128,10 +126,10 @@ func TestTopicsLayerIsModalAndClosesUnderlyingHits(t *testing.T) {
 	if rows[0].Selected || !rows[1].Selected || rows[2].Selected {
 		t.Fatalf("selection = %#v, want row 1 selected only", rows)
 	}
-	wantActions := []app.ActionReceived{
-		{Action: app.SelectTopic, ChatID: 9, TopicID: 0},
-		{Action: app.SelectTopic, ChatID: 9, TopicID: 1},
-		{Action: app.SelectTopic, ChatID: 9, TopicID: 2},
+	wantActions := []ActionReceived{
+		{Action: SelectTopic, ChatID: 9, TopicID: 0},
+		{Action: SelectTopic, ChatID: 9, TopicID: 1},
+		{Action: SelectTopic, ChatID: 9, TopicID: 2},
 	}
 	for index, row := range rows {
 		if row.Action != wantActions[index] {
@@ -205,12 +203,12 @@ func TestTopicsLayerRowClickCarriesTopicIdentity(t *testing.T) {
 		switch interaction.ID {
 		case "topic:all":
 			foundAll = true
-			if interaction.Click != (app.ActionReceived{Action: app.SelectTopic, ChatID: 9, TopicID: 0}) {
+			if interaction.Click != (ActionReceived{Action: SelectTopic, ChatID: 9, TopicID: 0}) {
 				t.Fatalf("ALL row click = %#v", interaction.Click)
 			}
 		case "topic:2":
 			foundTopic2 = true
-			if interaction.Click != (app.ActionReceived{Action: app.SelectTopic, ChatID: 9, TopicID: 2}) {
+			if interaction.Click != (ActionReceived{Action: SelectTopic, ChatID: 9, TopicID: 2}) {
 				t.Fatalf("row click = %#v", interaction.Click)
 			}
 		}
@@ -224,20 +222,19 @@ func TestTopicsLayerRowClickCarriesTopicIdentity(t *testing.T) {
 }
 
 func TestAppModelSelectorTopicsRouteSync(t *testing.T) {
-	state := app.InitialState()
+	state := InitialState()
 	state.Chats = []domain.Chat{{ID: 9, Kind: domain.ChatSupergroup, IsForum: true, CanSend: true}}
 	state.SelectedChat = 0
-	state.Focus = app.FocusTopics
+	state.Focus = FocusTopics
 	state.Width = 100
 	state.Height = 24
-	state.Topics = &app.TopicListState{
+	state.Topics = &TopicListState{
 		RequestID: 7, ChatID: 9,
 		Results:  []domain.ForumTopic{{ID: 1, ChatID: 9, Name: "General"}, {ID: 2, ChatID: 9, Name: "Announcements"}},
 		Selected: 1,
 		Done:     true,
 	}
-	engine := app.NewEngine(state)
-	model := newAppModelForTest(t, engine, newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, state, newTestSession(t))
 
 	_ = model.syncListModalController()
 	if got := model.listModals.host.Identity(); got != (selectorIdentity{Kind: selectorTopics, RequestID: 7, ChatID: 9}) {
@@ -245,7 +242,7 @@ func TestAppModelSelectorTopicsRouteSync(t *testing.T) {
 	}
 	// Selected==1 indexes display rows where row 0 is the ALL pseudo-row, so
 	// the synced value is topic 1 (General).
-	if got := model.listModals.host.Value(); got != (app.ActionReceived{Action: app.SelectTopic, ChatID: 9, TopicID: 1}) {
+	if got := model.listModals.host.Value(); got != (ActionReceived{Action: SelectTopic, ChatID: 9, TopicID: 1}) {
 		t.Fatalf("selector value = %#v", got)
 	}
 	if !model.listModals.host.focused {

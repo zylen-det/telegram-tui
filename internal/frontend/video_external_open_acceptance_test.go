@@ -6,14 +6,12 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 func TestVideoExternalOpenAcceptance_ActionMenuLabelsAndSemanticParity(t *testing.T) {
 	videoState := videoExternalOpenFrontendState(domain.MessageVideo)
-	opened, _ := app.Reduce(videoState, app.ActionReceived{Action: app.OpenMessageActionMenu})
+	opened, _ := updateState(videoState, ActionReceived{Action: OpenMessageActionMenu})
 	if opened.MessageMenu == nil {
 		t.Fatal("received Video did not open a message action menu")
 	}
@@ -21,12 +19,12 @@ func TestVideoExternalOpenAcceptance_ActionMenuLabelsAndSemanticParity(t *testin
 	if len(options) == 0 || options[0].ID != "action:open-video" || options[0].Label != "Open video" {
 		t.Fatalf("Video selector options = %#v, want Open video first", options)
 	}
-	wantAction := app.ActionReceived{Action: app.ViewMessageMedia, ChatID: 9, MessageID: 77}
+	wantAction := ActionReceived{Action: ViewMessageMedia, ChatID: 9, MessageID: 77}
 	if options[0].Value != wantAction {
 		t.Fatalf("Video selector action = %#v, want %#v", options[0].Value, wantAction)
 	}
 
-	model := ui.Select(opened, time.UTC)
+	model := Select(opened, time.UTC)
 	styles := newRenderStyles(false)
 	fallback := buildActionModalLayer(model, styles)
 	if fallback.Layer == nil {
@@ -51,17 +49,17 @@ func TestVideoExternalOpenAcceptance_ActionMenuLabelsAndSemanticParity(t *testin
 
 func TestVideoExternalOpenAcceptance_PhotoActionLabelUnchanged(t *testing.T) {
 	photoState := videoExternalOpenFrontendState(domain.MessagePhoto)
-	opened, _ := app.Reduce(photoState, app.ActionReceived{Action: app.OpenMessageActionMenu})
+	opened, _ := updateState(photoState, ActionReceived{Action: OpenMessageActionMenu})
 	options := selectorOptionsFromRows(messageActionRows(opened.MessageMenu))
 	if len(options) == 0 || options[0].ID != "action:view-image" || options[0].Label != "View image" {
 		t.Fatalf("Photo selector options = %#v, want existing View image first", options)
 	}
 }
 
-func videoExternalOpenFrontendState(kind domain.MessageKind) app.State {
-	state := app.InitialState()
+func videoExternalOpenFrontendState(kind domain.MessageKind) State {
+	state := InitialState()
 	state.Width, state.Height = 80, 24
-	state.Focus = app.FocusConversation
+	state.Focus = FocusConversation
 	state.Chats = []domain.Chat{{ID: 9}}
 	state.Messages[9] = []domain.Message{{
 		ID: 77, ChatID: 9, Kind: kind,

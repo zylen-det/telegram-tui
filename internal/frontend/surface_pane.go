@@ -5,7 +5,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
 )
 
 // buildPane builds one rounded pane root at the absolute rect.Min with a
@@ -13,7 +12,7 @@ import (
 // ID only when non-empty; an empty ID produces a root without an ID and no
 // interaction. A non-empty title is placed intrinsically on the top border row
 // so the remaining border cells stay intact.
-func buildPane(rect image.Rectangle, title string, focused bool, id string, focus app.Focus, styles renderStyles) surfaceResult {
+func buildPane(rect image.Rectangle, title string, focused bool, id string, focus Focus, styles renderStyles) surfaceResult {
 	if rect.Dx() < 2 || rect.Dy() < 2 {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
@@ -41,7 +40,7 @@ func buildPane(rect image.Rectangle, title string, focused bool, id string, focu
 			ID:    id,
 			Rect:  rect,
 			Z:     zPane,
-			Click: app.ActionReceived{Action: app.FocusPane, TargetFocus: focus},
+			Click: ActionReceived{Action: FocusPane, TargetFocus: focus},
 		}}
 	}
 

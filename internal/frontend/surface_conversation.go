@@ -6,8 +6,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // buildConversationLayer assembles the conversation pane surface from the
@@ -22,7 +20,7 @@ import (
 // A pane that is empty or below buildPane's minimum returns a zero surface
 // with a hidden cursor.
 func buildConversationLayer(
-	model ui.ViewModel,
+	model ViewModel,
 	location *time.Location,
 	styles renderStyles,
 	composerView ...string,
@@ -47,9 +45,9 @@ func buildConversationLayer(
 	pane := buildPane(
 		rect,
 		title,
-		model.Focus == app.FocusConversation || model.Focus == app.FocusComposer,
+		model.Focus == FocusConversation || model.Focus == FocusComposer,
 		"pane:conversation",
-		app.FocusConversation,
+		FocusConversation,
 		styles,
 	)
 	if pane.Layer == nil {
@@ -64,7 +62,7 @@ func buildConversationLayer(
 		info := addInteractive(
 			pane.Layer, rect.Min, infoLocal, "conversation:info", zControl,
 			styles.Accent.Render("ⓘ"),
-			app.ActionReceived{Action: app.ToggleDetails}, app.ActionReceived{}, app.ActionReceived{},
+			ActionReceived{Action: ToggleDetails}, ActionReceived{}, ActionReceived{},
 		)
 		interactions = append(interactions, info)
 	}

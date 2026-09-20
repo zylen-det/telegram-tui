@@ -5,8 +5,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-
-	"github.com/zylen-det/telegram-tui/internal/app"
 )
 
 func TestPhotoSendHuhViewInjectionReplacesManualPathAndCursor(t *testing.T) {
@@ -69,8 +67,7 @@ func TestPhotoSendStandaloneOmittedViewRetainsCompatibility(t *testing.T) {
 func TestAppModelPhotoPathHuhViewFlowsThroughProductionComposition(t *testing.T) {
 	state := photoPathRoutingState("HUH_APP_PHOTO_VISIBLE")
 	state.Width, state.Height = 100, 24
-	engine := app.NewEngine(state)
-	model := newAppModelForTest(t, engine, newBoundedAppRuntimeForModelTest(t))
+	model := newAppModelForTest(t, state, newTestSession(t))
 	_ = model.syncPhotoPathInputHost()
 
 	view := model.View()

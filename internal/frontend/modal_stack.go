@@ -5,8 +5,6 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
-	"github.com/zylen-det/telegram-tui/internal/app"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // This file holds the overlay (modal) registry that composeApplication uses.
@@ -24,7 +22,7 @@ import (
 // undimmed overlay styles, the typed production editor-view bundle, and whether
 // AppModel supplied that bundle at all.
 type modalContext struct {
-	model    ui.ViewModel
+	model    ViewModel
 	location *time.Location
 	bounds   image.Rectangle
 	root     *lipgloss.Layer
@@ -400,7 +398,7 @@ func defaultModalStack() modalStack {
 			suppressesToast: true,
 			render: func(ctx modalContext) modalResult {
 				inputView := ctx.views.ChatSettingsTitle
-				if ctx.model.ChatSettings.Mode == app.ChatSettingsDescriptionEditor {
+				if ctx.model.ChatSettings.Mode == ChatSettingsDescriptionEditor {
 					inputView = ctx.views.ChatSettingsDescription
 				}
 				return surfaceCursorModalResult(buildChatSettingsLayer(ctx.model, ctx.styles, inputView))
@@ -409,7 +407,7 @@ func defaultModalStack() modalStack {
 		modalSpec{
 			id: "authorization",
 			active: func(ctx modalContext) bool {
-				return ctx.model.Prompt != nil || ctx.model.Focus == app.FocusAuth
+				return ctx.model.Prompt != nil || ctx.model.Focus == FocusAuth
 			},
 			render: func(ctx modalContext) modalResult {
 				var data authorizationData

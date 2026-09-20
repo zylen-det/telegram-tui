@@ -3,9 +3,7 @@ package frontend
 import (
 	"image"
 
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 func chatActionFrame(bounds image.Rectangle) image.Rectangle {
@@ -15,13 +13,13 @@ func chatActionFrame(bounds image.Rectangle) image.Rectangle {
 	return centeredSurfaceRectangle(bounds, min(48, bounds.Dx()), min(14, bounds.Dy())).Intersect(bounds)
 }
 
-func buildChatActionLayer(model ui.ViewModel, styles renderStyles, selectorView string) surfaceResult {
+func buildChatActionLayer(model ViewModel, styles renderStyles, selectorView string) surfaceResult {
 	menu := model.ChatActions
 	if menu == nil || model.ActiveChat.ID == 0 || menu.ChatID != model.ActiveChat.ID {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
 	title := "Chat actions"
-	if menu.Confirming != app.NoAction {
+	if menu.Confirming != NoAction {
 		title = "Confirm action"
 	}
 	bounds := image.Rect(0, 0, model.Width, model.Height)
@@ -30,26 +28,26 @@ func buildChatActionLayer(model ui.ViewModel, styles renderStyles, selectorView 
 
 // displayedChatActionRows is the chat action modal's single row source for one
 // view model.
-func displayedChatActionRows(model ui.ViewModel) []modalRowSpec {
+func displayedChatActionRows(model ViewModel) []modalRowSpec {
 	return chatActionRows(model.ActiveChat, model.ChatActions)
 }
 
 // chatActionRows is the single row source for the chat action modal: one row
-// per generated app.ChatActionMenuItems entry in exact order plus the trailing
-// Working informational row. app.ChatActionMenuItems yields nothing without a
+// per generated ChatActionMenuItems entry in exact order plus the trailing
+// Working informational row. ChatActionMenuItems yields nothing without a
 // matching active chat, so a mismatched menu has no rows to render or select.
-func chatActionRows(chat domain.Chat, menu *app.ChatActionMenuState) []modalRowSpec {
+func chatActionRows(chat domain.Chat, menu *ChatActionMenuState) []modalRowSpec {
 	if menu == nil {
 		return nil
 	}
-	items := app.ChatActionMenuItems(chat, menu)
+	items := ChatActionMenuItems(chat, menu)
 	rows := make([]modalRowSpec, 0, len(items)+1)
 	for index, item := range items {
 		rows = append(rows, modalRowSpec{
 			ID:       "chat-action:" + item.Label,
 			Label:    item.Label,
 			Selected: index == menu.Selected,
-			Action:   app.ActionReceived{Action: item.Action, ChatID: menu.ChatID},
+			Action:   ActionReceived{Action: item.Action, ChatID: menu.ChatID},
 		})
 	}
 	if menu.Working {

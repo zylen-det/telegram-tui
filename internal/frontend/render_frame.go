@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
-	"github.com/zylen-det/telegram-tui/internal/app"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // renderCursor is the absolute viewport cell coordinate of the text cursor.
@@ -24,11 +22,11 @@ type layerInteraction struct {
 	ID        string
 	Rect      image.Rectangle
 	Z         int
-	Click     app.ActionReceived
-	WheelUp   app.ActionReceived
-	WheelDown app.ActionReceived
+	Click     ActionReceived
+	WheelUp   ActionReceived
+	WheelDown ActionReceived
 	Virtual   bool
-	Primary   app.ActionReceived
+	Primary   ActionReceived
 }
 
 // surfaceResult is the product of one surface builder.
@@ -76,7 +74,7 @@ type overlayRequest struct {
 // frameResult is the fully composed application frame.
 type frameResult struct {
 	Content    string
-	Hits       ui.HitMap
+	Hits       HitMap
 	Cursor     renderCursor
 	Overlay    overlayRequest
 	Inline     []inlinePlacement
@@ -112,7 +110,7 @@ const (
 // application frame. It builds a single real component root at (0,0) sized to
 // the model viewport, attaches the base and overlay surfaces once, creates
 // exactly one compositor, renders it once, and compiles the interactions into
-// a stable ui.HitMap. Zero or too-small bounds produce the matching safe frame.
+// a stable HitMap. Zero or too-small bounds produce the matching safe frame.
 // editorViews is the typed production injection bundle carrying the
 // persistent editor Huh Views into the composition seam. Composer feeds the
 // conversation layer; Authorization feeds the authorization overlay;
@@ -144,14 +142,14 @@ func selectEditorViews(views []editorViews) editorViews {
 	return views[0]
 }
 
-func composeApplication(model ui.ViewModel, location *time.Location, views ...editorViews) frameResult {
+func composeApplication(model ViewModel, location *time.Location, views ...editorViews) frameResult {
 	selectedViews := selectEditorViews(views)
 	if model.Width <= 0 || model.Height <= 0 {
 		return frameResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
 
 	bounds := image.Rect(0, 0, model.Width, model.Height)
-	if model.Layout.Mode == app.LayoutTooSmall {
+	if model.Layout.Mode == LayoutTooSmall {
 		return composeTooSmall(bounds, fmt.Sprintf("telegram-tui requires at least 60x18; current %dx%d", model.Width, model.Height))
 	}
 
@@ -235,10 +233,10 @@ func composeApplication(model ui.ViewModel, location *time.Location, views ...ed
 	}
 }
 
-// compileHits converts a slice of layer interactions into a stable ui.HitMap in
-// ascending Z/order. ui.HitMap's reverse search then selects the visual
+// compileHits converts a slice of layer interactions into a stable HitMap in
+// ascending Z/order. HitMap's reverse search then selects the visual
 // topmost action at any point.
-func compileHits(interactions []layerInteraction) ui.HitMap {
+func compileHits(interactions []layerInteraction) HitMap {
 	if len(interactions) == 0 {
 		return nil
 	}
@@ -246,12 +244,12 @@ func compileHits(interactions []layerInteraction) ui.HitMap {
 	// equal Z so the reverse search picks the last-inserted (topmost) action.
 	sorted := append([]layerInteraction(nil), interactions...)
 	stableSortInteractions(sorted)
-	hits := make(ui.HitMap, 0, len(sorted))
+	hits := make(HitMap, 0, len(sorted))
 	for _, interaction := range sorted {
 		if interaction.Rect.Empty() {
 			continue
 		}
-		hits = append(hits, ui.Hit{
+		hits = append(hits, Hit{
 			Rect:      interaction.Rect,
 			Click:     interaction.Click,
 			WheelUp:   interaction.WheelUp,

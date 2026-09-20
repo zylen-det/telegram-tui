@@ -4,9 +4,6 @@ import (
 	"fmt"
 	"image"
 	"time"
-
-	"github.com/zylen-det/telegram-tui/internal/app"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 func pinnedMessagesFrame(bounds image.Rectangle) image.Rectangle {
@@ -18,7 +15,7 @@ func pinnedMessagesFrame(bounds image.Rectangle) image.Rectangle {
 	return centeredSurfaceRectangle(bounds, width, height).Intersect(bounds)
 }
 
-func buildPinnedMessagesLayer(model ui.ViewModel, location *time.Location, overlayStyles renderStyles, selectorView string) surfaceResult {
+func buildPinnedMessagesLayer(model ViewModel, location *time.Location, overlayStyles renderStyles, selectorView string) surfaceResult {
 	if model.PinnedMessages == nil {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
@@ -34,7 +31,7 @@ func buildPinnedMessagesLayer(model ui.ViewModel, location *time.Location, overl
 // displayedPinnedMessagesRows is the single row source for the pinned message
 // modal: result rows plus the trailing loading/error/empty informational row,
 // reduced to the window the frame actually shows.
-func displayedPinnedMessagesRows(model ui.ViewModel, location *time.Location) []modalRowSpec {
+func displayedPinnedMessagesRows(model ViewModel, location *time.Location) []modalRowSpec {
 	if model.PinnedMessages == nil {
 		return nil
 	}
@@ -42,7 +39,7 @@ func displayedPinnedMessagesRows(model ui.ViewModel, location *time.Location) []
 	return windowPinnedMessagesRows(rows, model.PinnedMessages.Selected, max(1, model.Height-5))
 }
 
-func pinnedMessagesRows(model ui.ViewModel, location *time.Location) []modalRowSpec {
+func pinnedMessagesRows(model ViewModel, location *time.Location) []modalRowSpec {
 	pinned := model.PinnedMessages
 	if pinned == nil {
 		return nil
@@ -53,7 +50,7 @@ func pinnedMessagesRows(model ui.ViewModel, location *time.Location) []modalRowS
 			ID:       fmt.Sprintf("pinned:%d", message.ID),
 			Label:    pinnedMessageResultLabel(message.SenderName, message.SentAt, message.DisplayText(), location),
 			Selected: index == pinned.Selected,
-			Action:   app.ActionReceived{Action: app.SelectMessage, ChatID: pinned.ChatID, MessageID: message.ID},
+			Action:   ActionReceived{Action: SelectMessage, ChatID: pinned.ChatID, MessageID: message.ID},
 		})
 	}
 	switch {

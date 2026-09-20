@@ -7,18 +7,16 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
-func searchViewModel() ui.ViewModel {
+func searchViewModel() ViewModel {
 	sentAt := time.Unix(1700000000, 0).UTC()
-	return ui.ViewModel{
+	return ViewModel{
 		Width: 100, Height: 30,
-		Layout: ui.Layout{Mode: app.LayoutWide},
-		Focus:  app.FocusSearchResults,
-		MessageSearch: &app.MessageSearchState{
+		Layout: ViewLayout{Mode: LayoutWide},
+		Focus:  FocusSearchResults,
+		MessageSearch: &MessageSearchState{
 			RequestID: 10, ChatID: 9,
 			Input: []rune("needle"),
 			Query: "needle",
@@ -34,26 +32,26 @@ func searchViewModel() ui.ViewModel {
 
 func TestMessageSearchKeyMappings(t *testing.T) {
 	slash := tea.Key{Text: "/", Code: '/'}
-	if got, ok := mapKeyPress(app.FocusConversation, tea.KeyPressMsg(slash)); !ok || got.Action != app.OpenMessageSearch {
+	if got, ok := mapKeyPress(FocusConversation, tea.KeyPressMsg(slash)); !ok || got.Action != OpenMessageSearch {
 		t.Fatalf("conversation / = (%#v,%t)", got, ok)
 	}
-	cases := map[tea.Key]app.Action{
-		{Code: tea.KeyDown}:    app.SelectNext,
-		{Code: 'j', Text: "j"}: app.SelectNext,
-		{Code: tea.KeyUp}:      app.SelectPrevious,
-		{Code: 'k', Text: "k"}: app.SelectPrevious,
-		{Code: tea.KeyEnter}:   app.Activate,
-		{Code: tea.KeyEscape}:  app.Close,
-		{Code: 'q', Text: "q"}: app.Close,
-		{Code: '/', Text: "/"}: app.OpenMessageSearch,
+	cases := map[tea.Key]Action{
+		{Code: tea.KeyDown}:    SelectNext,
+		{Code: 'j', Text: "j"}: SelectNext,
+		{Code: tea.KeyUp}:      SelectPrevious,
+		{Code: 'k', Text: "k"}: SelectPrevious,
+		{Code: tea.KeyEnter}:   Activate,
+		{Code: tea.KeyEscape}:  Close,
+		{Code: 'q', Text: "q"}: Close,
+		{Code: '/', Text: "/"}: OpenMessageSearch,
 	}
 	for key, want := range cases {
-		got, ok := mapKeyPress(app.FocusSearchResults, tea.KeyPressMsg(key))
+		got, ok := mapKeyPress(FocusSearchResults, tea.KeyPressMsg(key))
 		if !ok || got.Action != want {
 			t.Fatalf("search results key %#v = (%v,%t), want %v", key, got.Action, ok, want)
 		}
 	}
-	if got, ok := mapKeyPress(app.FocusSearchInput, tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter})); !ok || got.Action != app.SubmitMessageSearch {
+	if got, ok := mapKeyPress(FocusSearchInput, tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter})); !ok || got.Action != SubmitMessageSearch {
 		t.Fatalf("search input enter = (%#v,%t)", got, ok)
 	}
 }
@@ -64,10 +62,10 @@ func TestMessageSearchSelectorOptionsCarryChatMessageIdentity(t *testing.T) {
 	if len(options) != 2 || options[0].ID != "search:30" || options[1].ID != "search:20" {
 		t.Fatalf("options = %#v", options)
 	}
-	if options[0].Value != (app.ActionReceived{Action: app.SelectMessage, ChatID: 9, MessageID: 30}) {
+	if options[0].Value != (ActionReceived{Action: SelectMessage, ChatID: 9, MessageID: 30}) {
 		t.Fatalf("option payload = %#v", options[0].Value)
 	}
-	if got := selectorOptionsFromRows(messageSearchRows(ui.ViewModel{}, time.UTC)); got != nil {
+	if got := selectorOptionsFromRows(messageSearchRows(ViewModel{}, time.UTC)); got != nil {
 		t.Fatalf("nil search options = %#v", got)
 	}
 }
@@ -124,7 +122,7 @@ func TestMessageSearchLayerIsModalAndClosesUnderlyingHits(t *testing.T) {
 	}
 	// Result rows preserve mouse parity payloads.
 	rows := messageSearchRows(model, time.UTC)
-	if rows[0].Action != (app.ActionReceived{Action: app.SelectMessage, ChatID: 9, MessageID: 30}) {
+	if rows[0].Action != (ActionReceived{Action: SelectMessage, ChatID: 9, MessageID: 30}) {
 		t.Fatalf("row action = %#v", rows[0].Action)
 	}
 }
@@ -145,13 +143,13 @@ func TestMessageSearchInputGeometryIsBounded(t *testing.T) {
 }
 
 func TestMessageSearchViewModelClonesWithoutAliasing(t *testing.T) {
-	state := app.InitialState()
-	state.Focus = app.FocusSearchResults
-	state.MessageSearch = &app.MessageSearchState{
+	state := InitialState()
+	state.Focus = FocusSearchResults
+	state.MessageSearch = &MessageSearchState{
 		ChatID: 9, Input: []rune("ab"),
 		Results: []domain.Message{{ID: 1, ChatID: 9, Kind: domain.MessageText, Text: "x"}},
 	}
-	model := ui.Select(state, time.UTC)
+	model := Select(state, time.UTC)
 	if model.MessageSearch == nil || string(model.MessageSearch.Input) != "ab" || len(model.MessageSearch.Results) != 1 {
 		t.Fatalf("projection = %#v", model.MessageSearch)
 	}

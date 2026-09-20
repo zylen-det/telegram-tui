@@ -8,9 +8,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 func chatSearchFrame(bounds image.Rectangle) image.Rectangle {
@@ -30,7 +28,7 @@ func chatSearchInputRect(bounds image.Rectangle) image.Rectangle {
 	return image.Rect(frame.Min.X+2, frame.Min.Y+3, frame.Max.X-2, frame.Min.Y+4)
 }
 
-func buildChatSearchLayer(model ui.ViewModel, location *time.Location, styles renderStyles, searchInputView, selectorView string) surfaceResult {
+func buildChatSearchLayer(model ViewModel, location *time.Location, styles renderStyles, searchInputView, selectorView string) surfaceResult {
 	if model.ChatSearch == nil {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
@@ -43,7 +41,7 @@ func buildChatSearchLayer(model ui.ViewModel, location *time.Location, styles re
 	return buildChatSearchUnifiedLayer(image.Rect(0, 0, model.Width, model.Height), model, location, styles, searchInputView, selectorView)
 }
 
-func buildChatSearchInputLayer(bounds image.Rectangle, search *app.ChatSearchState, styles renderStyles, inputView string) surfaceResult {
+func buildChatSearchInputLayer(bounds image.Rectangle, search *ChatSearchState, styles renderStyles, inputView string) surfaceResult {
 	frame := chatSearchFrame(bounds)
 	if frame.Empty() {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
@@ -59,7 +57,7 @@ func buildChatSearchInputLayer(bounds image.Rectangle, search *app.ChatSearchSta
 	closeAbs := image.Rect(frame.Max.X-2, frame.Min.Y, frame.Max.X-1, frame.Min.Y+1).Intersect(frame)
 	if !closeAbs.Empty() {
 		interactions = append(interactions, addInteractive(root, frame.Min, closeAbs.Sub(frame.Min), "chat-search:close", zModalControl,
-			renderLine(styles.Accent, "×", 1), app.ActionReceived{Action: app.Close}, app.ActionReceived{}, app.ActionReceived{}))
+			renderLine(styles.Accent, "×", 1), ActionReceived{Action: Close}, ActionReceived{}, ActionReceived{}))
 	}
 	label := ansi.Truncate("Search", max(0, frame.Dx()-4), "")
 	if label != "" {
@@ -73,19 +71,19 @@ func buildChatSearchInputLayer(bounds image.Rectangle, search *app.ChatSearchSta
 		}
 		view = clipPhotoPathInputView(view, inputAbs.Dx())
 		interactions = append(interactions, addInteractive(root, frame.Min, inputAbs.Sub(frame.Min), "chat-search:input", zModalControl,
-			renderLine(styles.Panel, view, inputAbs.Dx()), app.ActionReceived{}, app.ActionReceived{}, app.ActionReceived{}))
+			renderLine(styles.Panel, view, inputAbs.Dx()), ActionReceived{}, ActionReceived{}, ActionReceived{}))
 	}
 	buttonAbs := image.Rect(frame.Max.X-10, frame.Max.Y-3, frame.Max.X-2, frame.Max.Y-2).Intersect(frame)
 	enabled := strings.TrimSpace(string(search.Input)) != ""
 	buttonStyle := styles.Muted
-	buttonAction := app.ActionReceived{}
+	buttonAction := ActionReceived{}
 	if enabled {
 		buttonStyle = styles.Accent
-		buttonAction = app.ActionReceived{Action: app.SubmitChatSearch}
+		buttonAction = ActionReceived{Action: SubmitChatSearch}
 	}
 	if !buttonAbs.Empty() {
 		interactions = append(interactions, addInteractive(root, frame.Min, buttonAbs.Sub(frame.Min), "chat-search:submit", zModalControl,
-			renderLine(buttonStyle, "[Search]", buttonAbs.Dx()), buttonAction, app.ActionReceived{}, app.ActionReceived{}))
+			renderLine(buttonStyle, "[Search]", buttonAbs.Dx()), buttonAction, ActionReceived{}, ActionReceived{}))
 	}
 	return surfaceResult{Layer: root, Rect: frame, Interactions: interactions, Cursor: renderCursor{X: -1, Y: -1}, IsModal: true}
 }
@@ -101,7 +99,7 @@ func buildChatSearchInputLayer(bounds image.Rectangle, search *app.ChatSearchSta
 // wrong headers. Manual row paint below is the single source of truth;
 // keyboard navigation flows through the reducer and mouse through hit maps,
 // neither of which needs the overlay.
-func buildChatSearchUnifiedLayer(bounds image.Rectangle, model ui.ViewModel, location *time.Location, styles renderStyles, searchInputView, _ string) surfaceResult {
+func buildChatSearchUnifiedLayer(bounds image.Rectangle, model ViewModel, location *time.Location, styles renderStyles, searchInputView, _ string) surfaceResult {
 	search := model.ChatSearch
 	rows := buildUnifiedChatSearchRows(model, location)
 	capacity := max(1, bounds.Dy()-12)
@@ -127,7 +125,7 @@ func chatSearchSectionHeader(title string) modalRowSpec {
 // buildUnifiedChatSearchRows assembles the three-section results layout in
 // display order: local chats, global messages, public chats. Each non-empty
 // section gets a header/divider row; selection counts actionable rows only.
-func buildUnifiedChatSearchRows(model ui.ViewModel, location *time.Location) []modalRowSpec {
+func buildUnifiedChatSearchRows(model ViewModel, location *time.Location) []modalRowSpec {
 	search := model.ChatSearch
 	if search == nil {
 		return nil
@@ -153,7 +151,7 @@ func buildUnifiedChatSearchRows(model ui.ViewModel, location *time.Location) []m
 			ID:       fmt.Sprintf("chat-search:local:%d", chat.ID),
 			Label:    chatSearchResultLabel(chat),
 			Selected: search.Selected == selectionCount,
-			Action:   app.ActionReceived{Action: app.SelectChat, ChatID: chat.ID},
+			Action:   ActionReceived{Action: SelectChat, ChatID: chat.ID},
 		})
 		selectionCount++
 	}
@@ -176,7 +174,7 @@ func buildUnifiedChatSearchRows(model ui.ViewModel, location *time.Location) []m
 			ID:       fmt.Sprintf("chat-search:msg:%d:%d", msg.ChatID, msg.ID),
 			Label:    globalMessageLabel(msg, location),
 			Selected: search.Selected == selectionCount,
-			Action:   app.ActionReceived{Action: app.SelectMessage, ChatID: msg.ChatID, MessageID: msg.ID},
+			Action:   ActionReceived{Action: SelectMessage, ChatID: msg.ChatID, MessageID: msg.ID},
 		})
 		selectionCount++
 	}
@@ -199,7 +197,7 @@ func buildUnifiedChatSearchRows(model ui.ViewModel, location *time.Location) []m
 			ID:       fmt.Sprintf("chat-search:pub:%d", chat.ID),
 			Label:    chatSearchResultLabel(chat),
 			Selected: search.Selected == selectionCount,
-			Action:   app.ActionReceived{Action: app.SelectChat, ChatID: chat.ID},
+			Action:   ActionReceived{Action: SelectChat, ChatID: chat.ID},
 		})
 		selectionCount++
 	}
@@ -230,7 +228,7 @@ func windowUnifiedChatSearchRows(rows []modalRowSpec, selected, capacity int) []
 	selFull := -1
 	count := 0
 	for index, row := range rows {
-		if row.ID != "" && row.Action.Action != app.NoAction {
+		if row.ID != "" && row.Action.Action != NoAction {
 			if count == selected {
 				selFull = index
 				break
@@ -241,7 +239,7 @@ func windowUnifiedChatSearchRows(rows []modalRowSpec, selected, capacity int) []
 	if selFull < 0 {
 		// Stale selection: pin to the last actionable row, if any.
 		for index := len(rows) - 1; index >= 0; index-- {
-			if rows[index].ID != "" && rows[index].Action.Action != app.NoAction {
+			if rows[index].ID != "" && rows[index].Action.Action != NoAction {
 				selFull = index
 				break
 			}

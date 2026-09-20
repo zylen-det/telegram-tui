@@ -5,9 +5,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // listModalDescriptor is one snapshot of the shared list modal that currently
@@ -31,7 +29,7 @@ type listModalDescriptor struct {
 	options []selectorOption
 	// authoritative is the semantic payload of the selected actionable row,
 	// or the zero payload when the displayed rows mark none.
-	authoritative app.ActionReceived
+	authoritative ActionReceived
 	// focused is the requested host focus for this surface.
 	focused bool
 	// preferredWidth is the modal frame width the shared layout should use.
@@ -84,13 +82,13 @@ func selectorOptionsFromRows(rows []modalRowSpec) []selectorOption {
 
 // selectorRowsAuthoritative returns the exact semantic payload of the selected
 // actionable row, or the zero payload when no actionable row is selected.
-func selectorRowsAuthoritative(rows []modalRowSpec) app.ActionReceived {
+func selectorRowsAuthoritative(rows []modalRowSpec) ActionReceived {
 	for _, row := range rows {
 		if row.Selected && rowSelectable(row) {
 			return row.Action
 		}
 	}
-	return app.ActionReceived{}
+	return ActionReceived{}
 }
 
 // rowSelectable is the one actionable-row predicate shared by rendering and
@@ -99,7 +97,7 @@ func selectorRowsAuthoritative(rows []modalRowSpec) app.ActionReceived {
 // informational rows never do, so they stay out of selection while still
 // counting in the modal geometry.
 func rowSelectable(row modalRowSpec) bool {
-	return !row.Header && row.ID != "" && row.Action.Action != app.NoAction
+	return !row.Header && row.ID != "" && row.Action.Action != NoAction
 }
 
 // listModalController owns the single persistent selector host shared by every
@@ -119,7 +117,7 @@ func (c *listModalController) View() string { return c.host.View() }
 
 // Sync aligns the owned host with the supported list modal active in one
 // view-model snapshot, or resets it when no supported modal is active.
-func (c *listModalController) Sync(model ui.ViewModel, location *time.Location) tea.Cmd {
+func (c *listModalController) Sync(model ViewModel, location *time.Location) tea.Cmd {
 	bounds := image.Rect(0, 0, max(0, model.Width), max(0, model.Height))
 	descriptor, ok := activeListModalDescriptor(model, location)
 	if !ok {
@@ -130,7 +128,7 @@ func (c *listModalController) Sync(model ui.ViewModel, location *time.Location) 
 	// loading-to-settled Edit introduction. Every other transition keeps the
 	// host's generic semantic-preservation policy.
 	if descriptor.preferEdit &&
-		descriptor.authoritative.Action == app.EditMessage &&
+		descriptor.authoritative.Action == EditMessage &&
 		selectorOptionIndex(c.host.Options(), descriptor.authoritative) < 0 {
 		return c.host.SyncAuthoritative(descriptor.identity, descriptor.options, descriptor.authoritative, descriptor.focused, rect.Dx(), rect.Dy())
 	}
@@ -141,27 +139,27 @@ func (c *listModalController) Sync(model ui.ViewModel, location *time.Location) 
 // options, unfocused, and the compact default geometry.
 func (c *listModalController) Reset(bounds image.Rectangle) tea.Cmd {
 	rect := selectorHostRect(bounds, 0, 0)
-	return c.host.Sync(selectorIdentity{}, nil, app.ActionReceived{}, false, rect.Dx(), rect.Dy())
+	return c.host.Sync(selectorIdentity{}, nil, ActionReceived{}, false, rect.Dx(), rect.Dy())
 }
 
 // listModalSnapshotActive is the cheap pre-projection test for the common
 // no-list-modal case. It reads only reducer state, so composer typing never
-// runs the heavy ui.Select projection just to discover that no list modal is
+// runs the heavy Select projection just to discover that no list modal is
 // active.
 //
 // Note: ChatSearch renders its own sectioned manual rows and never consumes
 // the shared selector overlay (its headers cannot be represented by a
 // headerless Huh option list), so it stays out of this test and out of the
 // descriptor switch below.
-func listModalSnapshotActive(state app.State) bool {
+func listModalSnapshotActive(state State) bool {
 	return state.MessageMenu != nil ||
 		state.ReactionPicker != nil ||
 		state.ForwardPicker != nil ||
-		(state.MessageSearch != nil && state.Focus == app.FocusSearchResults) ||
-		(state.PinnedMessages != nil && state.Focus == app.FocusPinnedResults) ||
-		(state.Members != nil && state.Focus == app.FocusMembers) ||
-		(state.Topics != nil && state.Focus == app.FocusTopics) ||
-		(state.ChatActions != nil && state.Focus == app.FocusChatActions)
+		(state.MessageSearch != nil && state.Focus == FocusSearchResults) ||
+		(state.PinnedMessages != nil && state.Focus == FocusPinnedResults) ||
+		(state.Members != nil && state.Focus == FocusMembers) ||
+		(state.Topics != nil && state.Focus == FocusTopics) ||
+		(state.ChatActions != nil && state.Focus == FocusChatActions)
 }
 
 // activeListModalDescriptor is the single place that decides which shared list
@@ -170,10 +168,10 @@ func listModalSnapshotActive(state app.State) bool {
 // forward picker, then submitted message-search results, then Members, then
 // pinned messages, then topics. It reports false when no supported modal is
 // active.
-func activeListModalDescriptor(model ui.ViewModel, location *time.Location) (listModalDescriptor, bool) {
+func activeListModalDescriptor(model ViewModel, location *time.Location) (listModalDescriptor, bool) {
 	bounds := image.Rect(0, 0, max(0, model.Width), max(0, model.Height))
 	switch {
-	case model.ChatActions != nil && model.Focus == app.FocusChatActions:
+	case model.ChatActions != nil && model.Focus == FocusChatActions:
 		menu := model.ChatActions
 		return newListModalDescriptor(
 			selectorIdentity{Kind: selectorChatActions, RequestID: menu.RequestID, ChatID: menu.ChatID},
@@ -187,7 +185,7 @@ func activeListModalDescriptor(model ui.ViewModel, location *time.Location) (lis
 		return newListModalDescriptor(
 			selectorIdentity{Kind: selectorMessageActions, RequestID: menu.RequestID, ChatID: menu.ChatID, MessageID: menu.MessageID},
 			messageActionRows(menu),
-			model.Focus == app.FocusModal,
+			model.Focus == FocusModal,
 			0,
 			menu.PreferEdit,
 		), true
@@ -196,7 +194,7 @@ func activeListModalDescriptor(model ui.ViewModel, location *time.Location) (lis
 		return newListModalDescriptor(
 			selectorIdentity{Kind: selectorReaction, RequestID: picker.RequestID, ChatID: picker.ChatID, MessageID: picker.MessageID},
 			reactionRows(picker),
-			model.Focus == app.FocusReactionPicker,
+			model.Focus == FocusReactionPicker,
 			0,
 			false,
 		), true
@@ -205,11 +203,11 @@ func activeListModalDescriptor(model ui.ViewModel, location *time.Location) (lis
 		return newListModalDescriptor(
 			selectorIdentity{Kind: selectorForward, RequestID: picker.RequestID, ChatID: picker.SourceChatID, MessageID: picker.SourceMessageID},
 			forwardRows(picker, model.Chats),
-			model.Focus == app.FocusForwardPicker,
+			model.Focus == FocusForwardPicker,
 			0,
 			false,
 		), true
-	case model.MessageSearch != nil && model.Focus == app.FocusSearchResults:
+	case model.MessageSearch != nil && model.Focus == FocusSearchResults:
 		search := model.MessageSearch
 		return newListModalDescriptor(
 			selectorIdentity{Kind: selectorMessageSearch, RequestID: search.RequestID, ChatID: search.ChatID},
@@ -218,7 +216,7 @@ func activeListModalDescriptor(model ui.ViewModel, location *time.Location) (lis
 			messageSearchFrame(bounds).Dx(),
 			false,
 		), true
-	case model.Members != nil && model.Focus == app.FocusMembers:
+	case model.Members != nil && model.Focus == FocusMembers:
 		members := model.Members
 		// The single modal has two modes; the detail user scopes the identity
 		// so list/detail transitions reset the host, and the detail chrome
@@ -234,7 +232,7 @@ func activeListModalDescriptor(model ui.ViewModel, location *time.Location) (lis
 			membersFrame(bounds).Dx(),
 			false,
 		), true
-	case model.PinnedMessages != nil && model.Focus == app.FocusPinnedResults:
+	case model.PinnedMessages != nil && model.Focus == FocusPinnedResults:
 		pinned := model.PinnedMessages
 		return newListModalDescriptor(
 			selectorIdentity{Kind: selectorPinnedMessages, RequestID: pinned.RequestID, ChatID: pinned.ChatID},
@@ -243,7 +241,7 @@ func activeListModalDescriptor(model ui.ViewModel, location *time.Location) (lis
 			pinnedMessagesFrame(bounds).Dx(),
 			false,
 		), true
-	case model.Topics != nil && model.Focus == app.FocusTopics:
+	case model.Topics != nil && model.Focus == FocusTopics:
 		topics := model.Topics
 		return newListModalDescriptor(
 			selectorIdentity{Kind: selectorTopics, RequestID: topics.RequestID, ChatID: topics.ChatID},

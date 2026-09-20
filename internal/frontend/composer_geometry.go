@@ -2,8 +2,6 @@ package frontend
 
 import (
 	"image"
-
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // composerSurfaceRect returns the absolute viewport rectangle occupied by the
@@ -13,7 +11,7 @@ import (
 // inner rect (one-cell border inset), and takes the bottom three inner rows.
 // Returns a zero rect when the conversation pane is too small or outside the
 // viewport.
-func composerSurfaceRect(model ui.ViewModel) image.Rectangle {
+func composerSurfaceRect(model ViewModel) image.Rectangle {
 	rect := model.Layout.Conversation.Intersect(image.Rect(0, 0, model.Width, model.Height))
 	if rect.Dx() < 2 || rect.Dy() < 2 {
 		return image.Rectangle{}
@@ -66,7 +64,7 @@ func composerControls(width int, interactive bool) composerControlLayout {
 	return controls
 }
 
-func composerTextRect(model ui.ViewModel, rect image.Rectangle) image.Rectangle {
+func composerTextRect(model ViewModel, rect image.Rectangle) image.Rectangle {
 	rect = rect.Intersect(image.Rect(0, 0, model.Width, model.Height))
 	if rect.Empty() {
 		return image.Rectangle{}

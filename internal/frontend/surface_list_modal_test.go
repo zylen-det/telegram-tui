@@ -9,10 +9,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
 	"github.com/zylen-det/telegram-tui/internal/domain"
 	"github.com/zylen-det/telegram-tui/internal/frontend/components"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // listModalCanvas composes a full-size styles.Base root with the modal layer
@@ -50,7 +48,7 @@ func listModal(t *testing.T, width, height int, title string, rows []modalRowSpe
 func TestListModalZeroTinyBoundsSafe(t *testing.T) {
 	styles := newRenderStyles(false)
 	rows := []modalRowSpec{
-		{ID: "r0", Label: "Copy", Action: app.ActionReceived{Action: app.CopyMessage}},
+		{ID: "r0", Label: "Copy", Action: ActionReceived{Action: CopyMessage}},
 	}
 	for _, w := range []int{0, 1, 2} {
 		for _, h := range []int{0, 1, 2} {
@@ -87,8 +85,8 @@ func TestListModalZeroTinyBoundsSafe(t *testing.T) {
 
 func TestListModalTinyBoundsNoChildEscape(t *testing.T) {
 	rows := []modalRowSpec{
-		{ID: "r0", Label: "Copy", Action: app.ActionReceived{Action: app.CopyMessage}},
-		{ID: "r1", Label: "Reply", Action: app.ActionReceived{Action: app.ReplyMessage}},
+		{ID: "r0", Label: "Copy", Action: ActionReceived{Action: CopyMessage}},
+		{ID: "r1", Label: "Reply", Action: ActionReceived{Action: ReplyMessage}},
 	}
 	for _, w := range []int{3, 4, 5, 6, 7, 8} {
 		for _, h := range []int{3, 4, 5, 6} {
@@ -113,9 +111,9 @@ func TestListModalTinyBoundsNoChildEscape(t *testing.T) {
 func TestListModalExactLayoutGeometry(t *testing.T) {
 	title := "Message actions"
 	rows := []modalRowSpec{
-		{ID: "a", Label: "Copy", Selected: true, Action: app.ActionReceived{Action: app.CopyMessage}},
-		{ID: "b", Label: "Reply", Action: app.ActionReceived{Action: app.ReplyMessage}},
-		{ID: "c", Label: "Pin", Action: app.ActionReceived{Action: app.PinMessage}},
+		{ID: "a", Label: "Copy", Selected: true, Action: ActionReceived{Action: CopyMessage}},
+		{ID: "b", Label: "Reply", Action: ActionReceived{Action: ReplyMessage}},
+		{ID: "c", Label: "Pin", Action: ActionReceived{Action: PinMessage}},
 	}
 	bounds := image.Rect(0, 0, 80, 24)
 	styles := newRenderStyles(false)
@@ -154,7 +152,7 @@ func TestListModalExactLayoutGeometry(t *testing.T) {
 func TestListModalRoundedBorderCornersAndPalette(t *testing.T) {
 	title := "Actions"
 	rows := []modalRowSpec{
-		{ID: "a", Label: "Copy", Action: app.ActionReceived{Action: app.CopyMessage}},
+		{ID: "a", Label: "Copy", Action: ActionReceived{Action: CopyMessage}},
 	}
 	frame, surface, _, canvas := listModal(t, 80, 24, title, rows)
 	if surface.Layer == nil {
@@ -192,7 +190,7 @@ func TestListModalLongCJKFE0FZWJTitleClipsBeforeClose(t *testing.T) {
 	// the close cell so the top-right border corner (and the close) always win.
 	title := "很长的标题👨‍👩‍👧‍👦🔥❤️多字节"
 	rows := []modalRowSpec{
-		{ID: "a", Label: "Copy", Action: app.ActionReceived{Action: app.CopyMessage}},
+		{ID: "a", Label: "Copy", Action: ActionReceived{Action: CopyMessage}},
 	}
 	frame, _, compositor, canvas := listModal(t, 80, 24, title, rows)
 
@@ -233,7 +231,7 @@ func closePoint(frame image.Rectangle) image.Point {
 
 func TestListModalCloseIDRectActionAndHitParity(t *testing.T) {
 	rows := []modalRowSpec{
-		{ID: "a", Label: "Copy", Action: app.ActionReceived{Action: app.CopyMessage}},
+		{ID: "a", Label: "Copy", Action: ActionReceived{Action: CopyMessage}},
 	}
 	frame, surface, compositor, _ := listModal(t, 80, 24, "Actions", rows)
 
@@ -253,10 +251,10 @@ func TestListModalCloseIDRectActionAndHitParity(t *testing.T) {
 	if close.Z != zModalControl {
 		t.Errorf("close Z = %d, want %d", close.Z, zModalControl)
 	}
-	if close.Click.Action != app.Close {
+	if close.Click.Action != Close {
 		t.Errorf("close click = %#v, want Close", close.Click)
 	}
-	if close.WheelUp.Action != app.NoAction || close.WheelDown.Action != app.NoAction {
+	if close.WheelUp.Action != NoAction || close.WheelDown.Action != NoAction {
 		t.Errorf("close wheel should be empty actions")
 	}
 	// Hit parity at the close cell and inside it.
@@ -277,8 +275,8 @@ func TestListModalCloseIDRectActionAndHitParity(t *testing.T) {
 
 func TestListModalSelectedRowCoversFullRow(t *testing.T) {
 	rows := []modalRowSpec{
-		{ID: "sel", Label: "Selected item", Selected: true, Action: app.ActionReceived{Action: app.CopyMessage}},
-		{ID: "unsel", Label: "Plain item", Action: app.ActionReceived{Action: app.NoAction}},
+		{ID: "sel", Label: "Selected item", Selected: true, Action: ActionReceived{Action: CopyMessage}},
+		{ID: "unsel", Label: "Plain item", Action: ActionReceived{Action: NoAction}},
 	}
 	_, _, _, canvas := listModal(t, 80, 24, "Actions", rows)
 
@@ -320,7 +318,7 @@ func TestListModalSelectedRowCoversFullRow(t *testing.T) {
 
 func TestListModalActionableRowExactIDRectActionHit(t *testing.T) {
 	rows := []modalRowSpec{
-		{ID: "action:copy", Label: "Copy message", Action: app.ActionReceived{Action: app.CopyMessage, MessageID: 7}},
+		{ID: "action:copy", Label: "Copy message", Action: ActionReceived{Action: CopyMessage, MessageID: 7}},
 	}
 	_, surface, compositor, _ := listModal(t, 80, 24, "Actions", rows)
 
@@ -342,7 +340,7 @@ func TestListModalActionableRowExactIDRectActionHit(t *testing.T) {
 	if row.Z != zModalRow {
 		t.Errorf("row Z = %d, want %d", row.Z, zModalRow)
 	}
-	if row.Click.Action != app.CopyMessage || row.Click.MessageID != 7 {
+	if row.Click.Action != CopyMessage || row.Click.MessageID != 7 {
 		t.Errorf("row click = %#v, want CopyMessage/7", row.Click)
 	}
 	// Full-row hit parity: any interior point within the row bounds.
@@ -363,8 +361,8 @@ func TestListModalActionableRowExactIDRectActionHit(t *testing.T) {
 
 func TestListModalInformationalRowNoIDHit(t *testing.T) {
 	rows := []modalRowSpec{
-		{ID: "info", Label: "Just a label", Action: app.ActionReceived{Action: app.NoAction}},
-		{ID: "act", Label: "Do it", Action: app.ActionReceived{Action: app.Activate}},
+		{ID: "info", Label: "Just a label", Action: ActionReceived{Action: NoAction}},
+		{ID: "act", Label: "Do it", Action: ActionReceived{Action: Activate}},
 	}
 	_, surface, compositor, _ := listModal(t, 80, 24, "Actions", rows)
 
@@ -394,7 +392,7 @@ func TestListModalInformationalRowNoIDHit(t *testing.T) {
 func TestListModalLongWideLabelSingleLineBounded(t *testing.T) {
 	long := strings.Repeat("字", 60) + strings.Repeat("x", 40)
 	rows := []modalRowSpec{
-		{ID: "long", Label: long, Action: app.ActionReceived{Action: app.Activate}},
+		{ID: "long", Label: long, Action: ActionReceived{Action: Activate}},
 	}
 	_, surface, _, canvas := listModal(t, 80, 24, "Actions", rows)
 
@@ -428,9 +426,9 @@ func TestListModalLongWideLabelSingleLineBounded(t *testing.T) {
 
 func TestListModalAllIDsUniqueAndInteractionsMatchHitBounds(t *testing.T) {
 	rows := []modalRowSpec{
-		{ID: "r1", Label: "Copy", Action: app.ActionReceived{Action: app.CopyMessage}},
-		{ID: "r2", Label: "Reply", Action: app.ActionReceived{Action: app.ReplyMessage}},
-		{ID: "r3", Label: "Pin", Action: app.ActionReceived{Action: app.PinMessage}},
+		{ID: "r1", Label: "Copy", Action: ActionReceived{Action: CopyMessage}},
+		{ID: "r2", Label: "Reply", Action: ActionReceived{Action: ReplyMessage}},
+		{ID: "r3", Label: "Pin", Action: ActionReceived{Action: PinMessage}},
 	}
 	_, surface, compositor, _ := listModal(t, 80, 24, "Actions", rows)
 
@@ -455,7 +453,7 @@ func TestListModalAllIDsUniqueAndInteractionsMatchHitBounds(t *testing.T) {
 
 func TestListModalHiddenCursor(t *testing.T) {
 	rows := []modalRowSpec{
-		{ID: "a", Label: "Copy", Action: app.ActionReceived{Action: app.CopyMessage}},
+		{ID: "a", Label: "Copy", Action: ActionReceived{Action: CopyMessage}},
 	}
 	_, surface, _, _ := listModal(t, 80, 24, "Actions", rows)
 	if surface.Cursor.Visible {
@@ -471,7 +469,7 @@ func TestListModalHiddenCursor(t *testing.T) {
 
 func TestActionModalLayerNilState(t *testing.T) {
 	styles := newRenderStyles(false)
-	model := ui.ViewModel{Width: 80, Height: 24} // MessageMenu nil
+	model := ViewModel{Width: 80, Height: 24} // MessageMenu nil
 	surface := buildActionModalLayer(model, styles)
 	if surface.Layer != nil {
 		t.Errorf("nil menu should have no layer, got %v", surface.Layer)
@@ -491,7 +489,7 @@ func TestActionModalLayerCanonicalOrderPayloadSelection(t *testing.T) {
 	styles := newRenderStyles(false)
 	const chatID = domain.ChatID(77)
 	const messageID = domain.MessageID(88)
-	menu := &app.MessageActionMenu{
+	menu := &MessageActionMenu{
 		ChatID:    chatID,
 		MessageID: messageID,
 		Capabilities: domain.MessageCapabilities{
@@ -501,7 +499,7 @@ func TestActionModalLayerCanonicalOrderPayloadSelection(t *testing.T) {
 		CanReact: true,
 		Selected: 2, // edit row
 	}
-	model := ui.ViewModel{Width: 80, Height: 24, MessageMenu: menu}
+	model := ViewModel{Width: 80, Height: 24, MessageMenu: menu}
 	surface := buildActionModalLayer(model, styles)
 	if surface.Layer == nil {
 		t.Fatal("action menu layer is nil")
@@ -578,7 +576,7 @@ func TestActionModalLayerLoadingAndErrorGating(t *testing.T) {
 	}
 
 	build := func(loading bool, err *domain.AppError) (surfaceResult, string) {
-		menu := &app.MessageActionMenu{
+		menu := &MessageActionMenu{
 			ChatID:    9,
 			MessageID: 2,
 			Capabilities: domain.MessageCapabilities{
@@ -589,7 +587,7 @@ func TestActionModalLayerLoadingAndErrorGating(t *testing.T) {
 			Loading:  loading,
 			Error:    err,
 		}
-		model := ui.ViewModel{Width: 80, Height: 24, MessageMenu: menu}
+		model := ViewModel{Width: 80, Height: 24, MessageMenu: menu}
 		surface := buildActionModalLayer(model, styles)
 		_, canvas := listModalCanvas(image.Rect(0, 0, 80, 24), surface)
 		return surface, plainText(canvas.Render())
@@ -632,14 +630,14 @@ func assertPermittedOnly(t *testing.T, surface surfaceResult, forbidden []string
 func TestActionModalLayerPinUnpin(t *testing.T) {
 	styles := newRenderStyles(false)
 	build := func(pinned bool) (surfaceResult, string) {
-		menu := &app.MessageActionMenu{
+		menu := &MessageActionMenu{
 			ChatID:       9,
 			MessageID:    2,
 			Capabilities: domain.MessageCapabilities{Pin: true},
 			Pinned:       pinned,
 			CanReact:     false,
 		}
-		model := ui.ViewModel{Width: 80, Height: 24, MessageMenu: menu}
+		model := ViewModel{Width: 80, Height: 24, MessageMenu: menu}
 		surface := buildActionModalLayer(model, styles)
 		_, canvas := listModalCanvas(image.Rect(0, 0, 80, 24), surface)
 		return surface, plainText(canvas.Render())
@@ -653,7 +651,7 @@ func TestActionModalLayerPinUnpin(t *testing.T) {
 		t.Errorf("unpinned menu should not render Unpin, got %q", text)
 	}
 	pinAction := actionForID(t, surface, "action:pin")
-	if pinAction.Action != app.PinMessage || pinAction.ChatID != 9 || pinAction.MessageID != 2 {
+	if pinAction.Action != PinMessage || pinAction.ChatID != 9 || pinAction.MessageID != 2 {
 		t.Errorf("pin action = %#v, want PinMessage/9/2", pinAction)
 	}
 
@@ -665,12 +663,12 @@ func TestActionModalLayerPinUnpin(t *testing.T) {
 		t.Errorf("pinned menu should not render Pin, got %q", text)
 	}
 	unpinAction := actionForID(t, surface, "action:pin")
-	if unpinAction.Action != app.PinMessage || unpinAction.ChatID != 9 || unpinAction.MessageID != 2 {
+	if unpinAction.Action != PinMessage || unpinAction.ChatID != 9 || unpinAction.MessageID != 2 {
 		t.Errorf("unpin action = %#v, want PinMessage/9/2", unpinAction)
 	}
 }
 
-func actionForID(t *testing.T, surface surfaceResult, id string) app.ActionReceived {
+func actionForID(t *testing.T, surface surfaceResult, id string) ActionReceived {
 	t.Helper()
 	for _, interaction := range surface.Interactions {
 		if interaction.ID == id {
@@ -678,26 +676,26 @@ func actionForID(t *testing.T, surface surfaceResult, id string) app.ActionRecei
 		}
 	}
 	t.Fatalf("no interaction with ID %q", id)
-	return app.ActionReceived{}
+	return ActionReceived{}
 }
 
 func TestReactionPickerLayerPayloadHitAndEmojiPresence(t *testing.T) {
 	styles := newRenderStyles(false)
-	picker := &app.ReactionPicker{ChatID: 9, MessageID: 2, Selected: 0}
-	model := ui.ViewModel{Width: 80, Height: 24, ReactionPicker: picker}
+	picker := &ReactionPicker{ChatID: 9, MessageID: 2, Selected: 0}
+	model := ViewModel{Width: 80, Height: 24, ReactionPicker: picker}
 	surface := buildReactionPickerLayer(model, styles)
 	if surface.Layer == nil {
 		t.Fatal("reaction picker layer is nil")
 	}
 	compositor, canvas := listModalCanvas(image.Rect(0, 0, 80, 24), surface)
 
-	if len(surface.Interactions) != len(app.ReactionPalette)+1 {
-		t.Fatalf("interactions = %d, want %d", len(surface.Interactions), len(app.ReactionPalette)+1)
+	if len(surface.Interactions) != len(ReactionPalette)+1 {
+		t.Fatalf("interactions = %d, want %d", len(surface.Interactions), len(ReactionPalette)+1)
 	}
-	for index, emoji := range app.ReactionPalette {
+	for index, emoji := range ReactionPalette {
 		id := fmt.Sprintf("reaction:%d", index)
 		interaction := actionForID(t, surface, id)
-		if interaction.Action != app.Activate {
+		if interaction.Action != Activate {
 			t.Errorf("reaction:%d action = %v, want Activate", index, interaction.Action)
 		}
 		if interaction.ChatID != 9 || interaction.MessageID != 2 {
@@ -743,20 +741,20 @@ func interactionForID(t *testing.T, surface surfaceResult, id string) layerInter
 
 func TestReactionPickerLayerSelectionGeometryStable(t *testing.T) {
 	styles := newRenderStyles(false)
-	items := make([]components.Item, len(app.ReactionPalette))
-	for i, emoji := range app.ReactionPalette {
+	items := make([]components.Item, len(ReactionPalette))
+	for i, emoji := range ReactionPalette {
 		items[i] = components.Item{Label: emoji}
 	}
 
 	// Baseline geometry map ID->Rect for selection 0.
 	baseline := map[string]image.Rectangle{}
-	base := buildReactionPickerLayer(ui.ViewModel{Width: 80, Height: 24, ReactionPicker: &app.ReactionPicker{ChatID: 9, MessageID: 2, Selected: 0}}, styles)
+	base := buildReactionPickerLayer(ViewModel{Width: 80, Height: 24, ReactionPicker: &ReactionPicker{ChatID: 9, MessageID: 2, Selected: 0}}, styles)
 	for _, interaction := range base.Interactions {
 		baseline[interaction.ID] = interaction.Rect
 	}
 
-	for sel := 0; sel < len(app.ReactionPalette); sel++ {
-		surface := buildReactionPickerLayer(ui.ViewModel{Width: 80, Height: 24, ReactionPicker: &app.ReactionPicker{ChatID: 9, MessageID: 2, Selected: sel}}, styles)
+	for sel := 0; sel < len(ReactionPalette); sel++ {
+		surface := buildReactionPickerLayer(ViewModel{Width: 80, Height: 24, ReactionPicker: &ReactionPicker{ChatID: 9, MessageID: 2, Selected: sel}}, styles)
 		for _, interaction := range surface.Interactions {
 			if want, ok := baseline[interaction.ID]; !ok || !interaction.Rect.Eq(want) {
 				t.Errorf("selection %d: interaction %q rect = %v, want %v", sel, interaction.ID, interaction.Rect, want)
@@ -808,13 +806,13 @@ func TestReactionPickerLayerSelectionGeometryStable(t *testing.T) {
 func TestForwardPickerLayerOrderPayloadSelectionAndWideTitles(t *testing.T) {
 	styles := newRenderStyles(false)
 	longTitle := "很长的标题👨‍👩‍👧‍👦🔥❤️多字节群聊"
-	chats := []ui.ChatRow{
+	chats := []ChatRow{
 		{Chat: domain.Chat{ID: 101, Title: "Alpha"}},
 		{Chat: domain.Chat{ID: 202, Title: longTitle}},
 		{Chat: domain.Chat{ID: 303, Title: "Gamma"}},
 	}
-	picker := &app.ForwardPicker{SourceChatID: 9, SourceMessageID: 2, SelectedChat: 1}
-	model := ui.ViewModel{Width: 80, Height: 24, Chats: chats, ForwardPicker: picker}
+	picker := &ForwardPicker{SourceChatID: 9, SourceMessageID: 2, SelectedChat: 1}
+	model := ViewModel{Width: 80, Height: 24, Chats: chats, ForwardPicker: picker}
 	surface := buildForwardPickerLayer(model, styles)
 	if surface.Layer == nil {
 		t.Fatal("forward picker layer is nil")
@@ -826,7 +824,7 @@ func TestForwardPickerLayerOrderPayloadSelectionAndWideTitles(t *testing.T) {
 	for index, chat := range chats {
 		id := fmt.Sprintf("forward:%d:%d", index, chat.Chat.ID)
 		interaction := actionForID(t, surface, id)
-		if interaction.Action != app.Activate {
+		if interaction.Action != Activate {
 			t.Errorf("%s action = %v, want Activate", id, interaction.Action)
 		}
 		if interaction.ChatID != chat.Chat.ID {
@@ -885,7 +883,7 @@ func TestForwardPickerLayerOrderPayloadSelectionAndWideTitles(t *testing.T) {
 
 func TestForwardPickerLayerNilState(t *testing.T) {
 	styles := newRenderStyles(false)
-	model := ui.ViewModel{Width: 80, Height: 24} // ForwardPicker nil
+	model := ViewModel{Width: 80, Height: 24} // ForwardPicker nil
 	surface := buildForwardPickerLayer(model, styles)
 	if surface.Layer != nil {
 		t.Errorf("nil forward picker should have no layer, got %v", surface.Layer)
@@ -903,7 +901,7 @@ func TestForwardPickerLayerNilState(t *testing.T) {
 
 func TestReactionPickerLayerNilState(t *testing.T) {
 	styles := newRenderStyles(false)
-	model := ui.ViewModel{Width: 80, Height: 24} // ReactionPicker nil
+	model := ViewModel{Width: 80, Height: 24} // ReactionPicker nil
 	surface := buildReactionPickerLayer(model, styles)
 	if surface.Layer != nil {
 		t.Errorf("nil reaction picker should have no layer, got %v", surface.Layer)
@@ -945,7 +943,7 @@ func TestActionModalViewImageRowExactOrderPayloadAndGating(t *testing.T) {
 	bounds := image.Rect(0, 0, 80, 24)
 
 	// Build a fully-capable menu with eligible MediaFile.
-	menuWithMedia := &app.MessageActionMenu{
+	menuWithMedia := &MessageActionMenu{
 		ChatID:    chatID,
 		MessageID: messageID,
 		Capabilities: domain.MessageCapabilities{
@@ -956,7 +954,7 @@ func TestActionModalViewImageRowExactOrderPayloadAndGating(t *testing.T) {
 		Selected:  0,
 		MediaFile: domain.MediaFileRef{ID: 55, CanDownload: true},
 	}
-	model := ui.ViewModel{Width: 80, Height: 24, MessageMenu: menuWithMedia}
+	model := ViewModel{Width: 80, Height: 24, MessageMenu: menuWithMedia}
 	surface := buildActionModalLayer(model, styles)
 	if surface.Layer == nil {
 		t.Fatal("action menu layer is nil")
@@ -992,8 +990,8 @@ func TestActionModalViewImageRowExactOrderPayloadAndGating(t *testing.T) {
 
 	// Exact view-image payload.
 	viewImage := actionForID(t, surface, "action:view-image")
-	wantAction := app.ActionReceived{
-		Action:    app.ViewMessageMedia,
+	wantAction := ActionReceived{
+		Action:    ViewMessageMedia,
 		ChatID:    chatID,
 		MessageID: messageID,
 	}
@@ -1059,7 +1057,7 @@ func TestActionModalViewImageRowExactOrderPayloadAndGating(t *testing.T) {
 	}
 
 	// View image remains visible in loading state.
-	menuLoading := &app.MessageActionMenu{
+	menuLoading := &MessageActionMenu{
 		ChatID:    chatID,
 		MessageID: messageID,
 		Capabilities: domain.MessageCapabilities{
@@ -1070,13 +1068,13 @@ func TestActionModalViewImageRowExactOrderPayloadAndGating(t *testing.T) {
 		Loading:   true,
 		MediaFile: domain.MediaFileRef{ID: 66, CanDownload: true},
 	}
-	surfaceLoading := buildActionModalLayer(ui.ViewModel{Width: 80, Height: 24, MessageMenu: menuLoading}, styles)
+	surfaceLoading := buildActionModalLayer(ViewModel{Width: 80, Height: 24, MessageMenu: menuLoading}, styles)
 	if !hasInteractionID(surfaceLoading.Interactions, "action:view-image") {
 		t.Errorf("loading state should have view-image row")
 	}
 
 	// View image remains visible in error state.
-	menuError := &app.MessageActionMenu{
+	menuError := &MessageActionMenu{
 		ChatID:    chatID,
 		MessageID: messageID,
 		Capabilities: domain.MessageCapabilities{
@@ -1088,7 +1086,7 @@ func TestActionModalViewImageRowExactOrderPayloadAndGating(t *testing.T) {
 		Error:     &domain.AppError{Kind: domain.ErrorMedia, Message: "something went wrong"},
 		MediaFile: domain.MediaFileRef{ID: 77, CanDownload: true},
 	}
-	surfaceError := buildActionModalLayer(ui.ViewModel{Width: 80, Height: 24, MessageMenu: menuError}, styles)
+	surfaceError := buildActionModalLayer(ViewModel{Width: 80, Height: 24, MessageMenu: menuError}, styles)
 	if !hasInteractionID(surfaceError.Interactions, "action:view-image") {
 		t.Errorf("error state should have view-image row")
 	}
@@ -1111,7 +1109,7 @@ func TestActionModalViewImageRowExactOrderPayloadAndGating(t *testing.T) {
 
 	for _, tc := range eligibilityCases {
 		t.Run(tc.name, func(t *testing.T) {
-			menu := &app.MessageActionMenu{
+			menu := &MessageActionMenu{
 				ChatID:    chatID,
 				MessageID: messageID,
 				Capabilities: domain.MessageCapabilities{
@@ -1121,7 +1119,7 @@ func TestActionModalViewImageRowExactOrderPayloadAndGating(t *testing.T) {
 				Selected:  0,
 				MediaFile: tc.media,
 			}
-			model := ui.ViewModel{Width: 80, Height: 24, MessageMenu: menu}
+			model := ViewModel{Width: 80, Height: 24, MessageMenu: menu}
 			surface := buildActionModalLayer(model, styles)
 			if surface.Layer == nil {
 				t.Fatal("eligibility test layer is nil")

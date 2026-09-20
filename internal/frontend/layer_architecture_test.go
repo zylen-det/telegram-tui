@@ -10,8 +10,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/app"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 func TestFullSizeRootDimensions(t *testing.T) {
@@ -22,7 +20,7 @@ func TestFullSizeRootDimensions(t *testing.T) {
 		{100, 24},
 		{140, 30},
 	} {
-		model := ui.ViewModel{Width: tc.width, Height: tc.height}
+		model := ViewModel{Width: tc.width, Height: tc.height}
 		frame := composeApplication(model, time.Local)
 		if frame.Compositor == nil {
 			t.Fatalf("%dx%d: compositor is nil", tc.width, tc.height)
@@ -175,20 +173,20 @@ func TestInteractionsCompileInVisualZOrder(t *testing.T) {
 		ID:    "base",
 		Rect:  image.Rect(0, 0, 10, 10),
 		Z:     zPane,
-		Click: app.ActionReceived{Action: app.SelectChat, ChatID: 1},
+		Click: ActionReceived{Action: SelectChat, ChatID: 1},
 	}
 	top := layerInteraction{
 		ID:    "top",
 		Rect:  image.Rect(0, 0, 10, 10),
 		Z:     zModalContent,
-		Click: app.ActionReceived{Action: app.Close},
+		Click: ActionReceived{Action: Close},
 	}
 	hits := compileHits([]layerInteraction{base, top})
 	action, ok := hits.ActionAt(5, 5)
 	if !ok {
 		t.Fatal("no action found at (5,5)")
 	}
-	if action.Action != app.Close {
+	if action.Action != Close {
 		t.Errorf("topmost action = %v, want Close", action.Action)
 	}
 }
@@ -201,8 +199,8 @@ func TestUniqueIDsAndHitParity(t *testing.T) {
 	root := lipgloss.NewLayer(rootContent).X(0).Y(0).Z(zFrame)
 
 	origin := image.Point{0, 0}
-	interactionA := addInteractive(root, origin, image.Rect(2, 3, 12, 6), "chat:5", zRowBackground, "", app.ActionReceived{Action: app.SelectChat, ChatID: 5}, app.ActionReceived{}, app.ActionReceived{})
-	interactionB := addInteractive(root, origin, image.Rect(20, 4, 30, 7), "composer", zControl, "", app.ActionReceived{Action: app.FocusPane, TargetFocus: app.FocusComposer}, app.ActionReceived{}, app.ActionReceived{})
+	interactionA := addInteractive(root, origin, image.Rect(2, 3, 12, 6), "chat:5", zRowBackground, "", ActionReceived{Action: SelectChat, ChatID: 5}, ActionReceived{}, ActionReceived{})
+	interactionB := addInteractive(root, origin, image.Rect(20, 4, 30, 7), "composer", zControl, "", ActionReceived{Action: FocusPane, TargetFocus: FocusComposer}, ActionReceived{}, ActionReceived{})
 
 	if err := assertUniqueNonEmptyIDs([]layerInteraction{interactionA, interactionB}); err != nil {
 		t.Fatalf("unexpected duplicate IDs: %v", err)
@@ -230,7 +228,7 @@ func TestNestedAddInteractiveAbsoluteBounds(t *testing.T) {
 	parent := lipgloss.NewLayer(lipgloss.NewStyle().Width(20).Height(10).Render("")).X(10).Y(5).Z(zPane)
 	root.AddLayers(parent)
 
-	interaction := addInteractive(parent, image.Pt(10, 5), image.Rect(2, 1, 6, 3), "nested", zContent, "", app.ActionReceived{Action: app.SelectMessage}, app.ActionReceived{}, app.ActionReceived{})
+	interaction := addInteractive(parent, image.Pt(10, 5), image.Rect(2, 1, 6, 3), "nested", zContent, "", ActionReceived{Action: SelectMessage}, ActionReceived{}, ActionReceived{})
 	want := image.Rect(12, 6, 16, 8)
 	if !interaction.Rect.Eq(want) {
 		t.Errorf("nested interaction rect = %v, want %v", interaction.Rect, want)
@@ -298,7 +296,7 @@ func TestAddInteractiveExactContentAccepted(t *testing.T) {
 	// Non-empty content whose Lipgloss dimensions exactly match the local
 	// rectangle is accepted and its styles preserved.
 	content := lipgloss.NewStyle().Width(8).Height(3).Foreground(color.RGBA{1, 2, 3, 255}).Render("hi")
-	interaction := addInteractive(root, image.Point{0, 0}, image.Rect(2, 3, 10, 6), "exact", zContent, content, app.ActionReceived{Action: app.SelectMessage}, app.ActionReceived{}, app.ActionReceived{})
+	interaction := addInteractive(root, image.Point{0, 0}, image.Rect(2, 3, 10, 6), "exact", zContent, content, ActionReceived{Action: SelectMessage}, ActionReceived{}, ActionReceived{})
 
 	if got, want := interaction.Rect, image.Rect(2, 3, 10, 6); !got.Eq(want) {
 		t.Errorf("interaction rect = %v, want %v", got, want)
@@ -333,7 +331,7 @@ func TestAddInteractiveMismatchedContentPanics(t *testing.T) {
 			t.Errorf("panic message %q should mention addInteractive", message)
 		}
 	}()
-	addInteractive(root, image.Point{0, 0}, image.Rect(2, 3, 12, 6), "mismatch", zContent, content, app.ActionReceived{}, app.ActionReceived{}, app.ActionReceived{})
+	addInteractive(root, image.Point{0, 0}, image.Rect(2, 3, 12, 6), "mismatch", zContent, content, ActionReceived{}, ActionReceived{}, ActionReceived{})
 }
 
 func TestAddInteractiveEmptyRectangleSafe(t *testing.T) {
@@ -342,7 +340,7 @@ func TestAddInteractiveEmptyRectangleSafe(t *testing.T) {
 
 	// An empty local rectangle returns a safe empty interaction without adding
 	// a layer to the parent.
-	interaction := addInteractive(root, image.Point{0, 0}, image.Rect(5, 5, 5, 5), "empty", zContent, "", app.ActionReceived{Action: app.Close}, app.ActionReceived{}, app.ActionReceived{})
+	interaction := addInteractive(root, image.Point{0, 0}, image.Rect(5, 5, 5, 5), "empty", zContent, "", ActionReceived{Action: Close}, ActionReceived{}, ActionReceived{})
 	if interaction.ID != "empty" {
 		t.Errorf("empty-rect interaction ID = %q, want empty", interaction.ID)
 	}

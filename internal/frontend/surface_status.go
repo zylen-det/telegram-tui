@@ -6,13 +6,12 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/ui"
 )
 
 // buildStatusLayer builds the status bar surface: an exact root box with an
 // intrinsic brand, title, and connection text. The rect is the status layout
 // intersected with the viewport; an empty result returns a zero surface.
-func buildStatusLayer(model ui.ViewModel, styles renderStyles) surfaceResult {
+func buildStatusLayer(model ViewModel, styles renderStyles) surfaceResult {
 	rect := model.Layout.Status.Intersect(image.Rect(0, 0, model.Width, model.Height))
 	if rect.Empty() {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
