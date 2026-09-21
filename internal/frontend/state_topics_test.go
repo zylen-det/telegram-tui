@@ -473,7 +473,7 @@ func TestClosedTopicBlocksComposeAndSenders(t *testing.T) {
 	}
 }
 
-func TestChatSwitchingEntersAllModeDirectly(t *testing.T) {
+func TestSelectingForumChatDoesNotOpenIt(t *testing.T) {
 	base := func() State {
 		state := topicsBaseState(t)
 		state.Chats = []domain.Chat{
@@ -483,67 +483,27 @@ func TestChatSwitchingEntersAllModeDirectly(t *testing.T) {
 		state.SelectedChat = 1
 		return state
 	}
-	check := func(t *testing.T, name string, reduced State, commands []Effect) {
+	checkSelection := func(t *testing.T, name string, selected State) {
 		t.Helper()
-		if reduced.SelectedChat != 0 {
-			t.Fatalf("%s: selected chat = %d", name, reduced.SelectedChat)
+		if selected.SelectedChat != 0 {
+			t.Fatalf("%s: selected chat = %d", name, selected.SelectedChat)
 		}
-		if reduced.Topics != nil {
-			t.Fatalf("%s: topics modal opened: %#v", name, reduced.Topics)
+		if selected.Focus != FocusChats {
+			t.Fatalf("%s: focus = %v, want FocusChats", name, selected.Focus)
 		}
-		if !reduced.ShowAll[7] {
-			t.Fatalf("%s: ShowAll = %#v", name, reduced.ShowAll)
-		}
-		if reduced.Focus != FocusConversation {
-			t.Fatalf("%s: focus = %v", name, reduced.Focus)
-		}
-		if history, exists := reduced.History[7]; !exists || !history.Loading {
-			t.Fatalf("%s: ALL history not requested: %#v", name, reduced.History[7])
-		}
-		sawLoadMessages := false
-		for _, command := range commands {
-			if _, ok := command.(LoadTopics); ok {
-				t.Fatalf("%s: topic list requested: %#v", name, command)
-			}
-			if load, ok := command.(LoadMessages); ok {
-				if load.ChatID != 7 || load.TopicID != 0 {
-					t.Fatalf("%s: history command = %#v", name, command)
-				}
-				sawLoadMessages = true
-			}
-		}
-		if !sawLoadMessages {
-			t.Fatalf("%s: commands = %#v", name, commands)
+		if selected.Topics != nil || selected.ShowAll[7] {
+			t.Fatalf("%s: forum activated: topics=%#v showAll=%#v", name, selected.Topics, selected.ShowAll)
 		}
 	}
 
-	reduced, commands := updateState(base(), ActionReceived{Action: SelectChat, ChatID: 7})
-	check(t, "select chat", reduced, commands)
+	selected, _ := updateState(base(), ActionReceived{Action: SelectChat, ChatID: 7})
+	checkSelection(t, "select chat", selected)
 
-	reduced, commands = updateState(base(), ActionReceived{Action: SelectPrevious})
-	check(t, "chat nav", reduced, commands)
+	selected, _ = updateState(base(), ActionReceived{Action: SelectPrevious})
+	checkSelection(t, "chat navigation", selected)
 
-	activateBase := base()
-	activateBase.SelectedChat = 0
-	menu, menuCommands := updateState(activateBase, ActionReceived{Action: Activate})
-	if len(menuCommands) != 0 || menu.ChatActions == nil || menu.Focus != FocusChatActions {
-		t.Fatalf("activate menu = %#v commands=%#v", menu.ChatActions, menuCommands)
+	opened, _ := updateState(selected, ActionReceived{Action: OpenChat})
+	if opened.Focus != FocusConversation || !opened.ShowAll[7] {
+		t.Fatalf("explicit open: focus=%v showAll=%#v", opened.Focus, opened.ShowAll)
 	}
-	reduced, commands = updateState(menu, ActionReceived{Action: Activate})
-	check(t, "activate", reduced, commands)
-
-	// Non-forum chat switching still requests chat history as before.
-	nonForum := base()
-	nonForum.Chats[0] = domain.Chat{ID: 7, Kind: domain.ChatBasicGroup, Title: "Group", CanSend: true}
-	reduced, commands = updateState(nonForum, ActionReceived{Action: SelectChat, ChatID: 7})
-	if reduced.Topics != nil || len(commands) == 0 {
-		t.Fatalf("non-forum: topics=%#v commands=%#v", reduced.Topics, commands)
-	}
-	for _, command := range commands {
-		if _, ok := command.(LoadMessages); !ok {
-			continue
-		}
-		return
-	}
-	t.Fatalf("non-forum: no history request: %#v", commands)
 }

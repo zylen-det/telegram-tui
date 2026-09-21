@@ -376,21 +376,12 @@ func openChatFromSearchResult(state State, chat domain.Chat) (State, []Effect) {
 
 	state.ChatSearch = nil
 	state.Focus = FocusChats
-	if chat.IsForum {
-		// SelectChat already opens the topic list for forums instead of
-		// requesting all-chat history; keep its commands (including the
-		// first topic page load).
-		opened, forumCommands := reduceAction(state, ActionReceived{Action: SelectChat, ChatID: chat.ID})
-		if chatIndex(opened.Chats, chat.ID) < 0 {
-			return state, nil
-		}
-		return opened, forumCommands
-	}
 	opened, commands := reduceAction(state, ActionReceived{Action: SelectChat, ChatID: chat.ID})
 	if chatIndex(opened.Chats, chat.ID) < 0 {
 		return state, nil
 	}
-	opened.Focus = FocusConversation
+	opened, openCommands := openActiveChatFromList(opened)
+	commands = append(commands, openCommands...)
 	commands = append(commands, requestMissingChatAvatars(&opened, []domain.Chat{chat})...)
 	return opened, commands
 }
@@ -415,8 +406,7 @@ func openChatFromMessageResult(state State, msg domain.Message) (State, []Effect
 	if chatIndex(opened.Chats, msg.ChatID) < 0 {
 		return state, nil
 	}
-	// Landing from a chat search targets a single message: leave ALL mode
-	// (SelectChat above may have entered it for forums).
+	// Landing from a chat search targets a single message: leave ALL mode.
 	if opened.ShowAll == nil {
 		opened.ShowAll = make(map[domain.ChatID]bool)
 	}
@@ -427,17 +417,6 @@ func openChatFromMessageResult(state State, msg domain.Message) (State, []Effect
 		if !opened.Chats[opened.SelectedChat].IsForum {
 			return state, nil
 		}
-		// SelectChat opened the topic list above; a message jump lands
-		// directly on the message, so close the list and drop its page
-		// load while keeping the chat open/close commands.
-		opened.Topics = nil
-		kept := make([]Effect, 0, len(commands))
-		for _, command := range commands {
-			if _, ok := command.(LoadTopics); !ok {
-				kept = append(kept, command)
-			}
-		}
-		commands = kept
 		if opened.ForumTopics == nil {
 			opened.ForumTopics = make(map[domain.ChatID]map[domain.TopicID]domain.ForumTopic)
 		}

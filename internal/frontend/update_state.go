@@ -1298,12 +1298,6 @@ func reduceAction(state State, event ActionReceived) (State, []Effect) {
 				}
 			}
 			state.SelectedChat = index
-			if state.Chats[index].IsForum {
-				state.MessageMenu = nil
-				commands = append(commands, OpenChatCommand{ChatID: event.ChatID})
-				opened, allCommands := activateAllTopics(state, event.ChatID)
-				return opened, append(commands, allCommands...)
-			}
 			restoreActiveDraftReply(&state)
 			clampDetailsSelection(&state)
 			selectNewestMessage(&state, event.ChatID)
@@ -1363,17 +1357,6 @@ func reduceAction(state State, event ActionReceived) (State, []Effect) {
 		state.ReplyTarget = nil
 		state.EditTarget = nil
 		chatID := state.Chats[state.SelectedChat].ID
-		if state.Chats[state.SelectedChat].IsForum {
-			state.MessageMenu = nil
-			var commands []Effect
-			if oldChatID != chatID {
-				releaseDraftGuard(&state, oldChatID)
-				commands = append(commands, CloseChatCommand{ChatID: oldChatID})
-				commands = append(commands, OpenChatCommand{ChatID: chatID})
-			}
-			opened, allCommands := activateAllTopics(state, chatID)
-			return opened, append(commands, allCommands...)
-		}
 		restoreActiveDraftReply(&state)
 		clampDetailsSelection(&state)
 		selectNewestMessage(&state, chatID)
@@ -4206,14 +4189,14 @@ func cloneReducerStateForAction(state State, event ActionReceived) State {
 	case FocusPane, FocusNext, FocusPrevious, ToggleDetails, SelectMessage:
 		return state
 	case SelectChat:
-		if chatSelectionUsesOrdinaryChats(state, event.ChatID) {
+		if chatIndex(state.Chats, event.ChatID) >= 0 {
 			return cloneChatSelectionState(state)
 		}
 	case SelectNext, SelectPrevious:
 		if state.Focus == FocusDetails {
 			return state
 		}
-		if chatID, ok := adjacentChatID(state, event.Action == SelectPrevious); ok && chatSelectionUsesOrdinaryChats(state, chatID) {
+		if _, ok := adjacentChatID(state, event.Action == SelectPrevious); ok {
 			return cloneChatSelectionState(state)
 		}
 	case SelectNextUnread, SelectNextMention:
@@ -4224,13 +4207,11 @@ func cloneReducerStateForAction(state State, event ActionReceived) State {
 		if event.Action == SelectNextMention {
 			match = func(chat domain.Chat) bool { return chat.UnreadMentionCount > 0 }
 		}
-		chatID, ok := nextMatchingChatID(state, match)
+		_, ok := nextMatchingChatID(state, match)
 		if !ok {
 			return state
 		}
-		if chatSelectionUsesOrdinaryChats(state, chatID) {
-			return cloneChatSelectionState(state)
-		}
+		return cloneChatSelectionState(state)
 	case SelectNextMessage, SelectPreviousMessage, PageUp, PageDown:
 		clone := state
 		clone.History = maps.Clone(state.History)
@@ -4252,17 +4233,6 @@ func adjacentChatID(state State, previous bool) (domain.ChatID, bool) {
 	}
 	index := max(0, min(len(state.Chats)-1, state.SelectedChat+delta))
 	return state.Chats[index].ID, true
-}
-
-func chatSelectionUsesOrdinaryChats(state State, destination domain.ChatID) bool {
-	destinationIndex := chatIndex(state.Chats, destination)
-	if destinationIndex < 0 || state.Chats[destinationIndex].IsForum {
-		return false
-	}
-	if state.SelectedChat >= 0 && state.SelectedChat < len(state.Chats) && state.Chats[state.SelectedChat].IsForum {
-		return false
-	}
-	return true
 }
 
 func cloneChatSelectionState(state State) State {
