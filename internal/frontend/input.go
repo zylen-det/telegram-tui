@@ -142,6 +142,14 @@ func mapKeyPress(focus Focus, msg tea.KeyPressMsg) (ActionReceived, bool) {
 			return actionReceived(SelectNextUnread)
 		case "m":
 			return actionReceived(SelectNextMention)
+		case "l":
+			return actionReceived(OpenChat)
+		}
+		switch key.Code {
+		case tea.KeyRight:
+			return actionReceived(OpenChat)
+		case tea.KeyEnter:
+			return actionReceived(OpenChatActionMenu)
 		}
 	}
 	if focus == FocusConversation && key.Mod == 0 {

@@ -199,6 +199,15 @@ func TestComputeLayoutPanes(t *testing.T) {
 	}
 }
 
+func TestComputeLayoutNarrowChatActionsStayOnChatsPage(t *testing.T) {
+	t.Parallel()
+
+	got := ComputeLayout(79, 20, false, FocusChatActions)
+	if want := image.Rect(0, 1, 79, 20); got.Chats != want || !got.Conversation.Empty() {
+		t.Fatalf("chat-action layout = %#v, want chats page %v", got, want)
+	}
+}
+
 func TestComputeLayoutNarrowNonChatFocusShowsConversation(t *testing.T) {
 	t.Parallel()
 

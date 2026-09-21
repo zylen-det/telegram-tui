@@ -1546,6 +1546,10 @@ func reduceAction(state State, event ActionReceived) (State, []Effect) {
 		return openChatSearch(state)
 	case OpenChatActionMenu:
 		return openChatActionMenu(state)
+	case OpenChat:
+		if state.Focus == FocusChats {
+			return openActiveChatFromList(state)
+		}
 	case OpenPinnedMessages:
 		return openPinnedMessages(state)
 	case OpenMembers:

@@ -20,7 +20,7 @@ func TestChatActionInputAndSelectorOptions(t *testing.T) {
 	menu := &ChatActionMenuState{ChatID: 9}
 	chat := domain.Chat{ID: 9, Kind: domain.ChatSupergroup, IsMember: true}
 	options := selectorOptionsFromRows(chatActionRows(chat, menu))
-	if len(options) < 2 || options[0].Label != "Open chat" || options[0].Value != (ActionReceived{Action: OpenChatFromMenu, ChatID: 9}) {
+	if len(options) < 2 || options[0].Label != "Open chat" || options[0].Value != (ActionReceived{Action: OpenChat, ChatID: 9}) {
 		t.Fatalf("options = %#v", options)
 	}
 }
@@ -39,7 +39,7 @@ func TestChatActionLayerOwnsModalInteractions(t *testing.T) {
 	}
 	found := false
 	for _, interaction := range layer.Interactions {
-		if interaction.Click.Action == OpenChatFromMenu && interaction.Click.ChatID == 9 {
+		if interaction.Click.Action == OpenChat && interaction.Click.ChatID == 9 {
 			found = true
 		}
 	}

@@ -19,17 +19,33 @@ func chatActionState(chat domain.Chat) State {
 
 func TestChatListEnterOpensActionsAndOpenChatIsFirst(t *testing.T) {
 	state := chatActionState(domain.Chat{ID: 9, Title: "Group", Kind: domain.ChatSupergroup, IsMember: true})
-	opened, commands := updateState(state, ActionReceived{Action: Activate})
+	opened, commands := updateState(state, ActionReceived{Action: OpenChatActionMenu})
 	if len(commands) != 0 || opened.ChatActions == nil || opened.Focus != FocusChatActions || opened.ChatActions.ChatID != 9 {
 		t.Fatalf("opened = %#v commands=%#v", opened.ChatActions, commands)
 	}
 	items := ChatActionMenuItems(opened.Chats[0], opened.ChatActions)
-	if len(items) == 0 || items[0].Action != OpenChatFromMenu || items[0].Label != "Open chat" {
+	if len(items) == 0 || items[0].Action != OpenChat || items[0].Label != "Open chat" {
 		t.Fatalf("items = %#v", items)
 	}
 	activated, commands := updateState(opened, ActionReceived{Action: Activate})
 	if activated.ChatActions != nil || activated.Focus != FocusConversation {
 		t.Fatalf("activated = focus %v menu %#v", activated.Focus, activated.ChatActions)
+	}
+	if len(commands) != 1 {
+		t.Fatalf("open commands = %#v", commands)
+	}
+	if load, ok := commands[0].(LoadMessages); !ok || load.ChatID != 9 {
+		t.Fatalf("open command = %#v", commands[0])
+	}
+}
+
+func TestChatListOpenActionBypassesActions(t *testing.T) {
+	state := chatActionState(domain.Chat{ID: 9, Title: "Group", Kind: domain.ChatSupergroup, IsMember: true})
+	state.Layout = LayoutNarrow
+
+	opened, commands := updateState(state, ActionReceived{Action: OpenChat})
+	if opened.Focus != FocusConversation || opened.ChatActions != nil {
+		t.Fatalf("opened = focus %v menu %#v", opened.Focus, opened.ChatActions)
 	}
 	if len(commands) != 1 {
 		t.Fatalf("open commands = %#v", commands)

@@ -25,7 +25,7 @@ func ChatActionMenuItems(chat domain.Chat, menu *ChatActionMenuState) []ChatActi
 		}
 	}
 	items := []ChatActionMenuItem{
-		{Action: OpenChatFromMenu, Label: "Open chat"},
+		{Action: OpenChat, Label: "Open chat"},
 		{Action: ViewChatInfo, Label: chatInfoLabel(chat)},
 	}
 	if chat.IsArchived {
@@ -170,7 +170,7 @@ func reduceChatActionMenu(state State, event ActionReceived) (State, []Effect) {
 		action := menu.Confirming
 		menu.Confirming = NoAction
 		return executeChatAction(state, action)
-	case OpenChatFromMenu:
+	case OpenChat:
 		state.Focus = menu.PreviousFocus
 		state.ChatActions = nil
 		return openActiveChatFromList(state)

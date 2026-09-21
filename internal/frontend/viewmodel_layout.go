@@ -42,7 +42,7 @@ func ComputeLayout(width, height int, details bool, focus Focus) ViewLayout {
 	case LayoutNarrow:
 		if details {
 			layout.Details = body
-		} else if focus == FocusChats {
+		} else if focus == FocusChats || focus == FocusChatActions {
 			layout.Chats = body
 		} else {
 			layout.Conversation = body

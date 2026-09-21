@@ -84,7 +84,7 @@ const (
 	SelectTopic
 	SelectAllMessages
 	OpenChatActionMenu
-	OpenChatFromMenu
+	OpenChat
 	OpenGroupPermissions
 	OpenChatSettings
 	EditChatSetting
