@@ -2,8 +2,6 @@ module github.com/zylen-det/telegram-tui
 
 go 1.26
 
-replace github.com/zelenin/go-tdlib => ./third_party/go-tdlib
-
 require (
 	charm.land/bubbles/v2 v2.0.0
 	charm.land/bubbletea/v2 v2.0.8

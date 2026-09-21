@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Prebuilt TDLib 1.8.64, built from the commit required by the vendored Go
+# Prebuilt TDLib 1.8.64, built from the commit required by the pinned Go
 # wrapper. The package is produced by eilvelia/tdl's public GitHub Actions
 # workflow and published to npm with provenance.
 tdlib_version="1.8.64"

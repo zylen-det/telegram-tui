@@ -44,11 +44,6 @@ test-tdlib:
 	CGO_CFLAGS="-I$(TDLIB_PREFIX)/include" \
 	CGO_LDFLAGS="-Wl,-rpath,$(TDLIB_PREFIX)/lib -L$(TDLIB_PREFIX)/lib -ltdjson" \
 	go test -tags 'tdlib libtdjson' ./internal/telegram
-	cd third_party/go-tdlib && \
-	CGO_ENABLED=1 \
-	CGO_CFLAGS="-I$(TDLIB_PREFIX)/include" \
-	CGO_LDFLAGS="-Wl,-rpath,$(TDLIB_PREFIX)/lib -L$(TDLIB_PREFIX)/lib -ltdjson" \
-	go test -tags libtdjson ./client
 
 package:
 	@test "$(VERSION)" != "dev" || { printf 'VERSION is required (for example, make package VERSION=v0.1.0)\n' >&2; exit 1; }

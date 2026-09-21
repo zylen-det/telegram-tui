@@ -30,6 +30,7 @@ The packaged release currently targets:
 
 - Arch Linux on x86-64
 - Kitty
+- the `gcc-libs`, `openssl`, and `zlib` runtime packages
 - a personal Telegram `api_id` and `api_hash` from <https://my.telegram.org/apps>
 
 Desktop notifications are optional and require a freedesktop-compatible notification daemon such as Mako, Dunst, or SwayNotificationCenter.
