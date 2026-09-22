@@ -192,6 +192,24 @@ func TestArrowKeysMirrorHJKLByFocus(t *testing.T) {
 	}
 }
 
+func TestConversationLeftReturnsToChatsInEveryLayout(t *testing.T) {
+	for _, layout := range []Layout{LayoutWide, LayoutNormal, LayoutNarrow} {
+		for _, key := range []tea.Key{{Code: tea.KeyLeft}, {Code: 'h', Text: "h"}} {
+			action, ok := mapKeyPress(FocusConversation, tea.KeyPressMsg(key))
+			if !ok || action.Action != FocusPrevious {
+				t.Fatalf("layout %v key %#v mapped to (%#v, %t), want FocusPrevious", layout, key, action, ok)
+			}
+			state := InitialState()
+			state.Layout = layout
+			state.Focus = FocusConversation
+			got, _ := updateState(state, action)
+			if got.Focus != FocusChats {
+				t.Fatalf("layout %v key %#v focus = %v, want FocusChats", layout, key, got.Focus)
+			}
+		}
+	}
+}
+
 func TestReactionPickerKeyboardMappings(t *testing.T) {
 	for _, test := range []struct {
 		key  tea.Key

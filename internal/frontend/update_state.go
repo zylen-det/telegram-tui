@@ -4085,7 +4085,7 @@ func focusVisible(state State, focus Focus) bool {
 		if state.Focus == FocusChats {
 			return focus == FocusChats
 		}
-		return focus == FocusConversation || focus == FocusComposer
+		return focus == FocusChats || focus == FocusConversation || focus == FocusComposer
 	default:
 		return false
 	}
