@@ -172,6 +172,23 @@ func TestSelectBuildsRenderModelContinuation(t *testing.T) {
 	}
 }
 
+func TestSelectKeepsFocusedRowIndependentFromSelectedConversation(t *testing.T) {
+	state := InitialState()
+	state.Chats = []domain.Chat{{ID: 7, Title: "Selected"}, {ID: 9, Title: "Focused"}}
+	state.SelectedChat = 0
+	state.FocusedChat = 1
+	state.Messages[7] = []domain.Message{{ID: 1, ChatID: 7, Kind: domain.MessageText, Text: "selected body"}}
+	state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "focused body"}}
+
+	model := Select(state, time.UTC)
+	if !model.Chats[0].Selected || model.Chats[0].Focused || model.Chats[1].Selected || !model.Chats[1].Focused {
+		t.Fatalf("chat row selected/focused flags = %#v", model.Chats)
+	}
+	if model.ActiveChat.ID != 7 || len(model.Groups) != 1 || model.Groups[0].Messages[0].ChatID != 7 {
+		t.Fatalf("conversation followed focus instead of selection: active=%d groups=%#v", model.ActiveChat.ID, model.Groups)
+	}
+}
+
 func TestSelectInvalidSelectedChatLeavesConversationEmpty(t *testing.T) {
 	t.Parallel()
 

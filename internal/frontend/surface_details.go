@@ -8,7 +8,7 @@ import (
 )
 
 // buildDetailsLayer builds the details pane surface: a rounded pane root with
-// an intrinsic title, a close control, and the active chat's avatar, title,
+// an intrinsic title, a close control, and the info target chat's avatar, title,
 // username, and optional View image action. Interactions are absolute. An
 // empty viewport intersection returns a zero surface.
 func buildDetailsLayer(model ViewModel, styles renderStyles) surfaceResult {
@@ -39,7 +39,11 @@ func buildDetailsLayer(model ViewModel, styles renderStyles) surfaceResult {
 		return surfaceResult{Layer: pane.Layer, Rect: pane.Rect, Interactions: interactions, Cursor: pane.Cursor}
 	}
 
-	if model.ActiveChat.ID == 0 {
+	detailsChat := model.DetailsChat
+	if detailsChat.ID == 0 {
+		detailsChat = model.ActiveChat
+	}
+	if detailsChat.ID == 0 {
 		// Centered intrinsic "No conversation", clipped to inner width.
 		text := "No conversation"
 		width := min(inner.Dx(), displayWidth(text))
@@ -51,7 +55,7 @@ func buildDetailsLayer(model ViewModel, styles renderStyles) surfaceResult {
 		return surfaceResult{Layer: pane.Layer, Rect: pane.Rect, Interactions: interactions, Cursor: pane.Cursor}
 	}
 
-	row := activeChatSurfaceRow(model)
+	row := detailsChatSurfaceRow(model)
 
 	avatarWidth := min(12, inner.Dx())
 	avatarHeight := min(6, inner.Dy())
@@ -67,7 +71,7 @@ func buildDetailsLayer(model ViewModel, styles renderStyles) surfaceResult {
 		avatarZ = zControl
 	}
 	avatarLocal := image.Rect(avatarRect.Min.X-rect.Min.X, avatarRect.Min.Y-rect.Min.Y, avatarRect.Max.X-rect.Min.X, avatarRect.Max.Y-rect.Min.Y)
-	if avatarLayer := buildAvatarLayer(avatarLocal, row.Avatar, row.AvatarKey, model.ActiveChat.Title, styles, avatarZ); avatarLayer != nil {
+	if avatarLayer := buildAvatarLayer(avatarLocal, row.Avatar, row.AvatarKey, detailsChat.Title, styles, avatarZ); avatarLayer != nil {
 		if row.AvatarError != nil && avatarRect.Dx() == 12 && avatarRect.Dy() == 6 {
 			avatarLayer.ID("details:avatar-retry")
 			retry := ansi.Truncate("Retry", avatarLocal.Dx(), "")
@@ -85,7 +89,7 @@ func buildDetailsLayer(model ViewModel, styles renderStyles) surfaceResult {
 
 	// Centered title.
 	if y < inner.Max.Y {
-		titleText := model.ActiveChat.Title
+		titleText := detailsChat.Title
 		titleWidth := min(inner.Dx(), displayWidth(titleText))
 		titleClipped := ansi.Truncate(titleText, titleWidth, "")
 		titleContent := renderLine(styles.Emphasis, titleClipped, titleWidth)
@@ -95,8 +99,8 @@ func buildDetailsLayer(model ViewModel, styles renderStyles) surfaceResult {
 	}
 
 	// Optional @username.
-	if model.ActiveChat.Username != "" && y < inner.Max.Y {
-		userText := "@" + model.ActiveChat.Username
+	if detailsChat.Username != "" && y < inner.Max.Y {
+		userText := "@" + detailsChat.Username
 		userWidth := min(inner.Dx(), displayWidth(userText))
 		userClipped := ansi.Truncate(userText, userWidth, "")
 		userContent := renderLine(styles.Muted, userClipped, userWidth)
@@ -117,7 +121,7 @@ func buildDetailsLayer(model ViewModel, styles renderStyles) surfaceResult {
 		}
 		return text
 	}
-	for index, item := range DetailsActionItems(model.ActiveChat) {
+	for index, item := range DetailsActionItems(detailsChat) {
 		if y >= inner.Max.Y {
 			break
 		}

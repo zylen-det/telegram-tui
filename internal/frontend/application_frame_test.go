@@ -77,23 +77,23 @@ func TestApplicationFrameBaseSurfacesProduceSemanticHits(t *testing.T) {
 			t.Errorf("base frame missing %q", want)
 		}
 	}
-	var selectChat, focusPane, composerSubmit bool
+	var focusChat, focusPane, composerSubmit bool
 	for _, hit := range frame.Hits {
 		switch {
-		case hit.Click.Action == SelectChat && hit.Click.ChatID == 1:
-			selectChat = true
+		case hit.Click.Action == FocusChat && hit.Click.ChatID == 1:
+			focusChat = true
 		case hit.Click.Action == FocusPane:
 			focusPane = true
 		case hit.Click.Action == ComposerSubmit:
 			composerSubmit = true
 		}
 	}
-	if !selectChat || !focusPane || !composerSubmit {
-		t.Fatalf("base semantic hits missing (selectChat=%t focusPane=%t submit=%t)", selectChat, focusPane, composerSubmit)
+	if !focusChat || !focusPane || !composerSubmit {
+		t.Fatalf("base semantic hits missing (focusChat=%t focusPane=%t submit=%t)", focusChat, focusPane, composerSubmit)
 	}
 }
 
-// 3: every modal/picker/auth topology clears underlying SelectChat/FocusPane hits.
+// 3: every modal/picker/auth topology clears underlying FocusChat/FocusPane hits.
 func TestApplicationFrameOverlaysSuppressUnderlyingHits(t *testing.T) {
 	tops := []struct {
 		name  string
@@ -122,7 +122,7 @@ func TestApplicationFrameOverlaysSuppressUnderlyingHits(t *testing.T) {
 			}
 			frame := composeApplication(model, time.Local)
 			for _, hit := range frame.Hits {
-				if hit.Click.Action == SelectChat || hit.Click.Action == FocusPane || hit.Click.Action == ComposerSubmit {
+				if hit.Click.Action == FocusChat || hit.Click.Action == FocusPane || hit.Click.Action == ComposerSubmit {
 					t.Errorf("overlay %q retained underlying hit: %#v", tc.name, hit)
 				}
 			}
@@ -393,9 +393,9 @@ func TestApplicationFrameReactionPickerSelectionGeometryStable(t *testing.T) {
 			}
 		}
 
-		// Underlying SelectChat/FocusPane hits must remain absent.
+		// Underlying FocusChat/FocusPane hits must remain absent.
 		for _, hit := range frame.Hits {
-			if hit.Click.Action == SelectChat || hit.Click.Action == FocusPane {
+			if hit.Click.Action == FocusChat || hit.Click.Action == FocusPane {
 				t.Errorf("selection %d retained underlying hit: %#v", selected, hit)
 			}
 		}
@@ -559,7 +559,7 @@ func TestApplicationFramePhotoSend(t *testing.T) {
 		frame := composeApplication(basePhoto, time.Local)
 		for _, hit := range frame.Hits {
 			switch hit.Click.Action {
-			case SelectChat, FocusPane, ComposerSubmit, OpenPhotoSend:
+			case FocusChat, FocusPane, ComposerSubmit, OpenPhotoSend:
 				t.Errorf("underlying hit leaked: %#v", hit)
 			}
 		}

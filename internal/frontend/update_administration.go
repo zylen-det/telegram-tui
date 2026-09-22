@@ -14,10 +14,10 @@ type AdministrationMenuItem struct {
 }
 
 func openGroupPermissions(state State) (State, []Effect) {
-	if state.Focus != FocusDetails || state.SelectedChat < 0 || state.SelectedChat >= len(state.Chats) {
+	chat, ok := detailsChat(state)
+	if state.Focus != FocusDetails || !ok {
 		return state, nil
 	}
-	chat := state.Chats[state.SelectedChat]
 	if (chat.Kind != domain.ChatBasicGroup && chat.Kind != domain.ChatSupergroup) || !chat.CanRestrictMembers {
 		return state, nil
 	}
@@ -35,7 +35,7 @@ func openMemberAdministration(state State) (State, []Effect) {
 	userID := state.Members.Detail.UserID
 	id := allocateRequestID(&state)
 	isForum := false
-	if index := state.SelectedChat; index >= 0 && index < len(state.Chats) && state.Chats[index].ID == chatID {
+	if index := chatIndex(state.Chats, chatID); index >= 0 {
 		isForum = state.Chats[index].IsForum
 	}
 	state.Administration = &AdministrationState{RequestID: id, ChatID: chatID, UserID: userID, PreviousFocus: FocusMembers, ReturnMembers: state.Members, Mode: AdministrationMemberMenu, IsForum: isForum, Loading: true, MemberLoading: true}

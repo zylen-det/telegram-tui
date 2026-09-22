@@ -483,10 +483,10 @@ func TestSelectingForumChatDoesNotOpenIt(t *testing.T) {
 		state.SelectedChat = 1
 		return state
 	}
-	checkSelection := func(t *testing.T, name string, selected State) {
+	checkSelection := func(t *testing.T, name string, selected State, wantSelected int) {
 		t.Helper()
-		if selected.SelectedChat != 0 {
-			t.Fatalf("%s: selected chat = %d", name, selected.SelectedChat)
+		if selected.SelectedChat != wantSelected || selected.FocusedChat != 0 {
+			t.Fatalf("%s: selected/focused chat = %d/%d, want %d/0", name, selected.SelectedChat, selected.FocusedChat, wantSelected)
 		}
 		if selected.Focus != FocusChats {
 			t.Fatalf("%s: focus = %v, want FocusChats", name, selected.Focus)
@@ -497,10 +497,10 @@ func TestSelectingForumChatDoesNotOpenIt(t *testing.T) {
 	}
 
 	selected, _ := updateState(base(), ActionReceived{Action: SelectChat, ChatID: 7})
-	checkSelection(t, "select chat", selected)
+	checkSelection(t, "select chat", selected, 0)
 
 	selected, _ = updateState(base(), ActionReceived{Action: SelectPrevious})
-	checkSelection(t, "chat navigation", selected)
+	checkSelection(t, "chat navigation", selected, 1)
 
 	opened, _ := updateState(selected, ActionReceived{Action: OpenChat})
 	if opened.Focus != FocusConversation || !opened.ShowAll[7] {

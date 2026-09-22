@@ -88,9 +88,9 @@ Credential lookup order is environment → config file → first-run prompt.
 
 | Action | Keys | Mouse |
 |---|---|---|
-| Move selection | `j` / `k` or Up / Down | Click a row or use the wheel |
+| Move chat focus / list selection | `j` / `k` or Up / Down | Click a row or use the wheel |
 | Move between panes | `h` / `l` or Shift-Tab / Tab | Click a pane |
-| Open or activate | Enter | Click the action |
+| Open focused chat actions / activate | Enter | Click the action |
 | Close or go back | Esc; `q` inside a modal | Click close or outside |
 | Open chat details | `i` or F2 | Click Info |
 | Search from the chat list | `/` | Click a result |
@@ -103,6 +103,8 @@ Credential lookup order is environment → config file → first-run prompt.
 | Send media or a document | Ctrl+O | Click `[Photo]` |
 | Open the sticker picker | Ctrl+S | Click `[Sticker]` |
 | Stop the application | Ctrl-C | — |
+
+Moving through the chat list changes the focused row without replacing the selected conversation. Press Enter for actions on the focused chat, then choose **Open chat** to make it the selected conversation.
 
 Typing `/` at the beginning of the composer opens bot-command completion where available. Plain `q` never quits the process; it only closes the current modal or page.
 

@@ -111,6 +111,18 @@ func TestChatRowSelectedUnselectedDimensionsAndContent(t *testing.T) {
 		}
 	}
 
+	// Focused but not selected: the title carries the focus accent while the
+	// row remains on the terminal background.
+	focused := chatRowFor("Focused", 3, false)
+	focused.Focused = true
+	fCanvas, _, _ := chatRowSurface(focused, rect, time.Local, styles)
+	if got := colorOf(fCanvas.CellAt(rect.Min.X+7, rect.Min.Y).Style.Fg); got != rgba(accentColor) {
+		t.Errorf("focused title foreground = %v, want accentColor", got)
+	}
+	if got := fCanvas.CellAt(rect.Min.X+8, rect.Min.Y).Style.Bg; got != nil {
+		t.Errorf("focused unselected background = %v, want nil", colorOf(got))
+	}
+
 	// Selected.
 	selected := chatRowFor("Weekend dev", 2, true)
 	sCanvas, _, sSurface := chatRowSurface(selected, rect, time.Local, styles)
@@ -161,8 +173,8 @@ func TestChatRowFullHitActionAndWheel(t *testing.T) {
 	if !interaction.Rect.Eq(rect) {
 		t.Errorf("interaction rect = %v, want %v", interaction.Rect, rect)
 	}
-	if interaction.Click.Action != SelectChat || interaction.Click.ChatID != 7 {
-		t.Errorf("click = %#v, want SelectChat/7", interaction.Click)
+	if interaction.Click.Action != FocusChat || interaction.Click.ChatID != 7 {
+		t.Errorf("click = %#v, want FocusChat/7", interaction.Click)
 	}
 	if interaction.WheelUp.Action != SelectPrevious {
 		t.Errorf("wheel up = %#v, want SelectPrevious", interaction.WheelUp)

@@ -104,7 +104,7 @@ func confirmationLabel(action Action) string {
 }
 
 func openChatActionMenu(state State) (State, []Effect) {
-	chatID, ok := activeChatID(state)
+	chatID, ok := focusedChatID(state)
 	if !ok || state.Focus != FocusChats {
 		return state, nil
 	}
@@ -173,15 +173,17 @@ func reduceChatActionMenu(state State, event ActionReceived) (State, []Effect) {
 	case OpenChat:
 		state.Focus = menu.PreviousFocus
 		state.ChatActions = nil
-		return openActiveChatFromList(state)
+		return openChatFromList(state, menu.ChatID)
 	case ViewChatInfo:
 		state.Focus = menu.PreviousFocus
 		state.ChatActions = nil
-		if state.DetailsOpen {
-			state.Focus = FocusDetails
-			return state, nil
-		}
-		return reduceAction(state, ActionReceived{Action: ToggleDetails})
+		state.FocusBeforeInfo = state.Focus
+		state.DetailsOpen = true
+		state.DetailsChatID = menu.ChatID
+		state.DetailsSelected = 0
+		state.Focus = FocusDetails
+		clampDetailsSelection(&state)
+		return state, nil
 	}
 	for _, item := range items {
 		if item.Action != event.Action {
@@ -198,17 +200,45 @@ func reduceChatActionMenu(state State, event ActionReceived) (State, []Effect) {
 }
 
 func openActiveChatFromList(state State) (State, []Effect) {
-	chatID, ok := activeChatID(state)
+	chatID, ok := focusedChatID(state)
 	if !ok {
 		return state, nil
 	}
+	return openChatFromList(state, chatID)
+}
+
+func openChatFromList(state State, chatID domain.ChatID) (State, []Effect) {
+	state, commands := selectChatForOpen(state, chatID)
+	activeID, ok := activeChatID(state)
+	if !ok || activeID != chatID {
+		return state, commands
+	}
 	if state.Chats[state.SelectedChat].IsForum {
-		return activateAllTopics(state, chatID)
+		opened, openCommands := activateAllTopics(state, chatID)
+		return opened, append(commands, openCommands...)
 	}
 	state.Focus = FocusConversation
-	commands := requestHistoryIfAbsent(&state, chatID)
+	commands = append(commands, requestHistoryIfAbsent(&state, chatID)...)
 	commands = append(commands, requestMissingMessageAvatars(&state, state.Messages[chatID])...)
 	return state, commands
+}
+
+// selectChatForOpen commits the focused chat as the selected conversation.
+// Reopening the already-selected chat does not churn TDLib's open-chat state.
+func selectChatForOpen(state State, chatID domain.ChatID) (State, []Effect) {
+	index := chatIndex(state.Chats, chatID)
+	if index < 0 {
+		return state, nil
+	}
+	state.FocusedChat = index
+	if activeID, ok := activeChatID(state); ok && activeID == chatID {
+		if state.DetailsOpen {
+			state.DetailsChatID = chatID
+			clampDetailsSelection(&state)
+		}
+		return state, nil
+	}
+	return reduceAction(state, ActionReceived{Action: SelectChat, ChatID: chatID})
 }
 
 func executeChatAction(state State, action Action) (State, []Effect) {
@@ -339,17 +369,36 @@ func reduceChatActionApplied(state State, event ChatActionApplied) (State, []Eff
 func removeChatFromMainList(state *State, chatID domain.ChatID, deleteData bool) {
 	index := chatIndex(state.Chats, chatID)
 	if index >= 0 {
+		selectedID, hadSelected := activeChatID(*state)
+		focusedID, hadFocused := focusedChatID(*state)
+		selectedRemoved := hadSelected && selectedID == chatID
+		focusedRemoved := hadFocused && focusedID == chatID
+
 		state.Chats = append(state.Chats[:index], state.Chats[index+1:]...)
+		if state.DetailsChatID == chatID {
+			state.DetailsChatID = 0
+			state.DetailsOpen = false
+			if state.Focus == FocusDetails {
+				state.Focus = state.FocusBeforeInfo
+			}
+		}
 		if len(state.Chats) == 0 {
+			state.FocusedChat = -1
 			state.SelectedChat = 0
 			state.SelectedMessageChat = 0
 			state.SelectedMessage = 0
 		} else {
-			if index < state.SelectedChat {
-				state.SelectedChat--
+			if selectedRemoved || !hadSelected {
+				state.SelectedChat = min(index, len(state.Chats)-1)
+				selectNewestMessage(state, state.Chats[state.SelectedChat].ID)
+			} else {
+				preserveChatSelection(state, selectedID)
 			}
-			state.SelectedChat = max(0, min(state.SelectedChat, len(state.Chats)-1))
-			selectNewestMessage(state, state.Chats[state.SelectedChat].ID)
+			if focusedRemoved || !hadFocused {
+				state.FocusedChat = min(index, len(state.Chats)-1)
+			} else {
+				preserveChatFocus(state, focusedID)
+			}
 		}
 	}
 	if deleteData {

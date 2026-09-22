@@ -13,6 +13,7 @@ import (
 type ChatRow struct {
 	Chat        domain.Chat
 	Draft       domain.Draft
+	Focused     bool
 	Selected    bool
 	AvatarKey   string
 	Avatar      pixel.Avatar
@@ -42,6 +43,7 @@ type ViewModel struct {
 	HistoryError           *domain.AppError
 	Draft                  string
 	DetailsOpen            bool
+	DetailsChat            domain.Chat
 	DetailsSelected        int
 	MemberDetailAvatar     pixel.Avatar
 	Modal                  *ModalState
@@ -141,6 +143,8 @@ func Select(state State, location *time.Location) ViewModel {
 		model.StickerThumbnails = append(model.StickerThumbnails, RenderedStickerThumbnail{StickerFileID: fileID, Block: block})
 	}
 
+	focusedChat := focusedChatIndex(state)
+	detailsIndex := detailsChatIndex(state)
 	for index, chat := range state.Chats {
 		key := chat.Avatar.UniqueID + ":chat-list"
 		avatar := state.Avatars[key]
@@ -151,10 +155,14 @@ func Select(state State, location *time.Location) ViewModel {
 				ReplyToMessageID: state.DraftReplies[chat.ID],
 				Date:             state.DraftDates[chat.ID],
 			},
+			Focused:     index == focusedChat,
 			Selected:    index == state.SelectedChat,
 			AvatarKey:   key,
 			Avatar:      cloneAvatar(avatar.Cells),
 			AvatarError: cloneAppError(avatar.Error),
+		}
+		if index == detailsIndex {
+			model.DetailsChat = chat
 		}
 	}
 

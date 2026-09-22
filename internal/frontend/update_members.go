@@ -7,11 +7,11 @@ import (
 )
 
 func openMembers(state State) (State, []Effect) {
-	chatID, ok := activeChatID(state)
+	chat, ok := detailsChat(state)
 	if !ok || state.Focus != FocusDetails {
 		return state, nil
 	}
-	chat := state.Chats[state.SelectedChat]
+	chatID := chat.ID
 	if chat.Kind != domain.ChatBasicGroup && chat.Kind != domain.ChatSupergroup && chat.Kind != domain.ChatChannel {
 		return state, nil
 	}
@@ -22,7 +22,7 @@ func openMembers(state State) (State, []Effect) {
 		PreviousFocus: state.Focus,
 		Loading:       true,
 	}
-	if count := detailsActionCount(state.Chats[state.SelectedChat]); count > 1 {
+	if count := detailsActionCount(chat); count > 1 {
 		state.DetailsSelected = 1
 	}
 	state.Focus = FocusMembers

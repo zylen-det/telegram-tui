@@ -372,7 +372,7 @@ func TestForwardPickerSurfaceListsChatTitlesWithoutContentPreview(t *testing.T) 
 			destination1 = true
 		case hit.Click.Action == Activate && hit.Click.ChatID == 2:
 			destination2 = true
-		case hit.Click.Action == SelectChat:
+		case hit.Click.Action == FocusChat:
 			underlying++
 		}
 	}
@@ -529,7 +529,7 @@ func TestReactionPickerSurfaceListsPaletteEmojis(t *testing.T) {
 		switch {
 		case hit.Click.Action == Activate:
 			activateHits++
-		case hit.Click.Action == SelectChat:
+		case hit.Click.Action == FocusChat:
 			underlying++
 		}
 	}
@@ -628,7 +628,7 @@ func TestActionModalIsCenteredAndSuppressesUnderlyingHits(t *testing.T) {
 		t.Fatal("centered action modal content missing")
 	}
 	for _, hit := range model.hitRegions() {
-		if hit.Click.Action == SelectChat || hit.Click.Action == FocusPane {
+		if hit.Click.Action == FocusChat || hit.Click.Action == FocusPane {
 			t.Fatalf("action modal retained underlying hit: %#v", hit)
 		}
 	}
@@ -669,7 +669,7 @@ func TestStaleHitClearedAfterResizeAndModalTopologyChange(t *testing.T) {
 	t.Run("resize update then view", func(t *testing.T) {
 		model := mainSurfaceModel(t, 100, 24)
 		_ = model.View()
-		stale := selectChatHit(t, model.hitRegions(), 1)
+		stale := focusChatHit(t, model.hitRegions(), 1)
 		model, _ = updateAppModel(t, model, tea.WindowSizeMsg{Width: 59, Height: 17})
 		_ = model.View()
 		before := model.Snapshot().SelectedChat
@@ -682,14 +682,14 @@ func TestStaleHitClearedAfterResizeAndModalTopologyChange(t *testing.T) {
 	t.Run("modal view excludes underlying hits", func(t *testing.T) {
 		model := mainSurfaceModel(t, 100, 24)
 		_ = model.View()
-		stale := selectChatHit(t, model.hitRegions(), 1)
+		stale := focusChatHit(t, model.hitRegions(), 1)
 		state := model.Snapshot()
 		state.Focus = FocusModal
 		state.Modal = &ModalState{Title: "Avatar", Loading: true, PreviousFocus: FocusConversation}
 		model.state = &state
 		_ = model.View()
 		for _, hit := range model.hitRegions() {
-			if hit.Click.Action == SelectChat || hit.Click.Action == FocusPane {
+			if hit.Click.Action == FocusChat || hit.Click.Action == FocusPane {
 				t.Fatalf("modal topology retained underlying hit: %#v", hit)
 			}
 		}
@@ -722,14 +722,14 @@ func patternedAvatar(t *testing.T, width, height int) pixel.Avatar {
 	return avatar
 }
 
-func selectChatHit(t *testing.T, hits HitMap, chatID domain.ChatID) Hit {
+func focusChatHit(t *testing.T, hits HitMap, chatID domain.ChatID) Hit {
 	t.Helper()
 	for _, hit := range hits {
-		if hit.Click.Action == SelectChat && hit.Click.ChatID == chatID {
+		if hit.Click.Action == FocusChat && hit.Click.ChatID == chatID {
 			return hit
 		}
 	}
-	t.Fatalf("no SelectChat hit for chat %d in %#v", chatID, hits)
+	t.Fatalf("no FocusChat hit for chat %d in %#v", chatID, hits)
 	return Hit{}
 }
 

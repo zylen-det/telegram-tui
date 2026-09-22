@@ -39,6 +39,73 @@ func TestChatListEnterOpensActionsAndOpenChatIsFirst(t *testing.T) {
 	}
 }
 
+func TestChatListActionsTargetFocusedChatWhileConversationStaysSelected(t *testing.T) {
+	state := chatActionState(domain.Chat{ID: 1, Title: "Selected", Kind: domain.ChatPrivate})
+	state.Chats = append(state.Chats, domain.Chat{ID: 2, Title: "Focused", Kind: domain.ChatPrivate, Muted: false})
+	state.FocusedChat = 1
+	state.SelectedChat = 0
+	state.Messages[1] = []domain.Message{{ID: 11, ChatID: 1, Text: "selected conversation"}}
+
+	focused, commands := updateState(state, ActionReceived{Action: SelectPrevious})
+	if len(commands) != 0 || focused.FocusedChat != 0 || focused.SelectedChat != 0 {
+		t.Fatalf("focus-only navigation = focused:%d selected:%d commands:%#v", focused.FocusedChat, focused.SelectedChat, commands)
+	}
+
+	state.FocusedChat = 1
+	opened, commands := updateState(state, ActionReceived{Action: OpenChatActionMenu})
+	if len(commands) != 0 || opened.ChatActions == nil || opened.ChatActions.ChatID != 2 || opened.SelectedChat != 0 {
+		t.Fatalf("focused menu = %#v selected:%d commands:%#v", opened.ChatActions, opened.SelectedChat, commands)
+	}
+	working, commands := updateState(opened, ActionReceived{Action: MuteChat})
+	if len(commands) != 1 || working.SelectedChat != 0 {
+		t.Fatalf("focused action changed conversation: selected:%d commands:%#v", working.SelectedChat, commands)
+	}
+	command, ok := commands[0].(ApplyChatActionCommand)
+	if !ok || command.ChatID != 2 || command.Action != telegram.ChatActionMute {
+		t.Fatalf("focused action command = %#v", commands[0])
+	}
+
+	model := Select(working, nil)
+	if model.ActiveChat.ID != 1 || model.ChatActions == nil || len(displayedChatActionRows(model)) == 0 {
+		t.Fatalf("projection lost selected conversation or focused menu: active=%d menu=%#v", model.ActiveChat.ID, model.ChatActions)
+	}
+
+	infoMenu, _ := updateState(state, ActionReceived{Action: OpenChatActionMenu})
+	infoMenu.ChatActions.Selected = 1
+	info, commands := updateState(infoMenu, ActionReceived{Action: Activate})
+	infoModel := Select(info, nil)
+	if len(commands) != 0 || info.SelectedChat != 0 || info.DetailsChatID != 2 || infoModel.ActiveChat.ID != 1 || infoModel.DetailsChat.ID != 2 {
+		t.Fatalf("focused info changed conversation: selected=%d details=%d active=%d detail=%d commands:%#v", info.SelectedChat, info.DetailsChatID, infoModel.ActiveChat.ID, infoModel.DetailsChat.ID, commands)
+	}
+
+	reopened, _ := updateState(state, ActionReceived{Action: OpenChatActionMenu})
+	selected, commands := updateState(reopened, ActionReceived{Action: Activate})
+	if selected.SelectedChat != 1 || selected.FocusedChat != 1 || selected.Focus != FocusConversation || len(commands) == 0 {
+		t.Fatalf("open focused chat = focused:%d selected:%d focus:%v commands:%#v", selected.FocusedChat, selected.SelectedChat, selected.Focus, commands)
+	}
+	if active := Select(selected, nil).ActiveChat.ID; active != 2 {
+		t.Fatalf("conversation active chat = %d, want focused chat 2", active)
+	}
+}
+
+func TestRemovingFocusedChatKeepsSelectedConversation(t *testing.T) {
+	state := chatActionState(domain.Chat{ID: 1, Title: "Selected", Kind: domain.ChatPrivate})
+	state.Chats = append(state.Chats, domain.Chat{ID: 2, Title: "Focused", Kind: domain.ChatPrivate})
+	state.SelectedChat = 0
+	state.FocusedChat = 1
+	opened, _ := updateState(state, ActionReceived{Action: OpenChatActionMenu})
+	working, commands := updateState(opened, ActionReceived{Action: ArchiveChat})
+	request := commands[0].(ApplyChatActionCommand)
+
+	applied, commands := updateState(working, ChatActionApplied{RequestID: request.RequestID, ChatID: 2, Action: telegram.ChatActionArchive})
+	if len(applied.Chats) != 1 || applied.Chats[0].ID != 1 || applied.SelectedChat != 0 || applied.FocusedChat != 0 {
+		t.Fatalf("archive focused chat = chats:%#v selected:%d focused:%d", applied.Chats, applied.SelectedChat, applied.FocusedChat)
+	}
+	if len(commands) != 1 || commands[0] != (CloseChatCommand{ChatID: 2}) {
+		t.Fatalf("archive commands = %#v", commands)
+	}
+}
+
 func TestChatListOpenActionBypassesActions(t *testing.T) {
 	state := chatActionState(domain.Chat{ID: 9, Title: "Group", Kind: domain.ChatSupergroup, IsMember: true})
 	state.Layout = LayoutNarrow

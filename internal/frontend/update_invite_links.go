@@ -59,12 +59,12 @@ func InviteLinkMenuItems(links *InviteLinksState) []InviteLinkMenuItem {
 }
 
 func openInviteLinks(state State) (State, []Effect) {
-	chatID, ok := activeChatID(state)
-	if !ok || state.Focus != FocusDetails || state.SelectedChat < 0 || state.SelectedChat >= len(state.Chats) {
+	chat, ok := detailsChat(state)
+	if !ok || state.Focus != FocusDetails {
 		return state, nil
 	}
-	chat := state.Chats[state.SelectedChat]
-	if chat.ID != chatID || !chat.CanManageInviteLinks || (chat.Kind != domain.ChatBasicGroup && chat.Kind != domain.ChatSupergroup && chat.Kind != domain.ChatChannel) {
+	chatID := chat.ID
+	if !chat.CanManageInviteLinks || (chat.Kind != domain.ChatBasicGroup && chat.Kind != domain.ChatSupergroup && chat.Kind != domain.ChatChannel) {
 		return state, nil
 	}
 	requestID := allocateRequestID(&state)

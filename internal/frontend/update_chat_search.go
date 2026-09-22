@@ -368,10 +368,14 @@ func clampChatSearchSelection(search *ChatSearchState) {
 // and navigates back to the previous focus.
 func openChatFromSearchResult(state State, chat domain.Chat) (State, []Effect) {
 	previousID, hadPrevious := activeChatID(state)
+	focusedID, hadFocused := focusedChatID(state)
 	upsertChat(&state.Chats, chat)
 	sortChats(state.Chats)
 	if hadPrevious {
 		preserveChatSelection(&state, previousID)
+	}
+	if hadFocused {
+		preserveChatFocus(&state, focusedID)
 	}
 
 	state.ChatSearch = nil
@@ -390,6 +394,7 @@ func openChatFromSearchResult(state State, chat domain.Chat) (State, []Effect) {
 // message context so the user lands on the exact matched message.
 func openChatFromMessageResult(state State, msg domain.Message) (State, []Effect) {
 	previousID, hadPrevious := activeChatID(state)
+	focusedID, hadFocused := focusedChatID(state)
 	chat := findChatByID(state.Chats, msg.ChatID)
 	if chat.ID == 0 {
 		chat = domain.Chat{ID: msg.ChatID}
@@ -398,6 +403,9 @@ func openChatFromMessageResult(state State, msg domain.Message) (State, []Effect
 	sortChats(state.Chats)
 	if hadPrevious {
 		preserveChatSelection(&state, previousID)
+	}
+	if hadFocused {
+		preserveChatFocus(&state, focusedID)
 	}
 
 	state.ChatSearch = nil

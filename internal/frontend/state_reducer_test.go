@@ -661,12 +661,13 @@ func TestChatUpsertSortsPreservesSelectedIDAndRequestsOnlyNewAvatar(t *testing.T
 	state := InitialState()
 	state.Chats = []domain.Chat{{ID: 7, Order: 10}, {ID: 9, Order: 20}}
 	state.SelectedChat = 0
+	state.FocusedChat = 1
 	state.Avatars["existing:chat-list"] = AvatarState{Loading: true}
 	updated := domain.Chat{ID: 7, Title: "Mina", Order: 30, Avatar: domain.AvatarRef{UniqueID: "new"}}
 
 	got, commands := updateState(state, TelegramEvent{Value: telegram.ChatUpserted{Chat: updated}})
-	if got.Chats[0].ID != 7 || got.SelectedChat != 0 || got.Chats[0].Title != "Mina" {
-		t.Fatalf("upserted chats = %#v, selected=%d", got.Chats, got.SelectedChat)
+	if got.Chats[0].ID != 7 || got.SelectedChat != 0 || got.FocusedChat != 1 || got.Chats[0].Title != "Mina" {
+		t.Fatalf("upserted chats = %#v, selected=%d focused=%d", got.Chats, got.SelectedChat, got.FocusedChat)
 	}
 	assertCommands(t, commands, []Effect{RenderAvatar{Key: "new:chat-list", Ref: updated.Avatar, Role: avatar.RoleChatList}})
 	got, commands = updateState(got, TelegramEvent{Value: telegram.ChatUpserted{Chat: updated}})
@@ -684,30 +685,20 @@ func TestSelectionFocusAndCloseActionsRespectLayoutAndDrafts(t *testing.T) {
 	state.Drafts[2] = "two"
 	state.History[1] = HistoryState{Done: true}
 
-	selected, commands := updateState(state, ActionReceived{Action: SelectNext})
-	if selected.Chats[selected.SelectedChat].ID != 2 || selected.Drafts[1] != "one" || selected.Drafts[2] != "two" {
-		t.Fatalf("selected state = %#v", selected)
+	focused, commands := updateState(state, ActionReceived{Action: SelectNext})
+	if focused.FocusedChat != 1 || focused.SelectedChat != 0 || focused.Drafts[1] != "one" || focused.Drafts[2] != "two" {
+		t.Fatalf("focused state = %#v", focused)
 	}
-	if len(commands) != 3 {
-		t.Fatalf("history commands = %#v", commands)
+	if len(commands) != 0 {
+		t.Fatalf("focus navigation commands = %#v, want none", commands)
 	}
-	// Verify commands: LoadMessages, CloseChatCommand, OpenChatCommand
-	if _, ok := commands[0].(LoadMessages); !ok {
-		t.Fatalf("expected LoadMessages, got %T", commands[0])
+	menu, _ := updateState(focused, ActionReceived{Action: Activate})
+	if menu.Focus != FocusChatActions || menu.ChatActions == nil || menu.ChatActions.ChatID != 2 {
+		t.Fatalf("wide activate did not open focused chat actions: %#v", menu.ChatActions)
 	}
-	if _, ok := commands[1].(CloseChatCommand); !ok {
-		t.Fatalf("expected CloseChatCommand, got %T", commands[1])
-	}
-	if _, ok := commands[2].(OpenChatCommand); !ok {
-		t.Fatalf("expected OpenChatCommand, got %T", commands[2])
-	}
-	menu, _ := updateState(selected, ActionReceived{Action: Activate})
-	if menu.Focus != FocusChatActions || menu.ChatActions == nil {
-		t.Fatalf("wide activate did not open chat actions: %#v", menu.ChatActions)
-	}
-	activated, _ := updateState(menu, ActionReceived{Action: Activate})
-	if activated.Focus != FocusConversation {
-		t.Fatalf("wide activate focus = %v", activated.Focus)
+	activated, commands := updateState(menu, ActionReceived{Action: Activate})
+	if activated.Focus != FocusConversation || activated.SelectedChat != 1 || len(commands) == 0 {
+		t.Fatalf("wide activate = focus:%v selected:%d commands:%#v", activated.Focus, activated.SelectedChat, commands)
 	}
 	composer, _ := updateState(activated, ActionReceived{Action: FocusNext})
 	if composer.Focus != FocusComposer {
@@ -728,7 +719,7 @@ func TestSelectionFocusAndCloseActionsRespectLayoutAndDrafts(t *testing.T) {
 	}
 }
 
-func TestUnreadAndMentionNavigationWrapsWithOrdinarySelectionEffects(t *testing.T) {
+func TestUnreadAndMentionNavigationWrapsFocusedChatWithoutSelecting(t *testing.T) {
 	state := InitialState()
 	state.Layout = LayoutWide
 	state.Focus = FocusChats
@@ -753,11 +744,11 @@ func TestUnreadAndMentionNavigationWrapsWithOrdinarySelectionEffects(t *testing.
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			input := cloneReducerState(state)
-			input.SelectedChat = test.start
+			input.FocusedChat = test.start
 			got, gotCommands := updateState(input, ActionReceived{Action: test.action})
-			want, wantCommands := updateState(input, ActionReceived{Action: SelectChat, ChatID: test.wantID})
+			want, wantCommands := updateState(input, ActionReceived{Action: FocusChat, ChatID: test.wantID})
 			if !reflect.DeepEqual(got, want) || !reflect.DeepEqual(gotCommands, wantCommands) {
-				t.Fatalf("navigation result = (%#v, %#v), want ordinary selection (%#v, %#v)", got, gotCommands, want, wantCommands)
+				t.Fatalf("navigation result = (%#v, %#v), want ordinary focus (%#v, %#v)", got, gotCommands, want, wantCommands)
 			}
 		})
 	}

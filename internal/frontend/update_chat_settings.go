@@ -86,10 +86,10 @@ func ChatSettingsMenuItems(s *ChatSettingsState) []ChatSettingsMenuItem {
 }
 
 func openChatSettings(state State) (State, []Effect) {
-	if state.Focus != FocusDetails || state.SelectedChat < 0 || state.SelectedChat >= len(state.Chats) {
+	chat, ok := detailsChat(state)
+	if state.Focus != FocusDetails || !ok {
 		return state, nil
 	}
-	chat := state.Chats[state.SelectedChat]
 	if chat.Kind != domain.ChatBasicGroup && chat.Kind != domain.ChatSupergroup && chat.Kind != domain.ChatChannel {
 		return state, nil
 	}
@@ -271,8 +271,7 @@ func validChatSlowMode(v int) bool {
 }
 
 func chatSettingsActive(state State, id domain.ChatID) bool {
-	active, ok := activeChatID(state)
-	return ok && active == id
+	return id != 0 && chatIndex(state.Chats, id) >= 0
 }
 func reduceChatSettingsLoaded(state State, e ChatSettingsLoaded) (State, []Effect) {
 	s := state.ChatSettings

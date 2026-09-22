@@ -15,7 +15,8 @@ func chatActionFrame(bounds image.Rectangle) image.Rectangle {
 
 func buildChatActionLayer(model ViewModel, styles renderStyles, selectorView string) surfaceResult {
 	menu := model.ChatActions
-	if menu == nil || model.ActiveChat.ID == 0 || menu.ChatID != model.ActiveChat.ID {
+	_, ok := chatActionTarget(model)
+	if menu == nil || !ok {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
 	title := "Chat actions"
@@ -29,7 +30,29 @@ func buildChatActionLayer(model ViewModel, styles renderStyles, selectorView str
 // displayedChatActionRows is the chat action modal's single row source for one
 // view model.
 func displayedChatActionRows(model ViewModel) []modalRowSpec {
-	return chatActionRows(model.ActiveChat, model.ChatActions)
+	chat, ok := chatActionTarget(model)
+	if !ok {
+		return nil
+	}
+	return chatActionRows(chat, model.ChatActions)
+}
+
+func chatActionTarget(model ViewModel) (domain.Chat, bool) {
+	if model.ChatActions == nil {
+		return domain.Chat{}, false
+	}
+	for _, row := range model.Chats {
+		if row.Chat.ID == model.ChatActions.ChatID {
+			return row.Chat, true
+		}
+	}
+	// Keep direct/standalone view models compatible when they only publish the
+	// active chat, while production resolves the menu-owned focused identity
+	// from Chats above.
+	if model.ActiveChat.ID == model.ChatActions.ChatID {
+		return model.ActiveChat, true
+	}
+	return domain.Chat{}, false
 }
 
 // chatActionRows is the single row source for the chat action modal: one row

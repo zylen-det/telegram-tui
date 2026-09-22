@@ -112,6 +112,7 @@ const (
 	JoinChat
 	ConfirmChatAction
 	CancelChatAction
+	FocusChat
 )
 
 type Focus uint8

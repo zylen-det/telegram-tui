@@ -672,8 +672,7 @@ func updateState(input State, raw Event) (State, []Effect) {
 }
 
 func administrationChatActive(state State, chatID domain.ChatID) bool {
-	activeID, ok := activeChatID(state)
-	return ok && activeID == chatID
+	return chatID != 0 && chatIndex(state.Chats, chatID) >= 0
 }
 
 func reduceTelegramUpdate(state State, event TelegramEvent) (State, []Effect) {
@@ -753,6 +752,7 @@ func reduceTelegramUpdate(state State, event TelegramEvent) (State, []Effect) {
 		state.Connection = update.State
 	case telegram.ChatUpserted:
 		selectedID, _ := activeChatID(state)
+		focusedID, _ := focusedChatID(state)
 		if update.Chat.IsArchived && (state.ChatActions == nil || state.ChatActions.ChatID != update.Chat.ID || !state.ChatActions.Working) {
 			removeChatFromMainList(&state, update.Chat.ID, false)
 			if state.ChatActions != nil && state.ChatActions.ChatID == update.Chat.ID {
@@ -764,6 +764,7 @@ func reduceTelegramUpdate(state State, event TelegramEvent) (State, []Effect) {
 		upsertChat(&state.Chats, update.Chat)
 		sortChats(state.Chats)
 		preserveChatSelection(&state, selectedID)
+		preserveChatFocus(&state, focusedID)
 		applyCloudDraft(&state, update.Chat.ID, update.Chat.Draft)
 		return state, requestMissingChatAvatars(&state, []domain.Chat{update.Chat})
 	case telegram.DraftChanged:
@@ -908,12 +909,18 @@ func reduceChatsLoaded(state State, event ChatsLoaded) (State, []Effect) {
 		return state, nil
 	}
 	selectedID, selected := activeChatID(state)
+	focusedID, focused := focusedChatID(state)
 	state.Chats = append([]domain.Chat(nil), event.Page.Chats...)
 	sortChats(state.Chats)
 	if selected {
 		preserveChatSelection(&state, selectedID)
 	} else if len(state.Chats) > 0 {
 		state.SelectedChat = 0
+	}
+	if focused {
+		preserveChatFocus(&state, focusedID)
+	} else if len(state.Chats) > 0 {
+		state.FocusedChat = state.SelectedChat
 	}
 	state.ChatsLoading = false
 	state.ChatsLoaded = true
@@ -993,8 +1000,10 @@ func reduceMessageUpserted(state State, message domain.Message) (State, []Effect
 		state.Chats[chatIndex].LastMessageAt = latest.SentAt.Unix()
 		state.Chats[chatIndex].Order = latest.SentAt.Unix()
 		selectedID, _ := activeChatID(state)
+		focusedID, _ := focusedChatID(state)
 		sortChats(state.Chats)
 		preserveChatSelection(&state, selectedID)
+		preserveChatFocus(&state, focusedID)
 	}
 	if activeID, ok := activeChatID(state); ok && activeID == message.ChatID {
 		restoreActiveDraftReply(&state)
@@ -1277,6 +1286,13 @@ func reduceAction(state State, event ActionReceived) (State, []Effect) {
 	}
 
 	switch event.Action {
+	case FocusChat:
+		if index := chatIndex(state.Chats, event.ChatID); index >= 0 {
+			state.FocusedChat = index
+			if focusVisible(state, FocusChats) {
+				state.Focus = FocusChats
+			}
+		}
 	case SelectChat:
 		if index := chatIndex(state.Chats, event.ChatID); index >= 0 {
 			var commands []Effect
@@ -1297,7 +1313,11 @@ func reduceAction(state State, event ActionReceived) (State, []Effect) {
 					commands = append(commands, CloseChatCommand{ChatID: previousID})
 				}
 			}
+			state.FocusedChat = index
 			state.SelectedChat = index
+			if state.DetailsOpen {
+				state.DetailsChatID = event.ChatID
+			}
 			restoreActiveDraftReply(&state)
 			clampDetailsSelection(&state)
 			selectNewestMessage(&state, event.ChatID)
@@ -1315,7 +1335,7 @@ func reduceAction(state State, event ActionReceived) (State, []Effect) {
 			match = func(chat domain.Chat) bool { return chat.UnreadMentionCount > 0 }
 		}
 		if chatID, ok := nextMatchingChatID(state, match); ok {
-			return reduceAction(state, ActionReceived{Action: SelectChat, ChatID: chatID})
+			return reduceAction(state, ActionReceived{Action: FocusChat, ChatID: chatID})
 		}
 		message := "No unread chats"
 		if event.Action == SelectNextMention {
@@ -1325,8 +1345,8 @@ func reduceAction(state State, event ActionReceived) (State, []Effect) {
 	case SelectNext, SelectPrevious:
 		if state.Focus == FocusDetails {
 			count := 0
-			if state.SelectedChat >= 0 && state.SelectedChat < len(state.Chats) {
-				count = detailsActionCount(state.Chats[state.SelectedChat])
+			if chat, ok := detailsChat(state); ok {
+				count = detailsActionCount(chat)
 			}
 			if count > 0 {
 				delta := 1
@@ -1344,30 +1364,11 @@ func reduceAction(state State, event ActionReceived) (State, []Effect) {
 		if event.Action == SelectPrevious {
 			delta = -1
 		}
-		oldChatID := state.Chats[state.SelectedChat].ID
-		state.SelectedChat = max(0, min(len(state.Chats)-1, state.SelectedChat+delta))
-		if state.ForwardPicker != nil {
-			state.ForwardPicker = nil
-			state.Focus = FocusConversation
+		focused := focusedChatIndex(state)
+		if focused < 0 {
+			break
 		}
-		if state.ReactionPicker != nil {
-			state.ReactionPicker = nil
-			state.Focus = FocusConversation
-		}
-		state.ReplyTarget = nil
-		state.EditTarget = nil
-		chatID := state.Chats[state.SelectedChat].ID
-		restoreActiveDraftReply(&state)
-		clampDetailsSelection(&state)
-		selectNewestMessage(&state, chatID)
-		commands := requestHistoryIfAbsent(&state, chatID)
-		if oldChatID != chatID {
-			releaseDraftGuard(&state, oldChatID)
-			commands = append(commands, CloseChatCommand{ChatID: oldChatID})
-			commands = append(commands, OpenChatCommand{ChatID: chatID})
-		}
-		commands = append(commands, requestMissingMessageAvatars(&state, state.Messages[chatID])...)
-		return state, commands
+		state.FocusedChat = max(0, min(len(state.Chats)-1, focused+delta))
 	case FocusPane:
 		if focusVisible(state, event.TargetFocus) {
 			state.Focus = event.TargetFocus
@@ -1436,16 +1437,19 @@ func reduceAction(state State, event ActionReceived) (State, []Effect) {
 	case ToggleDetails:
 		if state.DetailsOpen {
 			state.DetailsOpen = false
+			state.DetailsChatID = 0
 			state.Focus = state.FocusBeforeInfo
-		} else {
+		} else if chatID, ok := activeChatID(state); ok {
 			state.FocusBeforeInfo = state.Focus
 			state.DetailsOpen = true
+			state.DetailsChatID = chatID
 			state.Focus = FocusDetails
 			state.DetailsSelected = 0
 		}
 	case Close:
 		if state.DetailsOpen {
 			state.DetailsOpen = false
+			state.DetailsChatID = 0
 			state.Focus = state.FocusBeforeInfo
 		} else if state.Focus == FocusComposer && state.EditTarget != nil {
 			state.EditTarget = nil
@@ -1577,10 +1581,11 @@ func activate(state State, event ActionReceived) (State, []Effect) {
 		return openMessageActionMenu(state)
 	case FocusDetails:
 		clampDetailsSelection(&state)
-		if state.SelectedChat < 0 || state.SelectedChat >= len(state.Chats) {
+		chat, ok := detailsChat(state)
+		if !ok {
 			return state, nil
 		}
-		items := DetailsActionItems(state.Chats[state.SelectedChat])
+		items := DetailsActionItems(chat)
 		if state.DetailsSelected >= 0 && state.DetailsSelected < len(items) {
 			switch items[state.DetailsSelected].Action {
 			case OpenMembers:
@@ -2785,11 +2790,57 @@ func preserveChatSelection(state *State, selectedID domain.ChatID) {
 	}
 }
 
+func preserveChatFocus(state *State, focusedID domain.ChatID) {
+	if index := chatIndex(state.Chats, focusedID); index >= 0 {
+		state.FocusedChat = index
+	} else if len(state.Chats) == 0 {
+		state.FocusedChat = -1
+	} else {
+		state.FocusedChat = max(0, min(state.FocusedChat, len(state.Chats)-1))
+	}
+}
+
 func activeChatID(state State) (domain.ChatID, bool) {
 	if state.SelectedChat < 0 || state.SelectedChat >= len(state.Chats) {
 		return 0, false
 	}
 	return state.Chats[state.SelectedChat].ID, true
+}
+
+func detailsChatIndex(state State) int {
+	if state.DetailsChatID != 0 {
+		return chatIndex(state.Chats, state.DetailsChatID)
+	}
+	if state.SelectedChat >= 0 && state.SelectedChat < len(state.Chats) {
+		return state.SelectedChat
+	}
+	return -1
+}
+
+func detailsChat(state State) (domain.Chat, bool) {
+	index := detailsChatIndex(state)
+	if index < 0 {
+		return domain.Chat{}, false
+	}
+	return state.Chats[index], true
+}
+
+func focusedChatIndex(state State) int {
+	if state.FocusedChat >= 0 && state.FocusedChat < len(state.Chats) {
+		return state.FocusedChat
+	}
+	if state.SelectedChat >= 0 && state.SelectedChat < len(state.Chats) {
+		return state.SelectedChat
+	}
+	return -1
+}
+
+func focusedChatID(state State) (domain.ChatID, bool) {
+	index := focusedChatIndex(state)
+	if index < 0 {
+		return 0, false
+	}
+	return state.Chats[index].ID, true
 }
 
 func chatIndex(chats []domain.Chat, id domain.ChatID) int {
@@ -2802,11 +2853,12 @@ func chatIndex(chats []domain.Chat, id domain.ChatID) int {
 }
 
 func nextMatchingChatID(state State, match func(domain.Chat) bool) (domain.ChatID, bool) {
-	if match == nil || len(state.Chats) < 2 || state.SelectedChat < 0 || state.SelectedChat >= len(state.Chats) {
+	focused := focusedChatIndex(state)
+	if match == nil || len(state.Chats) < 2 || focused < 0 {
 		return 0, false
 	}
 	for step := 1; step < len(state.Chats); step++ {
-		index := (state.SelectedChat + step) % len(state.Chats)
+		index := (focused + step) % len(state.Chats)
 		if match(state.Chats[index]) {
 			return state.Chats[index].ID, true
 		}

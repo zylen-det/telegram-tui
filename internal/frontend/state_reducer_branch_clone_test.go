@@ -106,7 +106,7 @@ func TestMessageUpsertCopiesOnlyBranchesItUpdates(t *testing.T) {
 	requireInputUnchanged(t, "message upsert", input, before)
 }
 
-func TestChatNavigationCopiesOnlyMutableSelectionBranches(t *testing.T) {
+func TestChatFocusNavigationCopiesNoConversationBranches(t *testing.T) {
 	input := reducerBranchCloneState()
 	input.Focus = FocusChats
 	input.DraftSync[9] = DraftSyncState{Dirty: true}
@@ -114,19 +114,19 @@ func TestChatNavigationCopiesOnlyMutableSelectionBranches(t *testing.T) {
 
 	got, commands := updateState(input, ActionReceived{Action: SelectNext})
 
-	if got.SelectedChat != 1 {
-		t.Fatalf("selected chat = %d, want 1", got.SelectedChat)
+	if got.FocusedChat != 1 || got.SelectedChat != 0 {
+		t.Fatalf("focused/selected chat = %d/%d, want 1/0", got.FocusedChat, got.SelectedChat)
 	}
-	if len(commands) != 3 {
-		t.Fatalf("commands = %#v, want load/close/open", commands)
+	if len(commands) != 0 {
+		t.Fatalf("commands = %#v, want none", commands)
 	}
 	if &got.Messages[9][0] != &input.Messages[9][0] || &got.Chats[0] != &input.Chats[0] {
-		t.Fatal("chat navigation cloned an untouched chat or message branch")
+		t.Fatal("chat focus navigation cloned an untouched chat or message branch")
 	}
-	if got.DraftSync[9].Dirty {
-		t.Fatal("previous chat draft guard was not released")
+	if !got.DraftSync[9].Dirty {
+		t.Fatal("moving focus released the selected chat draft guard")
 	}
-	requireInputUnchanged(t, "chat navigation", input, before)
+	requireInputUnchanged(t, "chat focus navigation", input, before)
 }
 
 func TestMessageSelectionNavigationCopiesHistoryOnly(t *testing.T) {

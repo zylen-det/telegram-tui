@@ -36,8 +36,8 @@ func detailsActionCount(chat domain.Chat) int { return len(DetailsActionItems(ch
 
 func clampDetailsSelection(state *State) {
 	count := 0
-	if state.SelectedChat >= 0 && state.SelectedChat < len(state.Chats) {
-		count = detailsActionCount(state.Chats[state.SelectedChat])
+	if chat, ok := detailsChat(*state); ok {
+		count = detailsActionCount(chat)
 	}
 	if count <= 0 {
 		state.DetailsSelected = 0
@@ -47,11 +47,11 @@ func clampDetailsSelection(state *State) {
 }
 
 func openDetailsAvatar(state State) (State, []Effect) {
-	if _, ok := activeChatID(state); !ok {
+	chat, ok := detailsChat(state)
+	if !ok {
 		return state, nil
 	}
 	state.DetailsSelected = 0
-	chat := state.Chats[state.SelectedChat]
 	requestID := allocateRequestID(&state)
 	state.Modal = &ModalState{RequestID: requestID, Title: chat.Title, Ref: chat.Avatar, Loading: true, PreviousFocus: state.Focus}
 	state.Focus = FocusModal
@@ -101,7 +101,7 @@ func openMemberDetail(state State, chatID domain.ChatID, userID domain.UserID) (
 			Avatar:    member.User.Avatar,
 			IsCurrent: member.User.IsCurrent,
 		}
-		if index := state.SelectedChat; index >= 0 && index < len(state.Chats) && state.Chats[index].ID == chatID {
+		if index := chatIndex(state.Chats, chatID); index >= 0 {
 			detail.CanManageInChat = !detail.IsCurrent && member.Role != domain.ChatMemberRoleOwner && (state.Chats[index].CanRestrictMembers || state.Chats[index].CanPromoteMembers)
 		}
 		if member.User.Avatar.UniqueID != "" {

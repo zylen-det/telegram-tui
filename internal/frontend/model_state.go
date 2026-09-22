@@ -350,6 +350,7 @@ type State struct {
 	Connection               domain.ConnectionState
 	TerminalFocused          bool // true when the terminal is visible/focused; conservative default
 	Chats                    []domain.Chat
+	FocusedChat              int
 	SelectedChat             int
 	Messages                 map[domain.ChatID][]domain.Message
 	SelectedMessageChat      domain.ChatID
@@ -374,6 +375,7 @@ type State struct {
 	ChatsLoaded              bool
 	ChatsError               *domain.AppError
 	DetailsOpen              bool
+	DetailsChatID            domain.ChatID
 	Modal                    *ModalState
 	Prompt                   *PromptState
 	PhotoSend                *PhotoSendState
@@ -422,6 +424,8 @@ func InitialState() State {
 		Focus:                    FocusChats,
 		TerminalFocused:          true,
 		Connection:               domain.ConnectionWaiting,
+		FocusedChat:              -1,
+		SelectedChat:             0,
 		Messages:                 make(map[domain.ChatID][]domain.Message),
 		Drafts:                   make(map[domain.ChatID]string),
 		DraftReplies:             make(map[domain.ChatID]domain.MessageID),

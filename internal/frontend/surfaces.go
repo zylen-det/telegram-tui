@@ -49,10 +49,16 @@ func chatMetadataSurface(timestamp int64, unread, mentions int, muted bool, loca
 	return strings.Join(parts, " ")
 }
 
-// activeChatSurfaceRow returns the ChatRow for the active chat, or a zero row.
-func activeChatSurfaceRow(model ViewModel) ChatRow {
+// detailsChatSurfaceRow returns the ChatRow owned by the Info pane. It may be
+// different from the selected conversation when Info was opened from the
+// focused chat's action menu.
+func detailsChatSurfaceRow(model ViewModel) ChatRow {
+	chatID := model.DetailsChat.ID
+	if chatID == 0 {
+		chatID = model.ActiveChat.ID
+	}
 	for _, row := range model.Chats {
-		if row.Chat.ID == model.ActiveChat.ID {
+		if row.Chat.ID == chatID {
 			return row
 		}
 	}

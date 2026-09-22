@@ -59,16 +59,26 @@ func buildChatsLayer(model ViewModel, location *time.Location, styles renderStyl
 		return surfaceResult{Layer: pane.Layer, Rect: pane.Rect, Interactions: interactions, Cursor: pane.Cursor}
 	}
 
+	focused := -1
 	selected := -1
 	for index, row := range model.Chats {
-		if row.Selected {
+		if row.Focused && focused < 0 {
+			focused = index
+		}
+		if row.Selected && selected < 0 {
 			selected = index
-			break
 		}
 	}
+	// Focus drives the chat-list viewport. The selected row is only a fallback
+	// for compatibility with standalone render models that do not publish a
+	// focused row.
+	visible := focused
+	if visible < 0 {
+		visible = selected
+	}
 	start := 0
-	if selected >= capacity {
-		start = selected - capacity + 1
+	if visible >= capacity {
+		start = visible - capacity + 1
 	}
 
 	for index := start; index < min(len(model.Chats), start+capacity); index++ {
@@ -111,7 +121,7 @@ func buildChatRowLayer(row ChatRow, rect image.Rectangle, location *time.Locatio
 		ID:        fmt.Sprintf("chat:%d", row.Chat.ID),
 		Rect:      rect,
 		Z:         zRowBackground,
-		Click:     ActionReceived{Action: SelectChat, ChatID: row.Chat.ID},
+		Click:     ActionReceived{Action: FocusChat, ChatID: row.Chat.ID},
 		WheelUp:   ActionReceived{Action: SelectPrevious},
 		WheelDown: ActionReceived{Action: SelectNext},
 	}}
@@ -151,6 +161,9 @@ func buildChatRowLayer(row ChatRow, rect image.Rectangle, location *time.Locatio
 		}
 	}
 	titleStyle := styles.Emphasis
+	if row.Focused {
+		titleStyle = styles.Accent
+	}
 	previewStyle := styles.Panel
 	if hasDraft {
 		previewStyle = styles.Emphasis
