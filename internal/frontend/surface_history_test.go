@@ -241,17 +241,16 @@ func TestHistoryBottomAlignmentAndInterGroupGap(t *testing.T) {
 	surface := buildHistoryLayer(model, image.Rect(0, 0, 100, 40), time.Local, styles)
 	canvas, _ := historySurfaceCanvas(model, surface)
 
-	// Both groups are 1 row tall (no avatar). Bottom-aligned: second group at
-	// row 39, first group at row 37 (one blank separator row 38 between).
-	if got := canvas.CellAt(1, 39).Content; got != "s" {
-		t.Errorf("bottom row 39 = %q, want 's' (second group)", got)
+	// Each card reserves a top and bottom border row, even when unselected.
+	if got := canvas.CellAt(1, 38).Content; got != "s" {
+		t.Errorf("second body row 38 = %q, want 's'", got)
 	}
-	if got := canvas.CellAt(1, 37).Content; got != "f" {
-		t.Errorf("row 37 = %q, want 'f' (first group)", got)
+	if got := canvas.CellAt(1, 34).Content; got != "f" {
+		t.Errorf("first body row 34 = %q, want 'f'", got)
 	}
-	// The separator row 38 is background only.
-	if got := canvas.CellAt(1, 38).Content; got == "f" || got == "s" {
-		t.Errorf("separator row 38 has content %q, want background", got)
+	// The separator between the two three-row cards is background only.
+	if got := canvas.CellAt(1, 36).Content; got == "f" || got == "s" {
+		t.Errorf("separator row 36 has content %q, want background", got)
 	}
 }
 
@@ -307,9 +306,11 @@ func TestBuildVisibleHistoryResultsBoundsCenteredSelectionToViewport(t *testing.
 		calls++
 		message := group.Messages[0]
 		return messageGroupResult{
-			Height:   1,
-			Group:    group,
-			Selected: message.ChatID == selection.ChatID && message.ID == selection.MessageID,
+			Height:        1,
+			Group:         group,
+			Selected:      message.ChatID == selection.ChatID && message.ID == selection.MessageID,
+			SelectedStart: 0,
+			SelectedEnd:   1,
 		}
 	})
 
@@ -345,6 +346,29 @@ func TestHistorySelectionFollowCentersWhileMessagesOverflow(t *testing.T) {
 	}
 }
 
+func TestHistoryFollowsIndividualMessageInsideTallSenderGroup(t *testing.T) {
+	styles := newRenderStyles(false)
+	hist := image.Rect(0, 0, 40, 5)
+	model := historyModel(40, 5, hist)
+	model.Groups = []RenderedMessageGroup{styledMessageGroup("Mina", true,
+		testMessage(1, 7, "first"), testMessage(2, 7, "second"), testMessage(3, 7, "third"))}
+	model.SelectedMessageChat = 7
+	model.HistoryFollowSelection = true
+
+	for _, id := range []domain.MessageID{1, 2, 3} {
+		model.SelectedMessage = id
+		surface := buildHistoryLayer(model, hist, time.UTC, styles)
+		body := messageInteractionRect(t, surface, 7, id)
+		if body.Min.Y <= hist.Min.Y || body.Max.Y >= hist.Max.Y {
+			t.Fatalf("selected %d body %v cannot fit its border in %v", id, body, hist)
+		}
+		canvas, _ := historySurfaceCanvas(model, surface)
+		if top, bottom := canvas.CellAt(4, body.Min.Y-1).Content, canvas.CellAt(4, body.Max.Y).Content; top != "╭" || bottom != "╰" {
+			t.Fatalf("selected %d frame at body %v = %q/%q, want corners", id, body, top, bottom)
+		}
+	}
+}
+
 func TestHistorySelectionFollowKeepsBottomAlignmentWhenEverythingFits(t *testing.T) {
 	styles := newRenderStyles(false)
 	historyRect := image.Rect(0, 0, 40, 12)
@@ -357,11 +381,11 @@ func TestHistorySelectionFollowKeepsBottomAlignmentWhenEverythingFits(t *testing
 	model.HistoryFollowSelection = true
 
 	surface := buildHistoryLayer(model, historyRect, time.Local, styles)
-	if newest := messageInteractionRect(t, surface, 7, 3); newest.Max.Y != historyRect.Max.Y {
-		t.Fatalf("newest message bottom = %d, want %d when all messages fit", newest.Max.Y, historyRect.Max.Y)
+	if newest := messageInteractionRect(t, surface, 7, 3); newest.Max.Y != historyRect.Max.Y-1 {
+		t.Fatalf("newest message body bottom = %d, want %d before reserved border", newest.Max.Y, historyRect.Max.Y-1)
 	}
-	if selected := messageInteractionRect(t, surface, 7, 2); selected.Min.Y == historyRect.Min.Y+historyRect.Dy()/2 {
-		t.Fatal("selection was unnecessarily centered when the whole history fit")
+	if first := messageInteractionRect(t, surface, 7, 1); first.Min.Y != historyRect.Max.Y-10 {
+		t.Fatalf("first body row = %d, want bottom-aligned history", first.Min.Y)
 	}
 }
 
@@ -378,9 +402,9 @@ func messageInteractionRect(t *testing.T, surface surfaceResult, chatID domain.C
 
 func TestHistoryTopClippedGroupRendersOnlyVisibleRows(t *testing.T) {
 	styles := newRenderStyles(false)
-	// A 100x4 history viewport forces a tall top group to clip at the top.
-	hist := image.Rect(0, 0, 100, 4)
-	model := historyModel(100, 4, hist)
+	// A 100x6 history viewport leaves part of a tall top group visible.
+	hist := image.Rect(0, 0, 100, 6)
+	model := historyModel(100, 6, hist)
 	// A long message wraps to many rows at width 100 (content width 98).
 	long := testMessage(10, 7, strings.Repeat("word ", 60)) // wraps to >= 4 rows
 	g1 := styledMessageGroup("Mina", false, long)
@@ -391,23 +415,23 @@ func TestHistoryTopClippedGroupRendersOnlyVisibleRows(t *testing.T) {
 	// the content height so the top group is genuinely clipped.
 	full1 := buildMessageGroupLayer(g1, 100, time.Local, messageSelection{}, nil, styles)
 	full2 := buildMessageGroupLayer(g2, 100, time.Local, messageSelection{}, nil, styles)
-	if full1.Height+1+full2.Height <= 4 {
-		t.Fatalf("prerequisite unmet: top %d + sep 1 + bottom %d = %d, need > 4", full1.Height, full2.Height, full1.Height+1+full2.Height)
+	if full1.Height+1+full2.Height <= 6 {
+		t.Fatalf("prerequisite unmet: top %d + sep 1 + bottom %d = %d, need > 6", full1.Height, full2.Height, full1.Height+1+full2.Height)
 	}
 
 	surface := buildHistoryLayer(model, hist, time.Local, styles)
 	canvas, compositor := historySurfaceCanvas(model, surface)
 
-	// Expected bottom-up geometry: bottom group at the final row (3); the top
-	// group's visible slice starts at startRow = full1.Height-2 > 0.
+	// The bottom card occupies three rows; a separator leaves two visible
+	// rows of the first card (from a nonzero source offset).
 	expectedStartRow := full1.Height - 2
 	if expectedStartRow <= 0 {
 		t.Fatalf("expected startRow = %d, want > 0", expectedStartRow)
 	}
 
-	// Bottom group on the final row.
-	if got := canvas.CellAt(1, 3).Content; got != "b" {
-		t.Errorf("bottom group at row 3 = %q, want 'b'", got)
+	// Bottom card's body is between its reserved border rows.
+	if got := canvas.CellAt(1, 4).Content; got != "b" {
+		t.Errorf("bottom group at row 4 = %q, want 'b'", got)
 	}
 
 	// At least one visible top-group interaction keeps a nonzero/original
@@ -435,7 +459,7 @@ func TestHistoryTopClippedGroupRendersOnlyVisibleRows(t *testing.T) {
 	if suffix == "0" {
 		t.Errorf("top interaction suffix = %q, want nonzero original row index", suffix)
 	}
-	if topInteraction.Rect.Min.Y < 0 || topInteraction.Rect.Max.Y > 4 {
+	if topInteraction.Rect.Min.Y < 0 || topInteraction.Rect.Max.Y > 6 {
 		t.Errorf("top interaction rect %v escapes history", topInteraction.Rect)
 	}
 
@@ -444,20 +468,20 @@ func TestHistoryTopClippedGroupRendersOnlyVisibleRows(t *testing.T) {
 		if interaction.ID == "conversation:history" || interaction.ID == "conversation:history-retry" {
 			continue
 		}
-		if interaction.Rect.Min.Y < 0 || interaction.Rect.Max.Y > 4 {
+		if interaction.Rect.Min.Y < 0 || interaction.Rect.Max.Y > 6 {
 			t.Errorf("interaction %q rect %v escapes history viewport", interaction.ID, interaction.Rect)
 		}
 	}
-	if got := compositor.Bounds(); got.Min.Y < 0 || got.Max.Y > 4 || got.Min.X < 0 || got.Max.X > 100 {
+	if got := compositor.Bounds(); got.Min.Y < 0 || got.Max.Y > 6 || got.Min.X < 0 || got.Max.X > 100 {
 		t.Errorf("compositor bounds %v escape history", got)
 	}
-	// No text cell above the history (y<0 is impossible on a 4-row canvas, but
+	// No text cell above the history (y<0 is impossible on this canvas, but
 	// the top group's clipped rows must not draw into row 0's top neighbor).
 	// The topmost rendered row of the history must be within the viewport.
-	for y := 0; y < 4; y++ {
+	for y := 0; y < 6; y++ {
 		for x := 0; x < 100; x++ {
 			if cell := canvas.CellAt(x, y); cell != nil && cell.Content != "" && cell.Content != " " {
-				// Any content is inside the 4-row canvas by construction.
+				// Any content is inside the canvas by construction.
 				_ = cell
 			}
 		}
@@ -472,8 +496,8 @@ func TestHistoryPartiallyClippedAvatarNoRetry(t *testing.T) {
 	group.AvatarError = &domain.AppError{Kind: domain.ErrorMedia, Message: "failed"}
 	model.Groups = []RenderedMessageGroup{group}
 
-	// With a history height of 1, the 2-row group is clipped to its bottom row
-	// (the body); the avatar row is above the viewport and must be omitted.
+	// With a history height of 1, only the bottom reserved frame row fits;
+	// the avatar is above the viewport and must be omitted.
 	small := historyModel(100, 1, image.Rect(0, 0, 100, 1))
 	small.Groups = []RenderedMessageGroup{group}
 	small.HistoryDone = true
@@ -499,23 +523,20 @@ func TestHistoryFullyContainedAvatarRetained(t *testing.T) {
 
 	surface := buildHistoryLayer(model, image.Rect(0, 0, 100, 40), time.Local, styles)
 	canvas, _ := historySurfaceCanvas(model, surface)
-	// The single 2-row group is bottom aligned at rows 38-39, so the avatar
-	// (rows 0-1 of the group) is fully visible at absolute rows 38-39.
-	if got := canvas.CellAt(0, 38).Content; got != "░" {
-		t.Errorf("avatar cell (0,38) = %q, want ░", got)
+	// The avatar remains at the group's first two rows, regardless of selection.
+	if got := canvas.CellAt(0, 36).Content; got != "░" {
+		t.Errorf("avatar cell (0,36) = %q, want ░", got)
 	}
-	if got := canvas.CellAt(3, 39).Content; got != "░" {
-		t.Errorf("avatar cell (3,39) = %q, want ░", got)
+	if got := canvas.CellAt(3, 37).Content; got != "░" {
+		t.Errorf("avatar cell (3,37) = %q, want ░", got)
 	}
 }
 
-func TestHistorySelectedAvatarRetryRetainedNonzeroStart(t *testing.T) {
+func TestHistorySelectedAvatarRetryStaysOutsideBorder(t *testing.T) {
 	styles := newRenderStyles(false)
-	// Selected ShowAvatar group: full height 4, avatar base rect (1,1)-(5,3).
-	// A 3-row history slices [1,4), wholly containing the avatar, which is
-	// Y-adjusted to fragment (1,0)-(5,2).
-	hist := image.Rect(0, 0, 100, 3)
-	model := historyModel(100, 3, hist)
+	// The avatar retains its unselected coordinates while the message is framed.
+	hist := image.Rect(0, 0, 100, 4)
+	model := historyModel(100, 4, hist)
 	msg := testMessage(45, 7, "selected avatar")
 	group := styledMessageGroup("Mina", true, msg)
 	group.AvatarError = &domain.AppError{Kind: domain.ErrorMedia, Message: "failed"}
@@ -532,8 +553,8 @@ func TestHistorySelectedAvatarRetryRetainedNonzeroStart(t *testing.T) {
 	surface := buildHistoryLayer(model, hist, time.Local, styles)
 	canvas, compositor := historySurfaceCanvas(model, surface)
 
-	// Absolute retry rect = history origin + fragment (1,0)-(5,2).
-	wantRect := image.Rect(1, 0, 5, 2)
+	// Absolute retry rect = the group's fixed avatar gutter.
+	wantRect := image.Rect(0, 0, 4, 2)
 	var retry *layerInteraction
 	for i := range surface.Interactions {
 		if surface.Interactions[i].ID == "message-avatar-retry:7:45" {
@@ -564,16 +585,15 @@ func TestHistorySelectedAvatarRetryRetainedNonzeroStart(t *testing.T) {
 		t.Errorf("retry hit bounds = %v, want %v", got, wantRect)
 	}
 
-	// Avatar cells render at the adjusted Y (fragment rows 0-1).
-	if got := canvas.CellAt(1, 0).Content; got != "░" {
-		t.Errorf("avatar cell (1,0) = %q, want ░", got)
+	if got := canvas.CellAt(0, 0).Content; got != "░" {
+		t.Errorf("avatar cell (0,0) = %q, want ░", got)
 	}
-	if got := canvas.CellAt(4, 1).Content; got != "░" {
-		t.Errorf("avatar cell (4,1) = %q, want ░", got)
+	if got := canvas.CellAt(3, 1).Content; got != "░" {
+		t.Errorf("avatar cell (3,1) = %q, want ░", got)
 	}
 
 	// All bounds remain inside the history.
-	if got := compositor.Bounds(); got.Min.Y < 0 || got.Max.Y > 3 || got.Min.X < 0 || got.Max.X > 100 {
+	if got := compositor.Bounds(); got.Min.Y < 0 || got.Max.Y > 4 || got.Min.X < 0 || got.Max.X > 100 {
 		t.Errorf("compositor bounds %v escape history", got)
 	}
 }
@@ -751,7 +771,7 @@ func TestHistoryPublishesKittyPlacementsAbsolute(t *testing.T) {
 	// The single group is bottom-aligned: height 9 (8 thumbnails + photo body)
 	// in a 40-row viewport places its top at row 31.
 	placement := surface.Inline[0]
-	if placement.ImageID != 99 || placement.X != 1 || placement.Y != 31 ||
+	if placement.ImageID != 99 || placement.X != 1 || placement.Y != 30 ||
 		placement.Width != 20 || placement.Height != 8 || placement.Text != "kitty" {
 		t.Fatalf("placement = %#v, want {ImageID:99 X:1 Y:31 W:20 H:8}", placement)
 	}
@@ -778,15 +798,15 @@ func TestHistoryClipsKittyPlacementsToViewport(t *testing.T) {
 	}
 	placement := surface.Inline[0]
 	wantID := derivedInlineID(100, 0)
-	// The 8-row block starts at absolute row -5 (bottom-aligned in 4 rows) and
-	// only rows 0..2 remain inside the pane: a 3-row crop from source y=40.
+	// The reserved card rows leave only two thumbnail rows in the viewport;
+	// crop the source at y=48 rather than drawing outside the history.
 	if placement.ImageID != wantID || placement.X != 1 || placement.Y != 0 ||
-		placement.Width != 20 || placement.Height != 3 {
-		t.Fatalf("placement = %#v, want {ID:%d X:1 Y:0 W:20 H:3}", placement, wantID)
+		placement.Width != 20 || placement.Height != 2 {
+		t.Fatalf("placement = %#v, want {ID:%d X:1 Y:0 W:20 H:2}", placement, wantID)
 	}
 	if !strings.Contains(placement.Text, "i="+strconv.FormatUint(uint64(wantID), 10)) ||
-		!strings.Contains(placement.Text, "c=20") || !strings.Contains(placement.Text, "r=3") ||
-		!strings.Contains(placement.Text, "x=0,y=40,w=64,h=24") {
+		!strings.Contains(placement.Text, "c=20") || !strings.Contains(placement.Text, "r=2") ||
+		!strings.Contains(placement.Text, "x=0,y=48,w=64,h=16") {
 		t.Fatalf("transmit not rewritten: %q", placement.Text)
 	}
 }

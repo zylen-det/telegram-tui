@@ -199,8 +199,8 @@ func TestMessageGroupReplyRows(t *testing.T) {
 		t.Errorf("whitespace not normalized in preview, got %q", joined)
 	}
 
-	// Reply rows are muted, inherit outgoing, carry no identity.
-	replySender := result.Rows[0]
+	// Reply rows are muted, inherit outgoing, carry no click identity.
+	replySender := result.Rows[1]
 	if replySender.kind != messageRowMuted {
 		t.Errorf("reply sender kind = %v, want muted", replySender.kind)
 	}
@@ -217,7 +217,7 @@ func TestMessageGroupReplyRows(t *testing.T) {
 	group2 := styledMessageGroup("Mina", false, msg2)
 	group2.ReplyContexts = map[domain.MessageID]ReplyContext{10: {Available: false}}
 	_, _, r2 := messageGroupCanvas(group2, 42, time.Local, messageSelection{}, nil, styles)
-	if got := r2.Rows[0].text; got != "Reply · Original message unavailable" {
+	if got := r2.Rows[1].text; got != "Reply · Original message unavailable" {
 		t.Errorf("unavailable reply = %q", got)
 	}
 
@@ -227,8 +227,8 @@ func TestMessageGroupReplyRows(t *testing.T) {
 	group3 := styledMessageGroup("Mina", false, msg3)
 	group3.ReplyContexts = map[domain.MessageID]ReplyContext{11: {Available: true, Sender: "Alice", Preview: strings.Repeat("yes ", 30)}}
 	_, _, r3 := messageGroupCanvas(group3, 10, time.Local, messageSelection{}, nil, styles)
-	if got := displayWidth(r3.Rows[1].text); got > 10 {
-		t.Errorf("reply preview not clipped: width %d row %q", got, r3.Rows[1].text)
+	if got := displayWidth(r3.Rows[2].text); got > 10 {
+		t.Errorf("reply preview not clipped: width %d row %q", got, r3.Rows[2].text)
 	}
 
 	// Unavailable reply at a wide enough width keeps the full message visible.
@@ -237,7 +237,7 @@ func TestMessageGroupReplyRows(t *testing.T) {
 	group2b := styledMessageGroup("Mina", false, msg2b)
 	group2b.ReplyContexts = map[domain.MessageID]ReplyContext{12: {Available: false}}
 	_, _, r2b := messageGroupCanvas(group2b, 42, time.Local, messageSelection{}, nil, styles)
-	if got := r2b.Rows[0].text; got != "Reply · Original message unavailable" {
+	if got := r2b.Rows[1].text; got != "Reply · Original message unavailable" {
 		t.Errorf("unavailable reply = %q", got)
 	}
 }
@@ -343,6 +343,58 @@ func TestMessageGroupSelectedPaddingAndRoundedBorder(t *testing.T) {
 	// Focused border color on the frame.
 	if got := colorOf(canvas.CellAt(1, 0).Style.Fg); got != rgba(focusedBorderColor) {
 		t.Errorf("border fg = %v, want focusedBorderColor", got)
+	}
+}
+
+func TestJoinedMessagesKeepOneAvatarAndMoveOnlyTheSelectedFrame(t *testing.T) {
+	styles := newRenderStyles(false)
+	messages := []domain.Message{
+		testMessage(1, 7, "first"),
+		testMessage(2, 7, "second"),
+		testMessage(3, 7, "third"),
+	}
+	groups := GroupMessages(domain.ChatBasicGroup, messages, time.UTC)
+	if len(groups) != 1 || len(groups[0].Messages) != 3 {
+		t.Fatalf("consecutive messages = %#v, want one avatar group", groups)
+	}
+	group := RenderedMessageGroup{MessageGroup: groups[0]}
+	const width = 40
+	var height int
+	for _, want := range []struct {
+		id       domain.MessageID
+		frameTop int
+	}{
+		{1, 1}, {2, 4}, {3, 7},
+	} {
+		canvas, compositor, result := messageGroupCanvas(group, width, time.UTC, messageSelection{ChatID: 7, MessageID: want.id}, nil, styles)
+		if height == 0 {
+			height = result.Height
+		}
+		if result.Height != height || result.SelectedStart != want.frameTop || result.SelectedEnd != want.frameTop+3 {
+			t.Fatalf("selected %d: height %d frame [%d,%d), want stable %d and [%d,%d)", want.id, result.Height, result.SelectedStart, result.SelectedEnd, height, want.frameTop, want.frameTop+3)
+		}
+		if got := canvas.CellAt(4, want.frameTop).Content; got != "╭" {
+			t.Errorf("selected %d top corner = %q", want.id, got)
+		}
+		if got := canvas.CellAt(4, want.frameTop+2).Content; got != "╰" {
+			t.Errorf("selected %d bottom corner = %q", want.id, got)
+		}
+		if got := canvas.CellAt(0, 0).Content; got != "░" {
+			t.Errorf("selected %d shifted avatar: %q", want.id, got)
+		}
+		for _, other := range []int{1, 4, 7} {
+			if other != want.frameTop && canvas.CellAt(4, other).Content == "╭" {
+				t.Errorf("selected %d also framed row %d", want.id, other)
+			}
+		}
+		bodyY := want.frameTop + 1
+		if hit := compositor.Hit(6, bodyY); hit.ID() != fmt.Sprintf("message:7:%d:%d", want.id, bodyY) {
+			t.Errorf("selected %d body hit = %q", want.id, hit.ID())
+		}
+	}
+	_, _, unselected := messageGroupCanvas(group, width, time.UTC, messageSelection{}, nil, styles)
+	if unselected.Height != height {
+		t.Fatalf("unselected height %d != selected %d", unselected.Height, height)
 	}
 }
 
@@ -565,7 +617,7 @@ func TestMessageGroupSelectedAvatarShiftAndOmission(t *testing.T) {
 	group := styledMessageGroup("Mina", true, msg)
 	group.AvatarError = &domain.AppError{Kind: domain.ErrorMedia, Message: "x"}
 
-	// Selected -> avatar shifts to (1,1)-(5,3).
+	// Selection does not shift the avatar; its gutter is outside the frame.
 	_, compositor, result := messageGroupCanvas(group, 40, time.Local, messageSelection{ChatID: 12, MessageID: 90}, nil, styles)
 	var retry *messageGroupLocalInteraction
 	for i := range result.LocalInteractions {
@@ -573,10 +625,10 @@ func TestMessageGroupSelectedAvatarShiftAndOmission(t *testing.T) {
 			retry = &result.LocalInteractions[i]
 		}
 	}
-	if retry == nil || !retry.Rect.Eq(image.Rect(1, 1, 5, 3)) {
-		t.Errorf("selected retry rect = %v, want (1,1)-(5,3)", retry.Rect)
+	if retry == nil || !retry.Rect.Eq(image.Rect(0, 0, 4, 2)) {
+		t.Errorf("selected retry rect = %v, want (0,0)-(4,2)", retry.Rect)
 	}
-	pt := image.Pt(3, 2)
+	pt := image.Pt(3, 1)
 	if hit := compositor.Hit(pt.X, pt.Y); hit.ID() != "message-avatar-retry:12:90" {
 		t.Errorf("Hit(%v) = %q, want avatar retry", pt, hit.ID())
 	}
@@ -601,11 +653,11 @@ func TestMessageGroupServiceRowMutedSelection(t *testing.T) {
 	msg.Service = true
 	group := styledMessageGroup("Mina", false, msg)
 	_, _, result := messageGroupCanvas(group, 40, time.Local, messageSelection{}, nil, styles)
-	if result.Rows[0].kind != messageRowMuted {
-		t.Errorf("service row kind = %v, want muted", result.Rows[0].kind)
+	if result.Rows[1].kind != messageRowMuted {
+		t.Errorf("service row kind = %v, want muted", result.Rows[1].kind)
 	}
-	if result.Rows[0].messageID != 100 {
-		t.Errorf("service row must retain selection identity: %+v", result.Rows[0])
+	if result.Rows[1].messageID != 100 {
+		t.Errorf("service row must retain selection identity: %+v", result.Rows[1])
 	}
 	selections := selectMessageInteractions(result)
 	if len(selections) != 1 || selections[0].Click.MessageID != 100 {
@@ -737,9 +789,9 @@ func TestMessageGroupSelectedSliceRoundedFrame(t *testing.T) {
 		t.Errorf("slice dims = %dx%d, want 25x1", slice.Width, slice.Height)
 	}
 	canvas, _ := slicedMessageGroupCanvas(slice, 0, 0)
-	// A fresh rendered layer exists for the exact 25x1 fragment.
-	if slice.Layer == nil {
-		t.Fatal("selected slice layer nil")
+	// Even a one-row fragment keeps a visible selection edge.
+	if slice.Layer == nil || canvas.CellAt(0, 0).Content != "│" {
+		t.Fatalf("selected one-row fragment lost border: %q", canvas.CellAt(0, 0).Content)
 	}
 	// The body row still carries its identity with original suffix 1.
 	var bodyRow *messageRowSpec
@@ -752,7 +804,6 @@ func TestMessageGroupSelectedSliceRoundedFrame(t *testing.T) {
 	if bodyRow == nil {
 		t.Fatal("selected body row not in slice")
 	}
-	_ = canvas
 }
 
 func TestMessageGroupSliceAvatarOmittedWhenPartial(t *testing.T) {
@@ -798,57 +849,6 @@ func TestMessageGroupSliceAvatarRetainedYAdjustment(t *testing.T) {
 	if got := canvas.CellAt(0, 0).Content; got != "░" {
 		t.Errorf("avatar cell (0,0) = %q, want ░", got)
 	}
-}
-
-// TestMessageGroupSliceAvatarRetainedNonzeroStart drives the avatar fully
-// inside a nonzero-start slice. A group with many trailing rows lets a slice
-// that starts at row 1 still wholly contain the top avatar only when the
-// avatar's base rect Min.Y >= 1, which never happens for an unselected group.
-// So a nonzero-start slice retains the avatar only after it has been clipped
-// from above by an earlier overlap; the required history invariant is that a
-// nonzero start that still fully contains the top avatar is impossible, so we
-// assert a [1,3) slice omits the avatar while a full [0,N) keeps it. This
-// satisfies the "avatar retained in a fully-contained nonzero-start fragment"
-// case is covered below where start > 0 by selecting a group whose leading
-// selected padding moves the body down while the avatar stays top-aligned.
-func TestMessageGroupSliceAvatarRetainedNonzeroStart(t *testing.T) {
-	styles := newRenderStyles(false)
-	msg := testMessage(235, 15, "selected hello")
-	group := styledMessageGroup("Mina", true, msg)
-
-	// A selected group shifts the avatar base rect to (1,1)-(5,3), which
-	// spans original rows [1,3). Slicing [1,4) contains it wholly with a
-	// nonzero start.
-	full := buildMessageGroupLayer(group, 40, time.Local, messageSelection{ChatID: 15, MessageID: 235}, nil, styles)
-	if !full.Selected {
-		t.Fatal("group not selected")
-	}
-	if full.Height <= 3 {
-		t.Fatalf("full height = %d, want > 3", full.Height)
-	}
-
-	slice := sliceMessageGroupLayer(full, 1, 4, styles, nil)
-	if slice.Height != 3 {
-		t.Fatalf("slice height = %d, want 3", slice.Height)
-	}
-	if slice.Layer == nil {
-		t.Fatal("slice layer nil")
-	}
-	// Avatar retained and Y-adjusted by -start (local rows 0..1).
-	canvas, compositor := slicedMessageGroupCanvas(slice, 0, 0)
-	if got := canvas.CellAt(1, 0).Content; got != "░" {
-		t.Errorf("avatar cell (1,0) = %q, want ░ (Y-adjusted retained avatar)", got)
-	}
-	if got := canvas.CellAt(4, 1).Content; got != "░" {
-		t.Errorf("avatar cell (4,1) = %q, want ░", got)
-	}
-	// The retained avatar publishes no interaction without a retry.
-	for _, li := range slice.LocalInteractions {
-		if strings.HasPrefix(li.ID, "message-avatar-retry:") {
-			t.Errorf("non-error avatar published retry %q", li.ID)
-		}
-	}
-	_ = compositor
 }
 
 func TestMessageGroupSliceAvatarNonzeroStartOmitsPartial(t *testing.T) {
@@ -913,12 +913,12 @@ func TestMessageGroupWithThumbnailReservesRows(t *testing.T) {
 	thumbs := map[domain.MessageID]thumbnail.Block{1001: block}
 
 	result := buildMessageGroupLayer(group, 40, time.Local, messageSelection{}, thumbs, styles)
-	// Body row "[Photo]" + 8 thumbnail placeholder rows = 9 total.
-	if result.Height != 9 {
-		t.Fatalf("Height = %d, want 9", result.Height)
+	// Body + 8 thumbnail rows + two permanently reserved border rows.
+	if result.Height != 11 {
+		t.Fatalf("Height = %d, want 11", result.Height)
 	}
-	if len(result.Rows) != 9 {
-		t.Fatalf("len(Rows) = %d, want 9", len(result.Rows))
+	if len(result.Rows) != 11 {
+		t.Fatalf("len(Rows) = %d, want 11", len(result.Rows))
 	}
 }
 
@@ -939,8 +939,8 @@ func TestMessageGroupThumbnailPlacedAsLayer(t *testing.T) {
 	thumbs := map[domain.MessageID]thumbnail.Block{1002: block}
 
 	_, _, result := messageGroupCanvas(group, 40, time.Local, messageSelection{}, thumbs, styles)
-	if result.Height != 9 {
-		t.Fatalf("Height = %d, want 9", result.Height)
+	if result.Height != 11 {
+		t.Fatalf("Height = %d, want 11", result.Height)
 	}
 
 	// Compose the result into a canvas and check that the marker "AAA" appears.
@@ -956,8 +956,8 @@ func TestMessageGroupThumbnailPlacedAsLayer(t *testing.T) {
 	}
 }
 
-// TestMessageGroupNoThumbnailKeepsSingleRow is a regression guard: a photo
-// message without an inline thumbnail should not reserve extra rows.
+// TestMessageGroupNoThumbnailKeepsSingleRow checks that only the border space
+// is reserved when a photo has no inline thumbnail.
 func TestMessageGroupNoThumbnailKeepsSingleRow(t *testing.T) {
 	styles := newRenderStyles(false)
 	msg := testMessage(1003, 7, "[Photo]")
@@ -966,14 +966,14 @@ func TestMessageGroupNoThumbnailKeepsSingleRow(t *testing.T) {
 
 	// nil inlineThumbnails -> no placeholder rows.
 	result := buildMessageGroupLayer(group, 40, time.Local, messageSelection{}, nil, styles)
-	if result.Height != 1 {
-		t.Fatalf("Height = %d, want 1", result.Height)
+	if result.Height != 3 {
+		t.Fatalf("Height = %d, want 3", result.Height)
 	}
-	if len(result.Rows) != 1 {
-		t.Fatalf("len(Rows) = %d, want 1", len(result.Rows))
+	if len(result.Rows) != 3 {
+		t.Fatalf("len(Rows) = %d, want 3", len(result.Rows))
 	}
-	if result.Rows[0].text != "[Photo]" {
-		t.Errorf("body text = %q, want [Photo]", result.Rows[0].text)
+	if result.Rows[1].text != "[Photo]" {
+		t.Errorf("body text = %q, want [Photo]", result.Rows[1].text)
 	}
 }
 
@@ -995,9 +995,9 @@ func TestMessageGroupMultipleThumbnailsCoexist(t *testing.T) {
 	}
 
 	_, _, result := messageGroupCanvas(group, 40, time.Local, messageSelection{}, thumbs, styles)
-	// 2 photo bodies + 8*2 thumbnails = 18 rows.
-	if result.Height != 18 {
-		t.Fatalf("Height = %d, want 18", result.Height)
+	// 2 photo bodies + 8*2 thumbnails + 2*2 reserved border rows.
+	if result.Height != 22 {
+		t.Fatalf("Height = %d, want 22", result.Height)
 	}
 
 	// Both blocks must appear in the rendered output.
@@ -1034,7 +1034,7 @@ func TestMessageGroupKittyThumbnailRecordedAsPlacement(t *testing.T) {
 		t.Fatalf("Inline placements = %d, want 1", len(result.Inline))
 	}
 	placement := result.Inline[0]
-	if placement.ImageID != 77 || placement.X != 1 || placement.Y != 0 ||
+	if placement.ImageID != 77 || placement.X != 1 || placement.Y != 1 ||
 		placement.Width != 20 || placement.Height != 8 || placement.Text != transmit {
 		t.Fatalf("placement = %#v, want {ImageID:77 X:1 Y:0 W:20 H:8}", placement)
 	}
@@ -1075,8 +1075,8 @@ func TestMessageGroupKittyPlacementSurvivesSlice(t *testing.T) {
 	if len(clipped.Inline) != 1 {
 		t.Fatalf("clipped Inline = %d, want 1", len(clipped.Inline))
 	}
-	if clipped.Inline[0].Y != 0 {
-		t.Fatalf("clipped placement Y = %d, want full-group 0", clipped.Inline[0].Y)
+	if clipped.Inline[0].Y != 1 {
+		t.Fatalf("clipped placement Y = %d, want full-group 1", clipped.Inline[0].Y)
 	}
 
 	// A slice covering the whole block keeps the placement at the original
@@ -1085,8 +1085,8 @@ func TestMessageGroupKittyPlacementSurvivesSlice(t *testing.T) {
 	if len(whole.Inline) != 1 {
 		t.Fatalf("whole Inline = %d, want 1", len(whole.Inline))
 	}
-	if whole.Inline[0].Y != 0 {
-		t.Fatalf("whole placement Y = %d, want 0", whole.Inline[0].Y)
+	if whole.Inline[0].Y != 1 {
+		t.Fatalf("whole placement Y = %d, want 1", whole.Inline[0].Y)
 	}
 
 	// A slice covering only the text rows below the block drops the placement

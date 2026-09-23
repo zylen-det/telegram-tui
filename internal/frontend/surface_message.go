@@ -17,7 +17,7 @@ import (
 )
 
 // messageSelection is the active message selection used to decide whether a
-// message group renders its selected-card border padding.
+// message renders its selected-card border.
 type messageSelection struct {
 	ChatID    domain.ChatID
 	MessageID domain.MessageID
@@ -63,6 +63,7 @@ type messageRowSpec struct {
 	outgoing  bool
 	chatID    domain.ChatID
 	messageID domain.MessageID
+	frameID   domain.MessageID // includes reply/marker/padding rows without changing click identity
 	chips     []messageChipSpec
 }
 
@@ -84,6 +85,8 @@ type messageGroupResult struct {
 	Rows              []messageRowSpec
 	Group             RenderedMessageGroup
 	Selected          bool
+	SelectedStart     int // selected message's first full-group row
+	SelectedEnd       int // exclusive; zero when no message is selected
 	RowOffset         int // original full-group row index represented by Rows[0]
 	LocalInteractions []messageGroupLocalInteraction
 	Inline            []inlinePlacement // Kitty thumbnails in full-group-local cells
@@ -108,14 +111,13 @@ func buildMessageGroupLayer(
 	}
 
 	rows, selected := buildMessageRows(group, width, location, selection, inlineThumbnails)
-
-	baseAvatar := image.Rect(0, 0, 4, 2)
+	start, end := 0, 0
 	if selected {
-		baseAvatar = image.Rect(1, 1, 5, 3)
+		start, end = selectedMessageRows(rows, selection)
 	}
-	avatarVisible := group.ShowAvatar && baseAvatar.In(image.Rect(0, 0, width, len(rows)))
+	avatarVisible := group.ShowAvatar && image.Rect(0, 0, 4, 2).In(image.Rect(0, 0, width, len(rows)))
 
-	root, interactions, inline := renderMessageGroupLayer(group, width, rows, 0, selected, avatarVisible, 0, styles, inlineThumbnails, messageGroupFirstRows(rows))
+	root, interactions, inline := renderMessageGroupLayer(group, width, rows, 0, start, end, avatarVisible, 0, styles, inlineThumbnails, messageGroupFirstRows(rows))
 
 	return messageGroupResult{
 		Layer:             root,
@@ -124,6 +126,8 @@ func buildMessageGroupLayer(
 		Rows:              rows,
 		Group:             group,
 		Selected:          selected,
+		SelectedStart:     start,
+		SelectedEnd:       end,
 		RowOffset:         0,
 		LocalInteractions: interactions,
 		Inline:            inline,
@@ -131,8 +135,8 @@ func buildMessageGroupLayer(
 }
 
 // renderMessageGroupLayer is the single shared renderer for message-group
-// surfaces. It lays out the semantic row slice, the selected rounded frame, and
-// the avatar inside a fresh local root at (0,0). rowOffset is the original
+// surfaces. It lays out the semantic row slice, the selected message's frame,
+// and the avatar inside a fresh local root at (0,0). rowOffset is the original
 // full-group row index of rows[0]; message row IDs use that offset so sliced
 // fragments keep the message's true row index. avatarVisible controls whether
 // the avatar renders; avatarNudgeY shifts the avatar rectangle upward by that
@@ -145,7 +149,7 @@ func renderMessageGroupLayer(
 	width int,
 	rows []messageRowSpec,
 	rowOffset int,
-	selected bool,
+	selectedStart, selectedEnd int,
 	avatarVisible bool,
 	avatarNudgeY int,
 	styles renderStyles,
@@ -158,18 +162,29 @@ func renderMessageGroupLayer(
 	var interactions []messageGroupLocalInteraction
 	var inline []inlinePlacement
 
-	// Selected groups draw a real rounded card frame behind the content.
-	if selected {
-		content := styles.Panel.
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(styles.FocusedBorder.GetForeground()).
-			BorderBackground(styles.FocusedBorder.GetBackground()).
-			Width(width).Height(height).Render("")
-		if width < 2 || height < 2 {
-			// Too small for a valid border; degrade to a plain fixed Panel box.
-			content = styles.Panel.Width(width).Height(height).Render("")
+	// Frame only the selected message, not the whole sender/avatar group.
+	// Clip the frame to the fragment when history scrolls through a message.
+	if selectedEnd > selectedStart {
+		start := max(0, selectedStart-rowOffset)
+		end := min(height, selectedEnd-rowOffset)
+		if start < end {
+			x := 0
+			if group.ShowAvatar {
+				x = 4 // leave the avatar outside the frame at a stable position
+			}
+			frameWidth := width - x
+			if frameWidth >= 2 && end-start >= 2 {
+				content := styles.Panel.
+					Border(lipgloss.RoundedBorder()).
+					BorderForeground(styles.FocusedBorder.GetForeground()).
+					BorderBackground(styles.FocusedBorder.GetBackground()).
+					Width(frameWidth).Height(end - start).Render("")
+				root.AddLayers(lipgloss.NewLayer(content).X(x).Y(start).Z(zCardFrame))
+			} else if frameWidth > 0 {
+				// A one-row viewport still shows where selection is.
+				root.AddLayers(lipgloss.NewLayer(styles.FocusedBorder.Render("│")).X(x).Y(start).Z(zCardFrame))
+			}
 		}
-		root.AddLayers(lipgloss.NewLayer(content).X(0).Y(0).Z(zCardFrame))
 	}
 
 	// Semantic rows: full-width Panel background (optional identity/click) plus
@@ -222,9 +237,6 @@ func renderMessageGroupLayer(
 	// escapes the box. The avatar rectangle is nudged upward by avatarNudgeY.
 	if avatarVisible {
 		avatarRect := image.Rect(0, 0, 4, 2)
-		if selected {
-			avatarRect = image.Rect(1, 1, 5, 3)
-		}
 		adjusted := image.Rect(avatarRect.Min.X, avatarRect.Min.Y-avatarNudgeY, avatarRect.Max.X, avatarRect.Max.Y-avatarNudgeY)
 		avatarZ := zContent
 		id := ""
@@ -369,15 +381,12 @@ func sliceMessageGroupLayer(
 	height := endRow - startRow
 
 	baseAvatar := image.Rect(0, 0, 4, 2)
-	if full.Selected {
-		baseAvatar = image.Rect(1, 1, 5, 3)
-	}
 	avatarVisible := full.Group.ShowAvatar &&
 		baseAvatar.In(image.Rect(0, 0, full.Width, full.Height)) &&
 		baseAvatar.Min.Y >= startRow && baseAvatar.Max.Y <= endRow
 
 	root, interactions, inline := renderMessageGroupLayer(
-		full.Group, full.Width, rows, full.RowOffset+startRow, full.Selected,
+		full.Group, full.Width, rows, full.RowOffset+startRow, full.SelectedStart, full.SelectedEnd,
 		avatarVisible, startRow, styles, inlineThumbnails, messageGroupFirstRows(full.Rows),
 	)
 
@@ -388,15 +397,17 @@ func sliceMessageGroupLayer(
 		Rows:              rows,
 		Group:             full.Group,
 		Selected:          full.Selected,
+		SelectedStart:     full.SelectedStart,
+		SelectedEnd:       full.SelectedEnd,
 		RowOffset:         full.RowOffset + startRow,
 		LocalInteractions: interactions,
 		Inline:            inline,
 	}
 }
 
-// buildMessageRows reconstructs the semantic row sequence of a message group,
-// porting the exact legacy buildSurfaceMessageBlock behavior onto the frozen
-// messageRowSpec types.
+// buildMessageRows constructs a stable row sequence: each message reserves
+// top and bottom frame rows whether selected or not, so keyboard navigation
+// never moves its content or the shared avatar.
 func buildMessageRows(
 	group RenderedMessageGroup,
 	width int,
@@ -407,7 +418,7 @@ func buildMessageRows(
 	contentWidth := max(1, width-2)
 	var rows []messageRowSpec
 	if group.ShowAvatar {
-		contentWidth = max(1, width-5)
+		contentWidth = max(1, width-6) // frame starts at x=4, text at x=5
 		first := group.Messages[0]
 		header := strings.TrimSpace(group.SenderName + "  " + first.SentAt.In(location).Format("15:04"))
 		rows = append(rows, messageRowSpec{text: header, kind: messageRowEmphasis})
@@ -415,13 +426,15 @@ func buildMessageRows(
 
 	selected := false
 	for _, message := range group.Messages {
+		start := len(rows)
+		rows = append(rows, messageRowSpec{kind: messageRowPanel}) // reserved top border
 		if selection.ChatID != 0 && selection.MessageID != 0 &&
 			message.ChatID == selection.ChatID && message.ID == selection.MessageID {
 			selected = true
 		}
 
 		widthForMessage := contentWidth
-		if message.Outgoing {
+		if message.Outgoing && !group.ShowAvatar {
 			widthForMessage = max(1, width-2)
 		}
 
@@ -506,17 +519,32 @@ func buildMessageRows(
 		if message.SendState == domain.SendFailed && len(rows) > 0 && len(rows[len(rows)-1].chips) == 0 {
 			rows[len(rows)-1].kind = messageRowError
 		}
-	}
-
-	if group.ShowAvatar && len(rows) < 2 {
-		rows = append(rows, messageRowSpec{kind: messageRowPanel})
-	}
-
-	if selected {
-		rows = append([]messageRowSpec{{kind: messageRowPanel}}, rows...)
-		rows = append(rows, messageRowSpec{kind: messageRowPanel})
+		rows = append(rows, messageRowSpec{kind: messageRowPanel}) // reserved bottom border
+		for index := start; index < len(rows); index++ {
+			rows[index].frameID = message.ID
+		}
 	}
 	return rows, selected
+}
+
+func selectedMessageRows(rows []messageRowSpec, selection messageSelection) (int, int) {
+	if selection.ChatID == 0 || selection.MessageID == 0 {
+		return 0, 0
+	}
+	start, end := -1, 0
+	for index, row := range rows {
+		if row.frameID != selection.MessageID {
+			continue
+		}
+		if start < 0 {
+			start = index
+		}
+		end = index + 1
+	}
+	if start < 0 {
+		return 0, 0
+	}
+	return start, end
 }
 
 func videoMetadata(message domain.Message) string {

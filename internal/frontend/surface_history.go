@@ -111,7 +111,7 @@ func buildHistoryLayer(
 
 	// Bottom-up placement over the content rect. One blank separator row is
 	// background only and never gets a layer or interaction. Keyboard message
-	// navigation centers the selected group while there is overflow on both
+	// navigation centers the selected message while there is overflow on both
 	// sides; near either end it clamps to the content edge without blank rows.
 	cursor := content.Max.Y
 	if model.HistoryFollowSelection {
@@ -180,8 +180,8 @@ func buildHistoryLayer(
 
 // buildVisibleHistoryResults builds only enough groups to cover the viewport.
 // Ordinary history is filled backward from its newest remaining group. While
-// following keyboard selection, the selected group is surrounded by enough
-// older and newer content to preserve centered placement and edge clamping.
+// following keyboard selection, the selected message (possibly inside a tall
+// sender group) is surrounded by content for centering and edge clamping.
 func buildVisibleHistoryResults(
 	groups []RenderedMessageGroup,
 	viewportHeight int,
@@ -201,12 +201,13 @@ func buildVisibleHistoryResults(
 	}
 
 	center := build(groups[selected])
-	remaining := max(0, viewportHeight-center.Height)
+	selectedStart, selectedEnd := center.SelectedStart, center.SelectedEnd
+	remaining := max(0, viewportHeight-(selectedEnd-selectedStart))
 	aboveNeed := remaining / 2
 	belowNeed := remaining - aboveNeed
 
 	var after []messageGroupResult
-	belowExtent := 0
+	belowExtent := center.Height - selectedEnd
 	nextAfter := selected + 1
 	for nextAfter < len(groups) && belowExtent < belowNeed {
 		result := build(groups[nextAfter])
@@ -223,7 +224,7 @@ func buildVisibleHistoryResults(
 	}
 
 	var beforeReverse []messageGroupResult
-	aboveExtent := 0
+	aboveExtent := selectedStart
 	nextBefore := selected - 1
 	for nextBefore >= 0 && aboveExtent < aboveTarget {
 		result := build(groups[nextBefore])
@@ -299,8 +300,8 @@ func centeredHistoryCursor(results []messageGroupResult, content image.Rectangle
 			totalHeight++
 		}
 		if result.Selected {
-			selectedTop = totalHeight
-			selectedHeight = result.Height
+			selectedTop = totalHeight + result.SelectedStart
+			selectedHeight = result.SelectedEnd - result.SelectedStart
 		}
 		totalHeight += result.Height
 	}

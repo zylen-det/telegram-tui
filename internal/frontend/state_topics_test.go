@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"testing"
+	"time"
 
 	"github.com/zylen-det/telegram-tui/internal/domain"
 	"github.com/zylen-det/telegram-tui/internal/telegram"
@@ -27,6 +28,55 @@ func trackTopic(state *State, topic domain.ForumTopic) {
 		state.ForumTopics[topic.ChatID] = make(map[domain.TopicID]domain.ForumTopic)
 	}
 	state.ForumTopics[topic.ChatID][topic.ID] = topic
+}
+
+func TestTopicMessageNavigationSkipsMessagesHiddenByTheConversation(t *testing.T) {
+	state := topicsBaseState(t)
+	state.Focus = FocusConversation
+	trackTopic(&state, testTopic(101, "Selected"))
+	state.SelectedTopics[7] = 101
+	state.Messages[7] = []domain.Message{
+		{ID: 1, ChatID: 7, TopicID: 101, Kind: domain.MessageText, Text: "first"},
+		{ID: 2, ChatID: 7, TopicID: 102, Kind: domain.MessageText, Text: "hidden"},
+		{ID: 3, ChatID: 7, TopicID: 101, Kind: domain.MessageText, Text: "reply target"},
+		{ID: 4, ChatID: 7, TopicID: 102, Kind: domain.MessageText, Text: "hidden"},
+		{ID: 5, ChatID: 7, TopicID: 101, Kind: domain.MessageText, Text: "edited reply", HasReply: true, ReplyToMessageID: 3, EditedAt: time.Unix(123, 0)},
+	}
+	state.SelectedMessageChat, state.SelectedMessage = 7, 5
+	key := topicKey{ChatID: 7, TopicID: 101}
+
+	for _, want := range []struct {
+		action Action
+		id     domain.MessageID
+		offset int
+	}{
+		{SelectPreviousMessage, 3, 1},
+		{SelectPreviousMessage, 1, 2},
+		{SelectPreviousMessage, 1, 2},
+		{SelectNextMessage, 3, 1},
+		{SelectNextMessage, 5, 0},
+	} {
+		state, _ = updateState(state, ActionReceived{Action: want.action})
+		if state.SelectedMessageChat != 7 || state.SelectedMessage != want.id {
+			t.Fatalf("selection = %d/%d after %v, want 7/%d", state.SelectedMessageChat, state.SelectedMessage, want.action, want.id)
+		}
+		if history := state.TopicHistory[key]; !history.FollowSelection || history.ViewOffset != want.offset {
+			t.Fatalf("topic history after %v = %#v, want following offset %d", want.action, history, want.offset)
+		}
+		model := Select(state, time.UTC)
+		if index := selectedHistoryGroupIndex(model.Groups, messageSelection{ChatID: 7, MessageID: want.id}); index < 0 {
+			t.Fatalf("selected message %d absent from visible conversation", want.id)
+		}
+	}
+	if state.History[7].FollowSelection {
+		t.Fatal("topic navigation changed chat-level history")
+	}
+
+	all, _ := activateAllTopics(state, 7)
+	all, _ = updateState(all, ActionReceived{Action: SelectPreviousMessage})
+	if all.SelectedMessage != 4 || !all.History[7].FollowSelection || all.History[7].ViewOffset != 1 {
+		t.Fatalf("ALL navigation = message %d history %#v, want message 4 and chat offset 1", all.SelectedMessage, all.History[7])
+	}
 }
 
 func TestOpenTopicsGating(t *testing.T) {

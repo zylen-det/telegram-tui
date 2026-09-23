@@ -469,6 +469,32 @@ func applyTopicCloudDraft(state *State, key topicKey, draft domain.Draft) {
 	state.TopicDraftSync[key] = syncState
 }
 
+// visibleConversationTopic is the topic whose messages the conversation
+// displays. ALL mode and untracked topics show the whole chat.
+func visibleConversationTopic(state State, chatID domain.ChatID) (domain.ForumTopic, bool) {
+	if state.ShowAll[chatID] {
+		return domain.ForumTopic{}, false
+	}
+	topic, ok := state.ForumTopics[chatID][state.SelectedTopics[chatID]]
+	return topic, ok
+}
+
+func visibleConversationMessages(state State, chatID domain.ChatID) []domain.Message {
+	messages := state.Messages[chatID]
+	_, known := visibleConversationTopic(state, chatID)
+	if !known {
+		return messages
+	}
+	visible := make([]domain.Message, 0)
+	topicID := state.SelectedTopics[chatID]
+	for _, message := range messages {
+		if message.TopicID == topicID {
+			visible = append(visible, message)
+		}
+	}
+	return visible
+}
+
 // activeTopicKey reports the active topic key: the active chat is a forum
 // with a selected topic. A forum without a selected topic has no key.
 func activeTopicKey(state State) (topicKey, bool) {

@@ -30,11 +30,11 @@ func TestVideoPosterAcceptance_StaticPosterCaptionAndMetadataRows(t *testing.T) 
 	got := make([]string, len(rows))
 	for index := range rows {
 		got[index] = rows[index].text
-		if rows[index].chatID != 9 || rows[index].messageID != 77 {
+		if index > 0 && index < len(rows)-1 && (rows[index].chatID != 9 || rows[index].messageID != 77) {
 			t.Fatalf("row %d identity = (%d,%d), want (9,77)", index, rows[index].chatID, rows[index].messageID)
 		}
 	}
-	want := []string{"", "", "launch clip", "[Video] clip.mp4 · 2:05 · 640×360 · video/mp4"}
+	want := []string{"", "", "", "launch clip", "[Video] clip.mp4 · 2:05 · 640×360 · video/mp4", ""}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Video poster rows = %#v, want %#v", got, want)
 	}
@@ -50,7 +50,7 @@ func TestVideoPosterAcceptance_MetadataFallbackOmitsEmptyFields(t *testing.T) {
 	group := RenderedMessageGroup{MessageGroup: MessageGroup{Messages: []domain.Message{message}}}
 
 	rows, _ := buildMessageRows(group, 80, time.UTC, messageSelection{}, nil)
-	if len(rows) != 1 || rows[0].text != "[Video] 0:09" {
+	if len(rows) != 3 || rows[1].text != "[Video] 0:09" {
 		t.Fatalf("Video metadata fallback rows = %#v, want one %q row", rows, "[Video] 0:09")
 	}
 }

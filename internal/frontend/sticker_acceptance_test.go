@@ -148,9 +148,9 @@ func TestStickerMessagesSharingCachedKittyBlockGetPlacementSpecificTransmits(t *
 	for _, placement := range first.Inline {
 		byY[placement.Y] = placement
 	}
-	placeA, okA := byY[0]
-	placeB, okB := byY[15]
-	photoPlace, okP := byY[6]
+	placeA, okA := byY[1]
+	placeB, okB := byY[20]
+	photoPlace, okP := byY[9]
 	if !okA || !okB || !okP {
 		t.Fatalf("placement rows = %#v", byY)
 	}

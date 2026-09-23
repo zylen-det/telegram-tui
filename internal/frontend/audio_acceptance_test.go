@@ -18,11 +18,11 @@ func TestAudioRenderingCaptionMetadataOmissionFallbackAndIdentity(t *testing.T) 
 	got := make([]string, len(rows))
 	for i, row := range rows {
 		got[i] = row.text
-		if row.chatID != 9 || row.messageID != 77 {
+		if i > 0 && i < len(rows)-1 && (row.chatID != 9 || row.messageID != 77) {
 			t.Fatalf("row %d identity = (%d,%d)", i, row.chatID, row.messageID)
 		}
 	}
-	want := []string{"listen now", "[Audio] song.flac · 2:05 · audio/flac"}
+	want := []string{"", "listen now", "[Audio] song.flac · 2:05 · audio/flac", ""}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("rows = %#v, want %#v", got, want)
 	}
@@ -31,13 +31,13 @@ func TestAudioRenderingCaptionMetadataOmissionFallbackAndIdentity(t *testing.T) 
 	pending.Outgoing = true
 	pending.SendState = domain.SendPending
 	pendingRows, _ := buildMessageRows(RenderedMessageGroup{MessageGroup: MessageGroup{Messages: []domain.Message{pending}}}, 100, time.UTC, messageSelection{}, nil)
-	if len(pendingRows) != 2 || !pendingRows[1].outgoing || pendingRows[1].kind != messageRowPanel {
+	if len(pendingRows) != 4 || !pendingRows[1].outgoing || pendingRows[2].kind != messageRowPanel {
 		t.Fatalf("pending Audio rows = %#v", pendingRows)
 	}
 	failed := pending
 	failed.SendState = domain.SendFailed
 	failedRows, _ := buildMessageRows(RenderedMessageGroup{MessageGroup: MessageGroup{Messages: []domain.Message{failed}}}, 100, time.UTC, messageSelection{}, nil)
-	if len(failedRows) != 2 || failedRows[1].kind != messageRowError {
+	if len(failedRows) != 4 || failedRows[2].kind != messageRowError {
 		t.Fatalf("failed Audio rows = %#v", failedRows)
 	}
 

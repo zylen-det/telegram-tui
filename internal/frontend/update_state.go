@@ -2923,10 +2923,13 @@ func messageByIdentity(state State, chatID domain.ChatID, messageID domain.Messa
 
 func selectAdjacentMessage(state *State, previous bool) {
 	chatID, ok := activeChatID(*state)
-	if !ok || len(state.Messages[chatID]) == 0 {
+	if !ok {
 		return
 	}
-	messages := state.Messages[chatID]
+	messages := visibleConversationMessages(*state, chatID)
+	if len(messages) == 0 {
+		return
+	}
 	index := messageIndex(messages, state.SelectedMessage)
 	moved := index < 0
 	if index < 0 {
@@ -2943,6 +2946,15 @@ func selectAdjacentMessage(state *State, previous bool) {
 	state.SelectedMessage = messages[index].ID
 	state.MessageMenu = nil
 	if moved {
+		if key, active := activeTopicKey(*state); active {
+			if _, known := visibleConversationTopic(*state, chatID); known {
+				history := state.TopicHistory[key]
+				history.ViewOffset = clampOffset(len(messages)-1-index, len(messages))
+				history.FollowSelection = true
+				state.TopicHistory[key] = history
+				return
+			}
+		}
 		history := state.History[chatID]
 		history.ViewOffset = clampOffset(len(messages)-1-index, len(messages))
 		history.FollowSelection = true

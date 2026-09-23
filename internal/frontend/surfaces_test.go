@@ -576,7 +576,7 @@ func TestRoundedMessageSelectionSurroundsFullCard(t *testing.T) {
 			break
 		}
 	}
-	if messageLine < 2 || messageLine+1 >= len(lines) || !strings.Contains(lines[messageLine-2], "╭") || !strings.Contains(lines[messageLine], "│") || !strings.Contains(lines[messageLine+1], "╰") {
+	if messageLine < 2 || messageLine+1 >= len(lines) || !strings.Contains(lines[messageLine-1], "╭") || !strings.Contains(lines[messageLine], "│") || !strings.Contains(lines[messageLine+1], "╰") {
 		t.Fatalf("selected full card lacks rounded border near line %d", messageLine)
 	}
 }

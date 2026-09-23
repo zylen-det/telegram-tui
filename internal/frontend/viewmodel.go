@@ -174,25 +174,9 @@ func Select(state State, location *time.Location) ViewModel {
 	model.ShowAllTopics = state.ShowAll[model.ActiveChat.ID]
 	topicID := state.SelectedTopics[model.ActiveChat.ID]
 	topicKey := TopicKey{ChatID: model.ActiveChat.ID, TopicID: topicID}
-	// ALL-messages mode keeps ActiveTopicKnown false: the reducer deletes
-	// SelectedTopics[chat] on activation, and even a stale entry must not
-	// filter groups or reroute history/drafts away from the chat-level path.
-	if !model.ShowAllTopics {
-		if topic, ok := state.ForumTopics[model.ActiveChat.ID][topicID]; ok {
-			model.ActiveTopic = topic
-			model.ActiveTopicKnown = true
-		}
-	}
-	var messages []domain.Message
-	if model.ActiveTopicKnown {
-		for _, message := range state.Messages[model.ActiveChat.ID] {
-			if message.TopicID == topicID {
-				messages = append(messages, message)
-			}
-		}
-	} else {
-		messages = state.Messages[model.ActiveChat.ID]
-	}
+	// ALL-messages mode ignores even a stale selected topic.
+	model.ActiveTopic, model.ActiveTopicKnown = visibleConversationTopic(state, model.ActiveChat.ID)
+	messages := visibleConversationMessages(state, model.ActiveChat.ID)
 	groups := GroupMessages(model.ActiveChat.Kind, messages, location)
 	model.Groups = make([]RenderedMessageGroup, len(groups))
 	for index, group := range groups {
