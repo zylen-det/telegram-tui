@@ -144,10 +144,19 @@ func mapKeyPress(focus Focus, msg tea.KeyPressMsg) (ActionReceived, bool) {
 			return actionReceived(SelectNextMention)
 		case "l":
 			return actionReceived(OpenChat)
+		case "h":
+			// Leftward from the chat list targets the conversation pane via the
+			// explicit FocusPane reducer, which honors focusVisible; in narrow
+			// layouts where conversation is hidden it stays on FocusChats. This
+			// must not use FocusPrevious, which would wrap into the composer.
+			return ActionReceived{Action: FocusPane, TargetFocus: FocusConversation}, true
 		}
 		switch key.Code {
 		case tea.KeyRight:
 			return actionReceived(OpenChat)
+		case tea.KeyLeft:
+			// Same explicit semantic mapping as h.
+			return ActionReceived{Action: FocusPane, TargetFocus: FocusConversation}, true
 		case tea.KeyEnter:
 			return actionReceived(OpenChatActionMenu)
 		}

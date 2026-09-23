@@ -20,7 +20,8 @@ func TestSemanticInputMapsNavigationAndEditors(t *testing.T) {
 		{name: "down", focus: FocusChats, key: tea.Key{Code: tea.KeyDown}, want: ActionReceived{Action: SelectNext}},
 		{name: "j", focus: FocusChats, key: tea.Key{Text: "j", Code: 'j'}, want: ActionReceived{Action: SelectNext}},
 		{name: "up", focus: FocusChats, key: tea.Key{Code: tea.KeyUp}, want: ActionReceived{Action: SelectPrevious}},
-		{name: "left mirrors h", focus: FocusChats, key: tea.Key{Code: tea.KeyLeft}, want: ActionReceived{Action: FocusPrevious}},
+		{name: "left targets conversation", focus: FocusChats, key: tea.Key{Code: tea.KeyLeft}, want: ActionReceived{Action: FocusPane, TargetFocus: FocusConversation}},
+		{name: "h targets conversation", focus: FocusChats, key: tea.Key{Text: "h", Code: 'h'}, want: ActionReceived{Action: FocusPane, TargetFocus: FocusConversation}},
 		{name: "right opens chat", focus: FocusChats, key: tea.Key{Code: tea.KeyRight}, want: ActionReceived{Action: OpenChat}},
 		{name: "enter opens chat actions", focus: FocusChats, key: tea.Key{Code: tea.KeyEnter}, want: ActionReceived{Action: OpenChatActionMenu}},
 		{name: "tab", focus: FocusChats, key: tea.Key{Code: tea.KeyTab}, want: ActionReceived{Action: FocusNext}},
@@ -207,6 +208,67 @@ func TestConversationLeftReturnsToChatsInEveryLayout(t *testing.T) {
 				t.Fatalf("layout %v key %#v focus = %v, want FocusChats", layout, key, got.Focus)
 			}
 		}
+	}
+}
+
+// TestChatListLeftAndHFocusConversation proves that unmodified Left and h from
+// the chat list map to the explicit FocusPane/FocusConversation action, not
+// FocusPrevious (which would wrap into the composer). Through AppModel.Update
+// the focus lands on the conversation pane in Wide and Normal layouts, while
+// the reducer's focusVisible guard keeps it on FocusChats in Narrow where the
+// conversation pane is hidden behind the chat list page. Shift-Tab stays
+// mapped to FocusPrevious, and Tab plus Right/l keep their forward behavior.
+func TestChatListLeftAndHFocusConversation(t *testing.T) {
+	for _, key := range []tea.Key{
+		{Code: tea.KeyLeft},
+		{Code: 'h', Text: "h"},
+	} {
+		want := ActionReceived{Action: FocusPane, TargetFocus: FocusConversation}
+		if got, ok := mapKeyPress(FocusChats, tea.KeyPressMsg(key)); !ok || got != want {
+			t.Fatalf("mapKeyPress(FocusChats, %#v) = (%#v, %t), want (%#v, true)", key, got, ok, want)
+		}
+
+		for _, test := range []struct {
+			name   string
+			layout Layout
+			width  int
+			want   Focus
+		}{
+			{name: "wide", layout: LayoutWide, width: 140, want: FocusConversation},
+			{name: "normal", layout: LayoutNormal, width: 100, want: FocusConversation},
+			// Narrow hides the conversation while the chat list page is active,
+			// so the focus must stay on the chat list.
+			{name: "narrow", layout: LayoutNarrow, width: 60, want: FocusChats},
+		} {
+			t.Run(test.name, func(t *testing.T) {
+				model := mainSurfaceModel(t, test.width, 24)
+				state := model.Snapshot()
+				state.Layout = test.layout
+				state.Focus = FocusChats
+				model.state = &state
+				model, _ = updateAppModel(t, model, tea.KeyPressMsg(key))
+				if got := model.Snapshot().Focus; got != test.want {
+					t.Fatalf("AppModel.Update with %#v moved focus from FocusChats to %v, want %v", key, got, test.want)
+				}
+			})
+		}
+	}
+
+	for _, test := range []struct {
+		name string
+		key  tea.Key
+		want Action
+	}{
+		{name: "shift tab still cycles backward", key: tea.Key{Code: tea.KeyTab, Mod: tea.ModShift}, want: FocusPrevious},
+		{name: "tab cycles forward", key: tea.Key{Code: tea.KeyTab}, want: FocusNext},
+		{name: "right opens chat", key: tea.Key{Code: tea.KeyRight}, want: OpenChat},
+		{name: "l opens chat", key: tea.Key{Code: 'l', Text: "l"}, want: OpenChat},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got, ok := mapKeyPress(FocusChats, tea.KeyPressMsg(test.key)); !ok || got.Action != test.want {
+				t.Fatalf("mapKeyPress(FocusChats, %#v) = (%v, %t), want (%v, true)", test.key, got.Action, ok, test.want)
+			}
+		})
 	}
 }
 
