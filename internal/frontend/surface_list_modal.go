@@ -152,9 +152,13 @@ func buildListModalWidth(bounds image.Rectangle, title string, rows []modalRowSp
 	}
 }
 
+// Both the renderer and the Huh selector host use this width so the reference
+// action fits on one line in normal-sized terminals.
+const messageActionModalWidth = 40
+
 // buildActionModalLayer adapts the message action menu into the shared list
 // modal. Selection follows the generated capability-gated row order rather
-// than capability ordinals. View image, Reply, and Copy survive loading/error
+// than capability ordinals. View image, Reply, reference navigation, and Copy survive loading/error
 // states; every other actionable row is gated on a settled menu. When a
 // selector Huh View is injected it replaces the actionable row labels and
 // selected-row paint; omitted injection retains the legacy rows.
@@ -162,7 +166,7 @@ func buildActionModalLayer(model ViewModel, styles renderStyles, selectorView ..
 	if model.MessageMenu == nil {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
-	return buildListModal(image.Rect(0, 0, model.Width, model.Height), "Message actions", messageActionRows(model.MessageMenu), styles, selectorView...)
+	return buildListModalWidth(image.Rect(0, 0, model.Width, model.Height), "Message actions", messageActionRows(model.MessageMenu), styles, messageActionModalWidth, selectorView...)
 }
 
 // messageActionRows is the single displayed row source for the message action
@@ -174,7 +178,7 @@ func messageActionRows(menu *MessageActionMenu) []modalRowSpec {
 	if menu == nil {
 		return nil
 	}
-	rows := make([]modalRowSpec, 0, 10)
+	rows := make([]modalRowSpec, 0, 12)
 
 	if (menu.MediaFile.Downloaded && menu.MediaFile.LocalPath != "") || (menu.MediaFile.ID != 0 && menu.MediaFile.CanDownload) {
 		id := "action:view-image"
@@ -211,6 +215,13 @@ func messageActionRows(menu *MessageActionMenu) []modalRowSpec {
 			ID:     "action:reply",
 			Label:  "Reply",
 			Action: ActionReceived{Action: ReplyMessage, ChatID: menu.ChatID, MessageID: menu.MessageID},
+		})
+	}
+	if menu.ReferencedMessageID > 0 {
+		rows = append(rows, modalRowSpec{
+			ID:     "action:go-to-reference",
+			Label:  "Go to referenced message",
+			Action: ActionReceived{Action: GoToReferencedMessage, ChatID: menu.ChatID, MessageID: menu.MessageID},
 		})
 	}
 	if !menu.Loading && menu.Error == nil && menu.Capabilities.Forward {
@@ -277,6 +288,9 @@ func messageActionRows(menu *MessageActionMenu) []modalRowSpec {
 		rows = append(rows, modalRowSpec{Label: "Loading actions..."})
 	} else if menu.Error != nil {
 		rows = append(rows, modalRowSpec{Label: "Actions unavailable"})
+	}
+	if menu.JumpRequestID != 0 {
+		rows = append(rows, modalRowSpec{Label: "Opening referenced message..."})
 	}
 
 	for index := range rows {

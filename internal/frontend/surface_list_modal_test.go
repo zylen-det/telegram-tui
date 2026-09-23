@@ -485,6 +485,44 @@ func TestActionModalLayerNilState(t *testing.T) {
 	}
 }
 
+func TestActionModalReferenceLabelFitsWideMenu(t *testing.T) {
+	const label = "Go to referenced message"
+	model := ViewModel{
+		Width: 80, Height: 24, Focus: FocusModal,
+		MessageMenu: &MessageActionMenu{ChatID: 9, MessageID: 30, ReferencedMessageID: 20, Selected: 0},
+	}
+	styles := newRenderStyles(false)
+	controller := newListModalController()
+	_ = controller.Sync(model, nil)
+
+	for _, tc := range []struct {
+		name    string
+		surface surfaceResult
+	}{
+		{"manual", buildActionModalLayer(model, styles)},
+		{"selector", buildActionModalLayer(model, styles, controller.View())},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.surface.Rect.Dx() != messageActionModalWidth {
+				t.Fatalf("modal width = %d, want %d", tc.surface.Rect.Dx(), messageActionModalWidth)
+			}
+			_, canvas := listModalCanvas(image.Rect(0, 0, 80, 24), tc.surface)
+			if !strings.Contains(plainText(canvas.Render()), label) {
+				t.Fatalf("reference label is truncated: %q", plainText(canvas.Render()))
+			}
+		})
+	}
+	if rect := selectorHostRectWidth(image.Rect(0, 0, 80, 24), 1, 1, messageActionModalWidth); controller.host.width != rect.Dx() {
+		t.Fatalf("selector width = %d, want %d", controller.host.width, rect.Dx())
+	}
+
+	model.Width = 26
+	compact := buildActionModalLayer(model, styles)
+	if compact.Rect.Dx() != 26 || !compact.Rect.In(image.Rect(0, 0, model.Width, model.Height)) {
+		t.Fatalf("narrow modal escapes viewport: %v", compact.Rect)
+	}
+}
+
 func TestActionModalLayerCanonicalOrderPayloadSelection(t *testing.T) {
 	styles := newRenderStyles(false)
 	const chatID = domain.ChatID(77)
@@ -543,7 +581,7 @@ func TestActionModalLayerCanonicalOrderPayloadSelection(t *testing.T) {
 		{Label: "Reply"}, {Label: "Forward"}, {Label: "Edit"}, {Label: "Copy"},
 		{Label: "React"}, {Label: "Pin"}, {Label: "Delete"}, {Label: "Delete for everyone"},
 	}
-	layout := (components.Modal{Title: "Message actions", Items: items, Selected: 2}).Layout(image.Rect(0, 0, 80, 24))
+	layout := (components.Modal{Title: "Message actions", Items: items, Selected: 2, Width: messageActionModalWidth}).Layout(image.Rect(0, 0, 80, 24))
 	var selRect image.Rectangle
 	for _, row := range layout.Rows {
 		if row.Selected {
@@ -1033,7 +1071,7 @@ func TestActionModalViewImageRowExactOrderPayloadAndGating(t *testing.T) {
 		{Label: "Delete"},
 		{Label: "Delete for everyone"},
 	}
-	layout := (components.Modal{Title: "Message actions", Items: items, Selected: 0}).Layout(bounds)
+	layout := (components.Modal{Title: "Message actions", Items: items, Selected: 0, Width: messageActionModalWidth}).Layout(bounds)
 	expectedRect := layout.Rows[0].Rect
 	if !viewRect.Eq(expectedRect) {
 		t.Errorf("view-image rect = %v, want %v", viewRect, expectedRect)

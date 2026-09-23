@@ -52,7 +52,7 @@ func TestListModalControllerSynchronizesMessageLifecycleAndPreferEdit(t *testing
 
 	loadingOptions := selectorOptionsFromRows(messageActionRows(state.MessageMenu))
 	wantIdentity := selectorIdentity{Kind: selectorMessageActions, RequestID: 7, ChatID: 9, MessageID: 2}
-	wantRect := selectorHostRect(image.Rect(0, 0, 80, 24), len(loadingOptions), len(loadingOptions)+1)
+	wantRect := selectorHostRectWidth(image.Rect(0, 0, 80, 24), len(loadingOptions), len(loadingOptions)+1, messageActionModalWidth)
 	if model.listModals.host.Identity() != wantIdentity || model.listModals.host.Value() != loadingOptions[0].Value || !model.listModals.host.focused {
 		t.Fatalf("loading message selector = id:%#v value:%#v focus:%t", model.listModals.host.Identity(), model.listModals.host.Value(), model.listModals.host.focused)
 	}

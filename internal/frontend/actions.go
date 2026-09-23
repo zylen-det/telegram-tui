@@ -34,6 +34,7 @@ const (
 	SelectNextMessage
 	SelectPreviousMessage
 	ReplyMessage
+	GoToReferencedMessage
 	CancelReply
 	EditMessage
 	CancelEdit

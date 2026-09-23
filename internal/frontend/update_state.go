@@ -95,8 +95,14 @@ func updateState(input State, raw Event) (State, []Effect) {
 	case ChatMessagesSearchFailed:
 		return reduceChatMessagesSearchFailed(state, event)
 	case SearchMessageContextLoaded:
+		if state.MessageMenu != nil && state.MessageMenu.JumpRequestID == event.RequestID {
+			return reduceReferencedMessageLoaded(state, event)
+		}
 		return reduceSearchMessageContextLoaded(state, event)
 	case SearchMessageContextFailed:
+		if state.MessageMenu != nil && state.MessageMenu.JumpRequestID == event.RequestID {
+			return reduceReferencedMessageFailed(state, event)
+		}
 		return reduceSearchMessageContextFailed(state, event)
 	case PublicChatSearched:
 		return reducePublicChatSearched(state, event)
@@ -1197,6 +1203,9 @@ func reduceAction(state State, event ActionReceived) (State, []Effect) {
 		return reducePhotoSend(state, event)
 	}
 	if state.MessageMenu != nil {
+		if state.MessageMenu.JumpRequestID != 0 && event.Action != Close {
+			return state, nil
+		}
 		switch event.Action {
 		case Close:
 			state.Focus = state.MessageMenu.PreviousFocus
@@ -1215,6 +1224,8 @@ func reduceAction(state State, event ActionReceived) (State, []Effect) {
 		case Activate:
 			event.Action = selectedMenuAction(state.MessageMenu)
 			return reduceAction(state, event)
+		case GoToReferencedMessage:
+			return beginReferencedMessageJump(state)
 		case ReplyMessage:
 			if message, ok := messageByIdentity(state, state.MessageMenu.ChatID, state.MessageMenu.MessageID); ok && state.MessageMenu.Capabilities.Reply {
 				return beginReply(state, message)
@@ -2992,7 +3003,11 @@ func openMessageActionMenu(state State) (State, []Effect) {
 	if message.Sender.Kind == domain.SenderUser && message.Sender.ID != 0 {
 		senderID = domain.UserID(message.Sender.ID)
 	}
-	state.MessageMenu = &MessageActionMenu{ChatID: message.ChatID, MessageID: message.ID, UserID: senderID, Pinned: message.Pinned, Capabilities: local, PreviousFocus: state.Focus, CanReact: canReact, MediaFile: mediaFile, MediaKind: message.Kind}
+	referenceID := domain.MessageID(0)
+	if message.HasReply && message.ReplyToMessageID > 0 {
+		referenceID = message.ReplyToMessageID
+	}
+	state.MessageMenu = &MessageActionMenu{ChatID: message.ChatID, MessageID: message.ID, ReferencedMessageID: referenceID, UserID: senderID, Pinned: message.Pinned, Capabilities: local, PreviousFocus: state.Focus, CanReact: canReact, MediaFile: mediaFile, MediaKind: message.Kind}
 	state.Focus = FocusModal
 	if message.ID <= 0 || message.SendState == domain.SendPending || message.SendState == domain.SendFailed || message.Service || message.Kind == domain.MessageService {
 		return state, nil
@@ -3040,6 +3055,13 @@ func selectMessageMenuAction(menu *MessageActionMenu, action Action) {
 	}
 	if menu.Capabilities.Reply {
 		if action == ReplyMessage {
+			menu.Selected = index
+			return
+		}
+		index++
+	}
+	if menu.ReferencedMessageID > 0 {
+		if action == GoToReferencedMessage {
 			menu.Selected = index
 			return
 		}
@@ -3116,6 +3138,9 @@ func actionMenuItemCount(menu *MessageActionMenu) int {
 	if menu.Capabilities.Reply {
 		count++
 	}
+	if menu.ReferencedMessageID > 0 {
+		count++
+	}
 	if menu.Capabilities.Forward {
 		count++
 	}
@@ -3157,6 +3182,12 @@ func selectedMenuAction(menu *MessageActionMenu) Action {
 	if menu.Capabilities.Reply {
 		if menu.Selected == index {
 			return ReplyMessage
+		}
+		index++
+	}
+	if menu.ReferencedMessageID > 0 {
+		if menu.Selected == index {
+			return GoToReferencedMessage
 		}
 		index++
 	}

@@ -17,7 +17,7 @@ telegram-tui is an unofficial client and is not affiliated with Telegram.
 - Read and send messages in private chats, groups, supergroups, channels, and forum topics.
 - Navigate with Vim keys, conventional keys, a mouse, or any combination of them.
 - Search chats and messages, jump to unread or mentioned chats, browse pinned messages, and use bot-command completion.
-- Reply, edit, delete, forward, pin, copy, and react to messages when Telegram permits the action.
+- Reply, edit, delete, forward, pin, copy, and react to messages when Telegram permits the action. Open a replied-to message from its message actions.
 - Keep Telegram cloud drafts—including reply targets—synchronized across devices.
 - Send photos, videos, audio, documents, and stickers. Preview images and available thumbnails inline as terminal pixel cells, or view images at full fidelity through Kitty's graphics protocol; other media opens in the system application.
 - Browse members and use supported group/channel administration controls.
@@ -99,6 +99,7 @@ Credential lookup order is environment → config file → first-run prompt.
 | Search from the chat list | `/` | Click a result |
 | Next unread / mentioned chat | `u` / `m` in the chat list | — |
 | View pinned messages | `p` in a conversation | — |
+| Go to a referenced message | Select the reply, press Enter, choose Go to referenced message | Choose Go to referenced message in the reply's actions |
 | Browse forum topics | `t` | Click a topic |
 | Page through history | Ctrl-u / Ctrl-d or Page Up / Page Down | Use the wheel |
 | Send a message | Enter | Click Send |

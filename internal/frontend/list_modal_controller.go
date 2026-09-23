@@ -186,7 +186,7 @@ func activeListModalDescriptor(model ViewModel, location *time.Location) (listMo
 			selectorIdentity{Kind: selectorMessageActions, RequestID: menu.RequestID, ChatID: menu.ChatID, MessageID: menu.MessageID},
 			messageActionRows(menu),
 			model.Focus == FocusModal,
-			0,
+			messageActionModalWidth,
 			menu.PreferEdit,
 		), true
 	case model.ReactionPicker != nil:

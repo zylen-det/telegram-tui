@@ -59,20 +59,22 @@ type HistoryState struct {
 }
 
 type MessageActionMenu struct {
-	RequestID     uint64
-	ChatID        domain.ChatID
-	MessageID     domain.MessageID
-	UserID        domain.UserID
-	Capabilities  domain.MessageCapabilities
-	Pinned        bool
-	Loading       bool
-	Error         *domain.AppError
-	Selected      int
-	PreviousFocus Focus
-	PreferEdit    bool
-	CanReact      bool
-	MediaFile     domain.MediaFileRef
-	MediaKind     domain.MessageKind
+	RequestID           uint64
+	JumpRequestID       uint64
+	ReferencedMessageID domain.MessageID
+	ChatID              domain.ChatID
+	MessageID           domain.MessageID
+	UserID              domain.UserID
+	Capabilities        domain.MessageCapabilities
+	Pinned              bool
+	Loading             bool
+	Error               *domain.AppError
+	Selected            int
+	PreviousFocus       Focus
+	PreferEdit          bool
+	CanReact            bool
+	MediaFile           domain.MediaFileRef
+	MediaKind           domain.MessageKind
 }
 
 type ForwardPicker struct {
