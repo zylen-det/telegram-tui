@@ -1,8 +1,6 @@
 package frontend
 
 import (
-	"os"
-	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -107,33 +105,5 @@ func TestAppModelHuhPhotoPathCtrlOFocusesHost(t *testing.T) {
 	}
 	if model.photoPathInput.Identity() != 9 || !model.photoPathInput.focused || model.photoPathInput.width != 52 {
 		t.Fatalf("opened Photo host = id:%d focus:%t width:%d", model.photoPathInput.Identity(), model.photoPathInput.focused, model.photoPathInput.width)
-	}
-}
-
-func TestAppModelHuhPhotoPathRoutingStructure(t *testing.T) {
-	source, err := os.ReadFile("app_model.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	text := string(source)
-	if !strings.Contains(text, "return key.Mod&^tea.ModShift == 0") {
-		t.Fatal("Photo Huh routing no longer rejects Alt/Ctrl/Meta modifiers")
-	}
-	photoBranch := strings.Index(text, "if focus == FocusPhotoSend && photoEditKeyAllowed(msg.Key())")
-	if photoBranch < 0 {
-		t.Fatal("Photo Huh routing branch is missing")
-	}
-	for _, forbidden := range []string{"m.applyRunes(", "func (m AppModel) applyRunes", "if editableFocus(focus) && textInputAllowed(msg.Key())", "if editableFocus(m.Snapshot().Focus)"} {
-		if strings.Contains(text, forbidden) {
-			t.Fatalf("AppModel retained superseded generic per-rune fallback %q", forbidden)
-		}
-	}
-	changedPostSync := "return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncPhotoPathInputHost(), m.syncListModalController())"
-	unchangedPostSync := "return m, tea.Batch(preSync, cmd, m.syncPhotoPathInputHost(), m.syncListModalController())"
-	if got := strings.Count(text, changedPostSync); got != 3 {
-		t.Fatalf("Photo changed-value post-sync seams = %d, want 3", got)
-	}
-	if got := strings.Count(text, unchangedPostSync); got != 6 {
-		t.Fatalf("controlled-input unchanged-value Photo post-sync seams = %d, want 6", got)
 	}
 }

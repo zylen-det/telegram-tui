@@ -2,7 +2,6 @@ package frontend
 
 import (
 	"image"
-	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -205,42 +204,5 @@ func TestClipSelectorHuhViewUsesExactANSIWideRuneRectangle(t *testing.T) {
 	}
 	if got := clipSelectorHuhView("non-empty", 0, 2); got != "" {
 		t.Fatalf("zero-width clip = %q, want empty", got)
-	}
-}
-
-func TestSelectorHuhViewTypedProductionCompositionSeam(t *testing.T) {
-	checks := []struct {
-		path     string
-		required []string
-	}{
-		{"view.go", []string{"editorViews{", "Selector: m.listModals.View()"}},
-		{"render_frame.go", []string{"Selector string", "selectedViews := selectEditorViews(views)", "ctx.hasViews = len(views) > 0", "stack.compose(ctx, modalBase{"}},
-		// The selector-owning overlay branches now live in the registry; each
-		// still forwards the injected Huh Selector View to its builder.
-		{"modal_stack.go", []string{"if !ctx.hasViews", "buildActionModalLayer(ctx.model, ctx.styles, ctx.injectedView(ctx.views.Selector)...)", "buildReactionPickerLayer(ctx.model, ctx.styles, ctx.injectedView(ctx.views.Selector)...)", "buildForwardPickerLayer(ctx.model, ctx.styles, ctx.injectedView(ctx.views.Selector)...)"}},
-		{"surface_list_modal.go", []string{"selectorView ...string", "clipSelectorHuhView", "len(selectorView) > 0"}},
-	}
-	for _, check := range checks {
-		source, err := os.ReadFile(check.path)
-		if err != nil {
-			t.Fatalf("read %s: %v", check.path, err)
-		}
-		for _, required := range check.required {
-			if !strings.Contains(string(source), required) {
-				t.Errorf("%s missing production seam %q", check.path, required)
-			}
-		}
-	}
-	viewSource, err := os.ReadFile("view.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	start := strings.Index(string(viewSource), "func (m AppModel) View() tea.View")
-	end := strings.Index(string(viewSource), "func (m AppModel) publishOverlayDesired")
-	if start < 0 || end <= start {
-		t.Fatal("cannot isolate AppModel.View source")
-	}
-	if strings.Contains(string(viewSource)[start:end], "syncListModalController()") {
-		t.Fatal("AppModel.View mutates/synchronizes selector host instead of remaining one-snapshot pure composition")
 	}
 }

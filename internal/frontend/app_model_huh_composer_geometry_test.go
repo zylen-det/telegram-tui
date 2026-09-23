@@ -1,8 +1,6 @@
 package frontend
 
 import (
-	"os"
-	"strings"
 	"testing"
 
 	"github.com/zylen-det/telegram-tui/internal/domain"
@@ -41,26 +39,4 @@ func TestAppModelHuhComposerSynchronizesSharedTextGeometry(t *testing.T) {
 	model.state = &state
 	_ = model.syncComposerTextHost()
 	assertHuhComposerHost(t, model, composerTextIdentity{}, "", true, 1, 1)
-}
-
-func TestAppModelHuhComposerSyncConsumesSharedGeometry(t *testing.T) {
-	source, err := os.ReadFile("app_model.go")
-	if err != nil {
-		t.Fatalf("read app_model.go: %v", err)
-	}
-	body := huhComposerFunctionBody(string(source), "func (m AppModel) syncComposerTextHost()")
-	for _, required := range []string{
-		"Select(snap, m.location)",
-		"composerSurfaceRect(model)",
-		"composerTextRect(model, composerRect)",
-		"textRect.Dx()",
-		"textRect.Dy()",
-	} {
-		if !strings.Contains(body, required) {
-			t.Fatalf("syncComposerTextHost missing shared geometry expression %q\n%s", required, body)
-		}
-	}
-	if strings.Contains(body, "snap.Width") {
-		t.Fatalf("syncComposerTextHost still passes terminal width directly\n%s", body)
-	}
 }

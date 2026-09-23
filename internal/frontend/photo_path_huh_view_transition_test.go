@@ -2,7 +2,6 @@ package frontend
 
 import (
 	"image"
-	"os"
 	"strings"
 	"testing"
 )
@@ -76,32 +75,5 @@ func TestAppModelPhotoPathHuhViewFlowsThroughProductionComposition(t *testing.T)
 	}
 	if view.Cursor != nil {
 		t.Fatalf("production Photo Huh View declares terminal cursor: %+v", view.Cursor)
-	}
-}
-
-func TestPhotoPathHuhViewTypedCompositionSeam(t *testing.T) {
-	checks := []struct {
-		path     string
-		required []string
-	}{
-		{"view.go", []string{"editorViews{", "PhotoPath: m.photoPathInput.View()"}},
-		{"render_frame.go", []string{"type editorViews struct", "PhotoPath string", "selectedViews := selectEditorViews(views)", "ctx.hasViews = len(views) > 0", "stack.compose(ctx, modalBase{"}},
-		// The PhotoSend branch now lives in the overlay registry; the injected
-		// Huh Photo Path View still reaches the builder through the optional
-		// bundle predicate.
-		{"modal_stack.go", []string{"if !ctx.hasViews", "buildPhotoSendModalLayer(ctx.bounds, photoSendModalData{Path: string(ctx.model.PhotoSend.Input)}, ctx.styles, ctx.injectedView(ctx.views.PhotoPath)...)"}},
-		{"surface_photo_send_modal.go", []string{"photoPathView ...string", "clipPhotoPathInputView", "photoSendInputRect(bounds)"}},
-	}
-	for _, check := range checks {
-		source, err := os.ReadFile(check.path)
-		if err != nil {
-			t.Fatalf("read %s: %v", check.path, err)
-		}
-		text := string(source)
-		for _, required := range check.required {
-			if !strings.Contains(text, required) {
-				t.Errorf("%s missing %q", check.path, required)
-			}
-		}
 	}
 }

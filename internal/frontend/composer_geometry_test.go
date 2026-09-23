@@ -3,8 +3,6 @@ package frontend
 import (
 	"fmt"
 	"image"
-	"os"
-	"strings"
 	"testing"
 
 	"github.com/zylen-det/telegram-tui/internal/domain"
@@ -120,23 +118,5 @@ func TestComposerTextRectStopsBeforeVisibleControlsWideAndNarrow(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestComposerGeometryIsUsedByProductionBuilders(t *testing.T) {
-	conversation, err := os.ReadFile("surface_conversation.go")
-	if err != nil {
-		t.Fatalf("read surface_conversation.go: %v", err)
-	}
-	if !strings.Contains(string(conversation), "composerSurfaceRect(model)") {
-		t.Fatal("conversation builder does not consume shared composer surface geometry")
-	}
-
-	composer, err := os.ReadFile("surface_composer.go")
-	if err != nil {
-		t.Fatalf("read surface_composer.go: %v", err)
-	}
-	if !strings.Contains(string(composer), "composerTextRect(model, rect)") {
-		t.Fatal("composer builder does not consume shared composer text geometry")
 	}
 }

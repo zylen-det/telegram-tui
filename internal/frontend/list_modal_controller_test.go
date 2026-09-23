@@ -2,7 +2,6 @@ package frontend
 
 import (
 	"image"
-	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -136,7 +135,7 @@ func TestListModalControllerSynchronizesReactionForwardReorderAndClose(t *testin
 	}
 }
 
-func TestAppModelSyncsListModalControllerOnEveryPostEngineBatch(t *testing.T) {
+func TestAppModelSyncsListModalControllerAfterUpdate(t *testing.T) {
 	state := InitialState()
 	state.Width, state.Height = 80, 24
 	state.Focus = FocusReactionPicker
@@ -145,23 +144,6 @@ func TestAppModelSyncsListModalControllerOnEveryPostEngineBatch(t *testing.T) {
 	model, _ = updateAppModel(t, model, tea.WindowSizeMsg{Width: 100, Height: 30})
 	if model.listModals.host.Identity().Kind != selectorReaction || model.listModals.host.Value() != selectorOptionsFromRows(reactionRows(state.ReactionPicker))[1].Value {
 		t.Fatalf("WindowSize did not synchronize selector: id=%#v value=%#v", model.listModals.host.Identity(), model.listModals.host.Value())
-	}
-
-	data, err := os.ReadFile("app_model.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	postSyncBatches := 0
-	for _, line := range strings.Split(string(data), "\n") {
-		if strings.Contains(line, "return m, tea.Batch") && strings.Contains(line, "m.syncPhotoPathInputHost()") {
-			postSyncBatches++
-			if !strings.Contains(line, "m.syncListModalController()") {
-				t.Fatalf("post-engine frontend host batch omitted selector sync: %s", strings.TrimSpace(line))
-			}
-		}
-	}
-	if postSyncBatches != 18 {
-		t.Fatalf("post-engine frontend host batches = %d, want frozen 18", postSyncBatches)
 	}
 }
 

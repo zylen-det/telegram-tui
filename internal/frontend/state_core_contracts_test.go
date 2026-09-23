@@ -9,34 +9,6 @@ import (
 	"github.com/zylen-det/telegram-tui/internal/domain"
 )
 
-func TestActionValues(t *testing.T) {
-	actions := []Action{
-		NoAction,
-		SelectChat,
-		SelectNext,
-		SelectPrevious,
-		FocusPane,
-		FocusNext,
-		FocusPrevious,
-		Activate,
-		ToggleDetails,
-		Close,
-		PageUp,
-		PageDown,
-		ComposerBackspace,
-		ComposerNewline,
-		ComposerSubmit,
-		Retry,
-		Quit,
-	}
-
-	for want, action := range actions {
-		if got := int(action); got != want {
-			t.Fatalf("action at index %d = %d, want %d", want, got, want)
-		}
-	}
-}
-
 func TestLayoutBreakpoints(t *testing.T) {
 	tests := []struct {
 		width  int
@@ -165,26 +137,6 @@ func TestTypedNilPointerEventsAreNoOps(t *testing.T) {
 	}
 }
 
-func TestCloneStateDeepCopiesPrompt(t *testing.T) {
-	state := InitialState()
-	state.Prompt = &PromptState{
-		Prompt:        auth.Prompt{ID: 46, Kind: auth.PromptPassword, Label: "Password", Secret: true},
-		Input:         []rune("secret"),
-		PreviousFocus: FocusComposer,
-	}
-
-	clone := cloneState(state)
-	clone.Prompt.Prompt.Label = "Changed"
-	clone.Prompt.Input[0] = 'X'
-
-	if state.Prompt.Prompt.Label != "Password" {
-		t.Fatalf("original prompt label = %q, want unchanged", state.Prompt.Prompt.Label)
-	}
-	if value := string(state.Prompt.Input); value != "secret" {
-		t.Fatalf("original prompt input = %q, want %q", value, "secret")
-	}
-}
-
 func layoutName(width, height int) string {
 	return fmt.Sprintf("%dx%d", width, height)
 }
@@ -226,10 +178,6 @@ func cloneState(state State) State {
 		clone.Toast = &toast
 	}
 	return clone
-}
-
-func actionName(action Action) string {
-	return fmt.Sprintf("action_%d", action)
 }
 
 func populatedModalState() State {

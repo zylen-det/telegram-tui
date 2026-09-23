@@ -2,7 +2,6 @@ package frontend
 
 import (
 	"image"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -67,31 +66,6 @@ func TestAuthorizationLayerOmittedInjectionPreservesStandaloneCompatibility(t *t
 	}
 	if !surface.Cursor.Visible {
 		t.Fatal("standalone compatibility lost terminal cursor")
-	}
-}
-
-func TestAuthorizationHuhViewFlowsFromAppModelThroughProductionComposition(t *testing.T) {
-	checks := []struct {
-		path     string
-		required []string
-	}{
-		{"view.go", []string{"editorViews{", "Authorization: m.authorizationInput.View()"}},
-		{"render_frame.go", []string{"type editorViews struct", "Authorization string", "selectedViews := selectEditorViews(views)", "ctx.hasViews = len(views) > 0", "stack.compose(ctx, modalBase{"}},
-		// The concrete overlay branch now lives in the overlay registry; the
-		// injected authorization Huh View still reaches the builder there.
-		{"modal_stack.go", []string{"func (ctx modalContext) injectedView(view string) []string", "if !ctx.hasViews", "buildAuthorizationLayer(ctx.bounds, data, ctx.styles, ctx.injectedView(ctx.views.Authorization)...)"}},
-		{"surface_authorization.go", []string{"authorizationView ...string", "clipAuthorizationInputView", "inputRect.Min.X - frameX", "inputRect.Min.Y - frameY"}},
-	}
-	for _, check := range checks {
-		source, err := os.ReadFile(check.path)
-		if err != nil {
-			t.Fatalf("read %s: %v", check.path, err)
-		}
-		for _, required := range check.required {
-			if !strings.Contains(string(source), required) {
-				t.Errorf("%s missing production seam %q", check.path, required)
-			}
-		}
 	}
 }
 

@@ -1,7 +1,6 @@
 package frontend
 
 import (
-	"os"
 	"strings"
 	"testing"
 
@@ -11,7 +10,7 @@ import (
 	"github.com/zylen-det/telegram-tui/internal/telegram"
 )
 
-func TestAppModelHuhComposerOwnsPersistentHostAndSingleSnapshot(t *testing.T) {
+func TestAppModelHuhComposerOwnsPersistentHost(t *testing.T) {
 	model := newAppModelForTest(t, InitialState(), newTestSession(t))
 	if model.composerText == nil {
 		t.Fatal("NewAppModel composerText host is nil")
@@ -23,15 +22,6 @@ func TestAppModelHuhComposerOwnsPersistentHostAndSingleSnapshot(t *testing.T) {
 	other := newAppModelForTest(t, InitialState(), newTestSession(t))
 	if other.composerText == model.composerText {
 		t.Fatal("independent AppModels share one composer host")
-	}
-
-	source, err := os.ReadFile("app_model.go")
-	if err != nil {
-		t.Fatalf("read app_model.go: %v", err)
-	}
-	body := huhComposerFunctionBody(string(source), "func (m AppModel) syncComposerTextHost()")
-	if got, want := strings.Count(body, "m.Snapshot()"), 1; got != want {
-		t.Fatalf("syncComposerTextHost snapshot calls = %d, want %d\n%s", got, want, body)
 	}
 }
 
@@ -253,30 +243,6 @@ func assertHuhComposerHost(t *testing.T, model AppModel, identity composerTextId
 	if got := model.composerText.height; got != height {
 		t.Fatalf("host height = %d, want %d", got, height)
 	}
-}
-
-func huhComposerFunctionBody(source, signature string) string {
-	start := strings.Index(source, signature)
-	if start < 0 {
-		return "<function not found>"
-	}
-	brace := strings.Index(source[start:], "{")
-	if brace < 0 {
-		return "<opening brace not found>"
-	}
-	depth := 0
-	for index := start + brace; index < len(source); index++ {
-		switch source[index] {
-		case '{':
-			depth++
-		case '}':
-			depth--
-			if depth == 0 {
-				return source[start : index+1]
-			}
-		}
-	}
-	return source[start:]
 }
 
 func TestAppModelHuhComposerIdentitySwitchesOnTopic(t *testing.T) {

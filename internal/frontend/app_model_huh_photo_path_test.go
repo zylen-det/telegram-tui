@@ -2,8 +2,6 @@ package frontend
 
 import (
 	"image"
-	"os"
-	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -53,24 +51,6 @@ func TestPhotoSendInputRectMatchesSharedModalGeometry(t *testing.T) {
 		if got := photoSendInputRect(test.bounds); got != test.want {
 			t.Fatalf("photoSendInputRect(%v) = %v, want %v", test.bounds, got, test.want)
 		}
-	}
-}
-
-func TestPhotoSendModalConsumesSharedInputRect(t *testing.T) {
-	source, err := os.ReadFile("surface_photo_send_modal.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	text := string(source)
-	if !strings.Contains(text, "inputAbs := photoSendInputRect(bounds)") {
-		t.Fatal("Photo send modal does not consume shared input geometry")
-	}
-	builder, _, found := strings.Cut(text, "func photoSendInputRect")
-	if !found {
-		t.Fatal("shared Photo send input geometry helper is missing")
-	}
-	if strings.Contains(builder, "inputLocal := image.Rect(2, 3") {
-		t.Fatal("Photo send modal retained a parallel input geometry source")
 	}
 }
 

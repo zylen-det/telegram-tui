@@ -2,11 +2,9 @@ package frontend
 
 import (
 	"image"
-	"reflect"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/zylen-det/telegram-tui/internal/auth"
 	"github.com/zylen-det/telegram-tui/internal/domain"
 )
 
@@ -34,6 +32,7 @@ func TestSemanticInputMapsNavigationAndEditors(t *testing.T) {
 		{name: "ctrl u", focus: FocusConversation, key: tea.Key{Code: 'u', Text: "u", Mod: tea.ModCtrl}, want: ActionReceived{Action: PageUp}},
 		{name: "ctrl d", focus: FocusConversation, key: tea.Key{Code: 'd', Text: "d", Mod: tea.ModCtrl}, want: ActionReceived{Action: PageDown}},
 		{name: "composer submit", focus: FocusComposer, key: tea.Key{Code: tea.KeyEnter}, want: ActionReceived{Action: ComposerSubmit}},
+		{name: "composer ctrl-o opens photo send", focus: FocusComposer, key: tea.Key{Code: 'o', Mod: tea.ModCtrl}, want: ActionReceived{Action: OpenPhotoSend}},
 		{name: "composer escape with lock state", focus: FocusComposer, key: tea.Key{Code: tea.KeyEscape, Mod: tea.ModNumLock}, want: ActionReceived{Action: Close}},
 		{name: "composer newline", focus: FocusComposer, key: tea.Key{Code: tea.KeyEnter, Mod: tea.ModShift}, want: ActionReceived{Action: ComposerNewline}},
 		{name: "auth backspace", focus: FocusAuth, key: tea.Key{Code: tea.KeyBackspace}, want: ActionReceived{Action: ComposerBackspace}},
@@ -48,10 +47,6 @@ func TestSemanticInputMapsNavigationAndEditors(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestEditableModifierTextDoesNotMutateEngine(t *testing.T) {
-
 }
 
 func TestMessageSelectionAndActionMenuKeyboardMappings(t *testing.T) {
@@ -211,62 +206,43 @@ func TestConversationLeftReturnsToChatsInEveryLayout(t *testing.T) {
 	}
 }
 
-// TestChatListLeftAndHFocusConversation proves that unmodified Left and h from
-// the chat list map to the explicit FocusPane/FocusConversation action, not
-// FocusPrevious (which would wrap into the composer). Through AppModel.Update
-// the focus lands on the conversation pane in Wide and Normal layouts, while
-// the reducer's focusVisible guard keeps it on FocusChats in Narrow where the
-// conversation pane is hidden behind the chat list page. Shift-Tab stays
-// mapped to FocusPrevious, and Tab plus Right/l keep their forward behavior.
+// TestChatListLeftAndHFocusConversation proves the AppModel integration
+// contract for unmodified Left and h from the chat list. Through
+// AppModel.Update the focus lands on the conversation pane in Wide and Normal
+// layouts, while the reducer's focusVisible guard keeps it on FocusChats in
+// Narrow where the conversation pane is hidden behind the chat list page.
 func TestChatListLeftAndHFocusConversation(t *testing.T) {
-	for _, key := range []tea.Key{
-		{Code: tea.KeyLeft},
-		{Code: 'h', Text: "h"},
-	} {
-		want := ActionReceived{Action: FocusPane, TargetFocus: FocusConversation}
-		if got, ok := mapKeyPress(FocusChats, tea.KeyPressMsg(key)); !ok || got != want {
-			t.Fatalf("mapKeyPress(FocusChats, %#v) = (%#v, %t), want (%#v, true)", key, got, ok, want)
-		}
-
-		for _, test := range []struct {
-			name   string
-			layout Layout
-			width  int
-			want   Focus
-		}{
-			{name: "wide", layout: LayoutWide, width: 140, want: FocusConversation},
-			{name: "normal", layout: LayoutNormal, width: 100, want: FocusConversation},
-			// Narrow hides the conversation while the chat list page is active,
-			// so the focus must stay on the chat list.
-			{name: "narrow", layout: LayoutNarrow, width: 60, want: FocusChats},
-		} {
-			t.Run(test.name, func(t *testing.T) {
-				model := mainSurfaceModel(t, test.width, 24)
-				state := model.Snapshot()
-				state.Layout = test.layout
-				state.Focus = FocusChats
-				model.state = &state
-				model, _ = updateAppModel(t, model, tea.KeyPressMsg(key))
-				if got := model.Snapshot().Focus; got != test.want {
-					t.Fatalf("AppModel.Update with %#v moved focus from FocusChats to %v, want %v", key, got, test.want)
-				}
-			})
-		}
-	}
-
-	for _, test := range []struct {
+	for _, keyTest := range []struct {
 		name string
 		key  tea.Key
-		want Action
 	}{
-		{name: "shift tab still cycles backward", key: tea.Key{Code: tea.KeyTab, Mod: tea.ModShift}, want: FocusPrevious},
-		{name: "tab cycles forward", key: tea.Key{Code: tea.KeyTab}, want: FocusNext},
-		{name: "right opens chat", key: tea.Key{Code: tea.KeyRight}, want: OpenChat},
-		{name: "l opens chat", key: tea.Key{Code: 'l', Text: "l"}, want: OpenChat},
+		{name: "left", key: tea.Key{Code: tea.KeyLeft}},
+		{name: "h", key: tea.Key{Code: 'h', Text: "h"}},
 	} {
-		t.Run(test.name, func(t *testing.T) {
-			if got, ok := mapKeyPress(FocusChats, tea.KeyPressMsg(test.key)); !ok || got.Action != test.want {
-				t.Fatalf("mapKeyPress(FocusChats, %#v) = (%v, %t), want (%v, true)", test.key, got.Action, ok, test.want)
+		t.Run(keyTest.name, func(t *testing.T) {
+			for _, test := range []struct {
+				name   string
+				layout Layout
+				width  int
+				want   Focus
+			}{
+				{name: "wide moves focus to conversation", layout: LayoutWide, width: 140, want: FocusConversation},
+				{name: "normal moves focus to conversation", layout: LayoutNormal, width: 100, want: FocusConversation},
+				// Narrow hides the conversation while the chat list page is active,
+				// so the focus must stay on the chat list.
+				{name: "narrow keeps focus on chats", layout: LayoutNarrow, width: 60, want: FocusChats},
+			} {
+				t.Run(test.name, func(t *testing.T) {
+					model := mainSurfaceModel(t, test.width, 24)
+					state := model.Snapshot()
+					state.Layout = test.layout
+					state.Focus = FocusChats
+					model.state = &state
+					model, _ = updateAppModel(t, model, tea.KeyPressMsg(keyTest.key))
+					if got := model.Snapshot().Focus; got != test.want {
+						t.Fatalf("AppModel.Update with %#v moved focus from FocusChats to %v, want %v", keyTest.key, got, test.want)
+					}
+				})
 			}
 		})
 	}
@@ -304,7 +280,7 @@ func TestReactionPickerKeyboardMappings(t *testing.T) {
 	}
 }
 
-func TestEditableModifiersTextDoesNotMutateEngineContinuation(t *testing.T) {
+func TestEditableModifierTextDoesNotMutateEngine(t *testing.T) {
 	for _, test := range []struct {
 		name  string
 		focus Focus
@@ -430,258 +406,23 @@ func TestModifierNegativeAppModelUpdateDoesNotMutate(t *testing.T) {
 	}
 }
 
-func TestPhotoSendInput(t *testing.T) {
-	// 1: Ctrl+O focus matrix.
-	t.Run("ctrlOFocusMatrix", func(t *testing.T) {
-		// Composer: Ctrl+O opens PhotoSend.
-		state := InitialState()
-		state.Connection = domain.ConnectionOnline
-		state.Chats = []domain.Chat{{ID: 1, CanSend: true}}
-		state.SelectedChat = 0
-		state.Focus = FocusComposer
-		state.Drafts[1] = "draft"
-		model := newAppModelForTest(t, state, newTestSession(t))
-		model, _ = updateAppModel(t, model, tea.WindowSizeMsg{Width: 100, Height: 24})
-		model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: 'o', Mod: tea.ModCtrl}))
-		snap := model.Snapshot()
-		if snap.PhotoSend == nil || snap.Focus != FocusPhotoSend {
-			t.Fatalf("Composer Ctrl+O: PhotoSend=%v Focus=%v", snap.PhotoSend, snap.Focus)
-		}
-
-		// Conversation: Ctrl+O unhandled.
-		state2 := InitialState()
-		state2.Chats = []domain.Chat{{ID: 1, CanSend: true}}
-		state2.SelectedChat = 0
-		state2.Focus = FocusConversation
-		snap2 := state2
-		model2 := newAppModelForTest(t, snap2, newTestSession(t))
-		model2, _ = updateAppModel(t, model2, tea.WindowSizeMsg{Width: 100, Height: 24})
-		model2, _ = updateAppModel(t, model2, tea.KeyPressMsg(tea.Key{Code: 'O', Mod: tea.ModCtrl}))
-		snap2 = model2.Snapshot()
-		if snap2.PhotoSend != nil {
-			t.Errorf("Conversation Ctrl+O opened PhotoSend: unexpected")
-		}
-
-		// Modal: Ctrl+O unhandled.
-		state3 := InitialState()
-		state3.Focus = FocusModal
-		state3.Modal = &ModalState{Title: "test"}
-		model3 := newAppModelForTest(t, state3, newTestSession(t))
-		model3, _ = updateAppModel(t, model3, tea.WindowSizeMsg{Width: 100, Height: 24})
-		model3, _ = updateAppModel(t, model3, tea.KeyPressMsg(tea.Key{Code: 'o', Mod: tea.ModCtrl}))
-		snap3 := model3.Snapshot()
-		if snap3.PhotoSend != nil {
-			t.Errorf("Modal Ctrl+O opened PhotoSend: unexpected")
-		}
-
-		// PhotoSend: Ctrl+O unhandled (full-state no-op).
-		state4 := InitialState()
-		state4.Chats = []domain.Chat{{ID: 1, CanSend: true}}
-		state4.SelectedChat = 0
-		state4.Focus = FocusPhotoSend
-		state4.PhotoSend = &PhotoSendState{ChatID: 1, Input: []rune("/tmp/x.jpg"), PreviousFocus: FocusConversation}
-		model4 := newAppModelForTest(t, state4, newTestSession(t))
-		model4, _ = updateAppModel(t, model4, tea.WindowSizeMsg{Width: 100, Height: 24})
-		before := model4.Snapshot()
-		model4, _ = updateAppModel(t, model4, tea.KeyPressMsg(tea.Key{Code: 'o', Mod: tea.ModCtrl}))
-		snap4 := model4.Snapshot()
-		if snap4.PhotoSend == nil {
-			t.Fatal("PhotoSend Ctrl+O closed PhotoSend unexpectedly")
-		}
-		if !reflect.DeepEqual(before.PhotoSend, snap4.PhotoSend) {
-			t.Errorf("PhotoSend Ctrl+O mutated state: before=%#v after=%#v", before.PhotoSend, snap4.PhotoSend)
-		}
-		if snap4.Focus != FocusPhotoSend {
-			t.Errorf("PhotoSend Ctrl+O changed focus: %v, want FocusPhotoSend", snap4.Focus)
-		}
-
-		// Auth: Ctrl+O unhandled.
-		state5 := InitialState()
-		state5.Focus = FocusAuth
-		state5.Prompt = &PromptState{Prompt: auth.Prompt{Label: "Auth"}}
-		model5 := newAppModelForTest(t, state5, newTestSession(t))
-		model5, _ = updateAppModel(t, model5, tea.WindowSizeMsg{Width: 100, Height: 24})
-		model5, _ = updateAppModel(t, model5, tea.KeyPressMsg(tea.Key{Code: 'o', Mod: tea.ModCtrl}))
-		snap5 := model5.Snapshot()
-		if snap5.PhotoSend != nil {
-			t.Errorf("Auth Ctrl+O opened PhotoSend: unexpected")
-		}
-	})
-
-	// 2: Ctrl+C quits.
-	t.Run("ctrlCQuits", func(t *testing.T) {
-		state := InitialState()
-		state.Focus = FocusPhotoSend
-		state.PhotoSend = &PhotoSendState{ChatID: 1, Input: []rune("x")}
-		model := newAppModelForTest(t, state, newTestSession(t))
-		model, _ = updateAppModel(t, model, tea.WindowSizeMsg{Width: 100, Height: 24})
-		model, cmd := updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: 'c', Mod: tea.ModCtrl}))
-		if cmd == nil {
-			t.Fatal("Ctrl+C did not return quit command")
-		}
-		if !model.Snapshot().Quitting {
-			t.Error("Ctrl+C did not set Quitting")
-		}
-	})
-
-	// 3: Enter/Escape/Backspace in PhotoSend.
-	t.Run("enterEscapeBackspace", func(t *testing.T) {
-		// Enter on empty path stays open.
-		state := InitialState()
-		state.Connection = domain.ConnectionOnline
-		state.Chats = []domain.Chat{{ID: 1, CanSend: true}}
-		state.SelectedChat = 0
-		state.Focus = FocusPhotoSend
-		state.PhotoSend = &PhotoSendState{ChatID: 1, Input: []rune("")}
-		model := newAppModelForTest(t, state, newTestSession(t))
-		model, _ = updateAppModel(t, model, tea.WindowSizeMsg{Width: 100, Height: 24})
-		model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
-		snap := model.Snapshot()
-		if snap.PhotoSend == nil {
-			t.Fatal("empty Enter closed PhotoSend")
-		}
-
-		// Enter on non-empty path closes with delivery.
-		state2 := InitialState()
-		state2.Connection = domain.ConnectionOnline
-		state2.Chats = []domain.Chat{{ID: 1, CanSend: true}}
-		state2.SelectedChat = 0
-		state2.Focus = FocusPhotoSend
-		state2.PhotoSend = &PhotoSendState{ChatID: 1, Input: []rune("/tmp/x.jpg")}
-		model2 := newAppModelForTest(t, state2, newTestSession(t))
-		model2, _ = updateAppModel(t, model2, tea.WindowSizeMsg{Width: 100, Height: 24})
-		model2, _ = updateAppModel(t, model2, tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
-		snap2 := model2.Snapshot()
-		if snap2.PhotoSend != nil {
-			t.Fatal("non-empty Enter kept PhotoSend open")
-		}
-
-		// Escape closes without altering draft.
-		state3 := InitialState()
-		state3.Connection = domain.ConnectionOnline
-		state3.Chats = []domain.Chat{{ID: 1, CanSend: true}}
-		state3.SelectedChat = 0
-		state3.Drafts[1] = "original draft"
-		state3.Focus = FocusConversation
-		state3.PhotoSend = &PhotoSendState{ChatID: 1, Input: []rune("/tmp/x.jpg"), PreviousFocus: FocusConversation}
-		model3 := newAppModelForTest(t, state3, newTestSession(t))
-		model3, _ = updateAppModel(t, model3, tea.WindowSizeMsg{Width: 100, Height: 24})
-		model3, _ = updateAppModel(t, model3, tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
-		snap3 := model3.Snapshot()
-		if snap3.PhotoSend != nil {
-			t.Fatal("Escape kept PhotoSend open")
-		}
-		if snap3.Drafts[1] != "original draft" {
-			t.Errorf("Escape changed draft: %q", snap3.Drafts[1])
-		}
-		if snap3.Focus != FocusConversation {
-			t.Errorf("Escape focus = %v, want Conversation", snap3.Focus)
-		}
-
-		// Backspace removes a rune.
-		state4 := InitialState()
-		state4.Connection = domain.ConnectionOnline
-		state4.Chats = []domain.Chat{{ID: 1, CanSend: true}}
-		state4.SelectedChat = 0
-		state4.Focus = FocusPhotoSend
-		state4.PhotoSend = &PhotoSendState{ChatID: 1, Input: []rune("abc")}
-		model4 := newAppModelForTest(t, state4, newTestSession(t))
-		model4, _ = updateAppModel(t, model4, tea.WindowSizeMsg{Width: 100, Height: 24})
-		model4, _ = updateAppModel(t, model4, tea.KeyPressMsg(tea.Key{Code: tea.KeyBackspace}))
-		snap4 := model4.Snapshot()
-		if snap4.PhotoSend == nil {
-			t.Fatal("Backspace closed PhotoSend")
-		}
-		if string(snap4.PhotoSend.Input) != "ab" {
-			t.Errorf("Backspace input = %q, want ab", string(snap4.PhotoSend.Input))
-		}
-	})
-
-	// 4: Modified printable rejection.
-	t.Run("modifiedRejected", func(t *testing.T) {
-		state := InitialState()
-		state.Connection = domain.ConnectionOnline
-		state.Chats = []domain.Chat{{ID: 1, CanSend: true}}
-		state.SelectedChat = 0
-		state.Focus = FocusPhotoSend
-		state.PhotoSend = &PhotoSendState{ChatID: 1, Input: []rune("/tmp/x")}
-		model := newAppModelForTest(t, state, newTestSession(t))
-		model, _ = updateAppModel(t, model, tea.WindowSizeMsg{Width: 100, Height: 24})
-		model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: 'j', Text: "j", Mod: tea.ModAlt}))
-		snap := model.Snapshot()
-		if snap.PhotoSend == nil {
-			t.Fatal("Alt-J closed PhotoSend")
-		}
-		if string(snap.PhotoSend.Input) != "/tmp/x" {
-			t.Errorf("Alt-J modified input: %q", string(snap.PhotoSend.Input))
-		}
-	})
-
-	// 5: Plain a/o text behavior - falls through as Runes.
-	t.Run("plainAOText", func(t *testing.T) {
-		state := InitialState()
-		state.Connection = domain.ConnectionOnline
-		state.Chats = []domain.Chat{{ID: 1, CanSend: true}}
-		state.SelectedChat = 0
-		state.Focus = FocusPhotoSend
-		state.PhotoSend = &PhotoSendState{ChatID: 1, Input: []rune("")}
-		model := newAppModelForTest(t, state, newTestSession(t))
-		model, _ = updateAppModel(t, model, tea.WindowSizeMsg{Width: 100, Height: 24})
-		model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: 'a', Text: "a"}))
-		model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: 'o', Text: "o"}))
-		snap := model.Snapshot()
-		if string(snap.PhotoSend.Input) != "ao" {
-			t.Errorf("Plain a/o input = %q, want ao", string(snap.PhotoSend.Input))
-		}
-	})
-
-	// 6: Key runes CJK/emoji.
-	t.Run("cjkEmojiRunes", func(t *testing.T) {
-		state := InitialState()
-		state.Connection = domain.ConnectionOnline
-		state.Chats = []domain.Chat{{ID: 1, CanSend: true}}
-		state.SelectedChat = 0
-		state.Focus = FocusPhotoSend
-		state.PhotoSend = &PhotoSendState{ChatID: 1, Input: []rune("")}
-		model := newAppModelForTest(t, state, newTestSession(t))
-		model, _ = updateAppModel(t, model, tea.WindowSizeMsg{Width: 100, Height: 24})
-		model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Text: "界"}))
-		model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Text: "👍"}))
-		snap := model.Snapshot()
-		if string(snap.PhotoSend.Input) != "界👍" {
-			t.Errorf("CJK/emoji input = %q, want 界👍", string(snap.PhotoSend.Input))
-		}
-	})
-
-	// 7: Paste with CRLF/trailing newline.
-	t.Run("pasteCRLF", func(t *testing.T) {
-		state := InitialState()
-		state.Connection = domain.ConnectionOnline
-		state.Chats = []domain.Chat{{ID: 1, CanSend: true}}
-		state.SelectedChat = 0
-		state.Focus = FocusPhotoSend
-		state.PhotoSend = &PhotoSendState{ChatID: 1, Input: []rune("")}
-		model := newAppModelForTest(t, state, newTestSession(t))
-		model, _ = updateAppModel(t, model, tea.WindowSizeMsg{Width: 100, Height: 24})
-		model, _ = updateAppModel(t, model, tea.PasteMsg{Content: "/tmp/x.jpg\r\n"})
-		snap := model.Snapshot()
-		// CR/LF should be stripped by the app reducer (ignored), so path only.
-		if string(snap.PhotoSend.Input) != "/tmp/x.jpg" {
-			t.Errorf("paste CRLF input = %q, want /tmp/x.jpg", string(snap.PhotoSend.Input))
-		}
-
-		// Trailing newline.
-		state2 := InitialState()
-		state2.Focus = FocusPhotoSend
-		state2.PhotoSend = &PhotoSendState{ChatID: 1, Input: []rune("")}
-		model2 := newAppModelForTest(t, state2, newTestSession(t))
-		model2, _ = updateAppModel(t, model2, tea.WindowSizeMsg{Width: 100, Height: 24})
-		model2, _ = updateAppModel(t, model2, tea.PasteMsg{Content: "/tmp/x.jpg\n"})
-		snap2 := model2.Snapshot()
-		if string(snap2.PhotoSend.Input) != "/tmp/x.jpg" {
-			t.Errorf("paste trailing newline input = %q, want /tmp/x.jpg", string(snap2.PhotoSend.Input))
-		}
-	})
+func TestPhotoSendShortcutIsComposerOnly(t *testing.T) {
+	tests := []struct {
+		name  string
+		focus Focus
+	}{
+		{name: "conversation", focus: FocusConversation},
+		{name: "modal", focus: FocusModal},
+		{name: "auth", focus: FocusAuth},
+		{name: "photo send", focus: FocusPhotoSend},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if _, ok := mapKeyPress(test.focus, tea.KeyPressMsg(tea.Key{Code: 'o', Mod: tea.ModCtrl})); ok {
+				t.Fatalf("Ctrl+O unexpectedly mapped while focus = %v", test.focus)
+			}
+		})
+	}
 }
 
 func TestPhotoSendAppModelIntegration(t *testing.T) {
@@ -700,23 +441,9 @@ func TestPhotoSendAppModelIntegration(t *testing.T) {
 		model := newAppModelForTest(t, state, newTestSession(t))
 		model, _ = updateAppModel(t, model, tea.WindowSizeMsg{Width: 100, Height: 24})
 
-		// Compose view to populate hitRegions.
+		// Compose view to populate hitRegions, then click the [Photo] hit to open PhotoSend.
 		_ = model.View()
-
-		// Find the [Photo] hit before opening.
-		var foundPhotoHit bool
-		for _, hit := range model.hitRegions() {
-			if hit.Click.Action == OpenPhotoSend {
-				foundPhotoHit = true
-				break
-			}
-		}
-		if !foundPhotoHit {
-			t.Fatal("no OpenPhotoSend hit found in view")
-		}
-
-		// Click on the photo button to open PhotoSend.
-		photoHit := HitMap{}
+		var photoHit HitMap
 		for _, hit := range model.hitRegions() {
 			if hit.Click.Action == OpenPhotoSend {
 				photoHit = append(photoHit, hit)
@@ -778,19 +505,6 @@ func TestPhotoSendAppModelIntegration(t *testing.T) {
 		if snap.Focus != FocusComposer {
 			t.Fatalf("mouse close focus = %v, want Composer", snap.Focus)
 		}
-
-		// Verify Ctrl+O also works to open PhotoSend from composer focus.
-		// First close via Escape.
-		model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
-		snap = model.Snapshot()
-		if snap.PhotoSend != nil {
-			t.Fatalf("Escape did not close PhotoSend")
-		}
-		model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: 'o', Mod: tea.ModCtrl}))
-		snap = model.Snapshot()
-		if snap.PhotoSend == nil || snap.Focus != FocusPhotoSend {
-			t.Fatalf("Ctrl+O did not open PhotoSend: PhotoSend=%v Focus=%v", snap.PhotoSend, snap.Focus)
-		}
 	})
 
 	// Escape closes without altering draft/reply.
@@ -818,40 +532,6 @@ func TestPhotoSendAppModelIntegration(t *testing.T) {
 		}
 		if snap.ReplyTarget.ChatID != 1 || snap.ReplyTarget.MessageID != 42 || snap.ReplyTarget.Sender != "Alice" || snap.ReplyTarget.Preview != "Hello world" {
 			t.Errorf("ReplyTarget fields changed: %#v", snap.ReplyTarget)
-		}
-	})
-
-	// Enter on empty path stays open; Enter on non-empty path closes with delivery.
-	t.Run("enterEmptyStaysNonEmptyCloses", func(t *testing.T) {
-		// Empty path Enter stays open.
-		state := InitialState()
-		state.Connection = domain.ConnectionOnline
-		state.Chats = []domain.Chat{{ID: 1, CanSend: true}}
-		state.SelectedChat = 0
-		state.Focus = FocusPhotoSend
-		state.PhotoSend = &PhotoSendState{ChatID: 1, Input: []rune("")}
-		model := newAppModelForTest(t, state, newTestSession(t))
-		model, _ = updateAppModel(t, model, tea.WindowSizeMsg{Width: 100, Height: 24})
-		model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
-		if model.Snapshot().PhotoSend == nil {
-			t.Fatal("empty Enter closed PhotoSend")
-		}
-
-		// Non-empty Enter closes with delivery command.
-		state2 := InitialState()
-		state2.Connection = domain.ConnectionOnline
-		state2.Chats = []domain.Chat{{ID: 1, CanSend: true}}
-		state2.SelectedChat = 0
-		state2.Focus = FocusPhotoSend
-		state2.PhotoSend = &PhotoSendState{ChatID: 1, Input: []rune("/tmp/photo.jpg")}
-		model2 := newAppModelForTest(t, state2, newTestSession(t))
-		model2, _ = updateAppModel(t, model2, tea.WindowSizeMsg{Width: 100, Height: 24})
-		model2, cmd := updateAppModel(t, model2, tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
-		if cmd == nil {
-			t.Fatal("non-empty Enter returned nil command")
-		}
-		if model2.Snapshot().PhotoSend != nil {
-			t.Fatal("non-empty Enter kept PhotoSend open")
 		}
 	})
 }

@@ -2,7 +2,6 @@ package frontend
 
 import (
 	"image"
-	"os"
 	"strings"
 	"testing"
 
@@ -69,35 +68,5 @@ func TestComposerLayerWithoutInjectedViewDoesNotFallbackToDraft(t *testing.T) {
 	plain := ansi.Strip(lipgloss.NewCompositor(root).Render())
 	if strings.Contains(plain, model.Draft) {
 		t.Fatalf("composer fell back to ViewModel draft without injected Huh View\n%s", plain)
-	}
-}
-
-func TestComposerHuhViewFlowsFromAppModelThroughProductionComposition(t *testing.T) {
-	checks := []struct {
-		path     string
-		required []string
-		forbid   []string
-	}{
-		{"view.go", []string{"composeApplication(model, m.location, editorViews{", "Composer:      m.composerText.View()"}, nil},
-		{"render_frame.go", []string{"views ...editorViews", "selectedViews := selectEditorViews(views)", "buildConversationLayer(model, location, baseStyles, selectedViews.Composer)"}, nil},
-		{"surface_conversation.go", []string{"composerView ...string", "buildComposerLayer(model, composerRect, styles, composerView...)"}, nil},
-		{"surface_composer.go", []string{"composerView ...string", "composerTextView(composerView)", "clipComposerTextView(composerStr, textRect.Dx(), textRect.Dy())", "textRect.Min.X - rect.Min.X", "textRect.Min.Y - rect.Min.Y"}, []string{"wrapText(model.Draft", "lastDisplayedLine", "hasDraftRow"}},
-	}
-	for _, check := range checks {
-		source, err := os.ReadFile(check.path)
-		if err != nil {
-			t.Fatalf("read %s: %v", check.path, err)
-		}
-		text := string(source)
-		for _, required := range check.required {
-			if !strings.Contains(text, required) {
-				t.Errorf("%s missing %q", check.path, required)
-			}
-		}
-		for _, forbidden := range check.forbid {
-			if strings.Contains(text, forbidden) {
-				t.Errorf("%s retains legacy renderer %q", check.path, forbidden)
-			}
-		}
 	}
 }

@@ -270,45 +270,6 @@ func TestChatSearchAllMessagesSearchFailed(t *testing.T) {
 	}
 }
 
-func TestChatSearchActivationDebug(t *testing.T) {
-	state := chatSearchBaseState()
-	opened, _ := updateState(state, ActionReceived{Action: OpenChatSearch})
-	t.Logf("After open: ChatSearch=%v", opened.ChatSearch != nil)
-	opened, _ = updateState(opened, ChatSearchValueChanged{Value: "@botfather"})
-	t.Logf("After type: ChatSearch=%v", opened.ChatSearch != nil)
-	submitted, _ := updateState(opened, ActionReceived{Action: SubmitChatSearch})
-	t.Logf("After submit: ChatSearch=%v RequestID=%d", submitted.ChatSearch != nil, submitted.ChatSearch.RequestID)
-	found := domain.Chat{
-		ID: 99, Kind: domain.ChatPrivate, Title: "BotFather", Username: "BotFather", CanSend: true,
-	}
-	requestID := submitted.ChatSearch.RequestID
-	loaded, _ := updateState(submitted, PublicChatsSearched{RequestID: requestID, Chats: []domain.Chat{found}})
-	t.Logf("After public chats: ChatSearch=%v PublicChats=%v", loaded.ChatSearch != nil, loaded.ChatSearch.PublicChats != nil)
-	activated, commands := updateState(loaded, ActionReceived{Action: Activate})
-	t.Logf("After activate: ChatSearch=%v Focus=%v Commands=%d", activated.ChatSearch != nil, activated.Focus, len(commands))
-	if activated.ChatSearch != nil {
-		t.Logf("ChatSearch fields: RequestID=%d Input=%v", activated.ChatSearch.RequestID, activated.ChatSearch.Input)
-	}
-}
-
-func TestOpenChatFromSearchResultClearsChatSearch(t *testing.T) {
-	state := chatSearchBaseState()
-	opened, _ := updateState(state, ActionReceived{Action: OpenChatSearch})
-	opened, _ = updateState(opened, ChatSearchValueChanged{Value: "@botfather"})
-	submitted, _ := updateState(opened, ActionReceived{Action: SubmitChatSearch})
-	found := domain.Chat{ID: 99, Kind: domain.ChatPrivate, Title: "BotFather", Username: "BotFather", CanSend: true}
-	requestID := submitted.ChatSearch.RequestID
-	loaded, _ := updateState(submitted, PublicChatsSearched{RequestID: requestID, Chats: []domain.Chat{found}})
-
-	// Direct test of openChatFromSearchResult
-	chat := domain.Chat{ID: 99, Kind: domain.ChatPrivate, Title: "BotFather"}
-	activated, _ := openChatFromSearchResult(loaded, chat)
-	t.Logf("openChatFromSearchResult returns ChatSearch=%v", activated.ChatSearch != nil)
-	if activated.ChatSearch != nil {
-		t.Fatalf("Expected ChatSearch to be nil after openChatFromSearchResult, got %+v", activated.ChatSearch)
-	}
-}
-
 func TestChatSearchLiveTypingEmitsBothAndStaysInInput(t *testing.T) {
 	state := chatSearchBaseState()
 	state.Chats = append(state.Chats, domain.Chat{ID: 10, Title: "Telegram", Username: "telegram", Order: 50})

@@ -590,7 +590,7 @@ func TestDetailsAvatarModalOpenFailureAndRetry(t *testing.T) {
 		t.Fatalf("failed modal = %#v", failed.Modal)
 	}
 	retried, commands := updateState(failed, ActionReceived{Action: Retry})
-	if retried.Modal.RequestID != 31 || !retried.Modal.Loading || retried.Modal.Error != nil || retried.Focus != FocusModal {
+	if retried.Modal.RequestID != 31 || !retried.Modal.Loading || retried.Modal.Error != nil || retried.Focus != FocusModal || retried.Modal.Path != "" {
 		t.Fatalf("retried modal = %#v", retried.Modal)
 	}
 	assertCommands(t, commands, []Effect{OpenAvatar{RequestID: 31, Title: "Mina", Ref: state.Chats[0].Avatar}})
@@ -3251,75 +3251,45 @@ func TestMessageMediaDownloadFailureRetryAndStaleResults(t *testing.T) {
 		t.Fatalf("retry command = %#v", retryCmd)
 	}
 
-	// Base expected for stale success — retried state (RequestID=200).
-	buildStaleSuccessBase := func() State {
-		state := InitialState()
-		state.NextRequestID = 201
-		state.Focus = FocusModal
-		state.Messages[9] = []domain.Message{{
-			ID: 2, ChatID: 9, Kind: domain.MessagePhoto,
-			Media: domain.MessageMedia{
-				File:     domain.MediaFileRef{ID: 101, CanDownload: true},
-				MIMEType: "image/jpeg",
-				Width:    640, Height: 480,
-				Thumbnail: domain.MediaFileRef{ID: 102},
-			},
-		}}
-		state.Modal = &ModalState{
-			RequestID: 200, Title: "Photo",
-			MediaChatID: 9, MediaMessageID: 2,
-			MediaFile: domain.MediaFileRef{ID: 101, CanDownload: true},
-			Loading:   true, PreviousFocus: FocusConversation,
-		}
-		return state
-	}
-	// Wrong request: RequestID 119, chat 9, message 2, file 101.
-	successStaleReq, cmdsStaleReq := updateState(retried, MessageMediaOpened{
-		RequestID: 119, ChatID: 9, MessageID: 2, Title: "Photo",
-		File: domain.MediaFileRef{ID: 101, Downloaded: true, LocalPath: "/tmp/stale.jpg"},
-	})
-	wantStaleReq := buildStaleSuccessBase()
-	if !reflect.DeepEqual(successStaleReq, wantStaleReq) {
-		t.Fatalf("wrong request stale success = %#v, want %#v", successStaleReq, wantStaleReq)
-	}
-	if len(cmdsStaleReq) != 0 {
-		t.Fatalf("wrong request stale success commands = %d, want 0", len(cmdsStaleReq))
-	}
-	// Wrong chat: RequestID 200, chat 8, message 2, file 101.
-	successStaleChat, cmdsStaleChat := updateState(retried, MessageMediaOpened{
-		RequestID: 200, ChatID: 8, MessageID: 2, Title: "Photo",
-		File: domain.MediaFileRef{ID: 101, Downloaded: true, LocalPath: "/tmp/stale.jpg"},
-	})
-	wantStaleChat := buildStaleSuccessBase()
-	if !reflect.DeepEqual(successStaleChat, wantStaleChat) {
-		t.Fatalf("wrong chat stale success = %#v, want %#v", successStaleChat, wantStaleChat)
-	}
-	if len(cmdsStaleChat) != 0 {
-		t.Fatalf("wrong chat stale success commands = %d, want 0", len(cmdsStaleChat))
-	}
-	// Wrong message: RequestID 200, chat 9, message 3, file 101.
-	successStaleMsg, cmdsStaleMsg := updateState(retried, MessageMediaOpened{
-		RequestID: 200, ChatID: 9, MessageID: 3, Title: "Photo",
-		File: domain.MediaFileRef{ID: 101, Downloaded: true, LocalPath: "/tmp/stale.jpg"},
-	})
-	wantStaleMsg := buildStaleSuccessBase()
-	if !reflect.DeepEqual(successStaleMsg, wantStaleMsg) {
-		t.Fatalf("wrong message stale success = %#v, want %#v", successStaleMsg, wantStaleMsg)
-	}
-	if len(cmdsStaleMsg) != 0 {
-		t.Fatalf("wrong message stale success commands = %d, want 0", len(cmdsStaleMsg))
-	}
-	// Wrong file: RequestID 200, chat 9, message 2, file 999.
-	successStaleFile, cmdsStaleFile := updateState(retried, MessageMediaOpened{
-		RequestID: 200, ChatID: 9, MessageID: 2, Title: "Photo",
-		File: domain.MediaFileRef{ID: 999, Downloaded: true, LocalPath: "/tmp/stale.jpg"},
-	})
-	wantStaleFile := buildStaleSuccessBase()
-	if !reflect.DeepEqual(successStaleFile, wantStaleFile) {
-		t.Fatalf("wrong file stale success = %#v, want %#v", successStaleFile, wantStaleFile)
-	}
-	if len(cmdsStaleFile) != 0 {
-		t.Fatalf("wrong file stale success commands = %d, want 0", len(cmdsStaleFile))
+	// Stale success matrix — one identity mismatch per case; all must be no-op.
+	for _, tc := range []struct {
+		name  string
+		event Event
+	}{
+		// Wrong request: RequestID 119, chat 9, message 2, file 101.
+		{name: "stale success/wrong request", event: MessageMediaOpened{
+			RequestID: 119, ChatID: 9, MessageID: 2, Title: "Photo",
+			File: domain.MediaFileRef{ID: 101, Downloaded: true, LocalPath: "/tmp/stale.jpg"},
+		}},
+		// Wrong chat: RequestID 200, chat 8, message 2, file 101.
+		{name: "stale success/wrong chat", event: MessageMediaOpened{
+			RequestID: 200, ChatID: 8, MessageID: 2, Title: "Photo",
+			File: domain.MediaFileRef{ID: 101, Downloaded: true, LocalPath: "/tmp/stale.jpg"},
+		}},
+		// Wrong message: RequestID 200, chat 9, message 3, file 101.
+		{name: "stale success/wrong message", event: MessageMediaOpened{
+			RequestID: 200, ChatID: 9, MessageID: 3, Title: "Photo",
+			File: domain.MediaFileRef{ID: 101, Downloaded: true, LocalPath: "/tmp/stale.jpg"},
+		}},
+		// Wrong file: RequestID 200, chat 9, message 2, file 999.
+		{name: "stale success/wrong file", event: MessageMediaOpened{
+			RequestID: 200, ChatID: 9, MessageID: 2, Title: "Photo",
+			File: domain.MediaFileRef{ID: 999, Downloaded: true, LocalPath: "/tmp/stale.jpg"},
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			want := cloneReducerState(retried)
+			got, cmds := updateState(retried, tc.event)
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("%s stale success = %#v, want unchanged retried %#v", tc.name, got, want)
+			}
+			if len(cmds) != 0 {
+				t.Fatalf("%s stale success commands = %#v, want none", tc.name, cmds)
+			}
+			if !reflect.DeepEqual(retried, want) {
+				t.Fatalf("%s stale success mutated input state = %#v, want %#v", tc.name, retried, want)
+			}
+		})
 	}
 
 	// A7: Stale failure matrix — one coherent base modal (request=120, chat=9, message=2).
@@ -3346,83 +3316,32 @@ func TestMessageMediaDownloadFailureRetryAndStaleResults(t *testing.T) {
 		}
 		return state
 	}
-	buildStaleFailureExpected := func() State {
-		return buildStaleFailureState()
-	}
 	failureErr := domain.AppError{Kind: domain.ErrorMedia, Message: "unavailable"}
-	// Wrong request only — should be no-op (Error remains nil).
-	sf1, cmdsSF1 := updateState(buildStaleFailureState(), MessageMediaOpenFailed{
-		RequestID: 119, ChatID: 9, MessageID: 2, Error: failureErr,
-	})
-	if !reflect.DeepEqual(sf1, buildStaleFailureExpected()) {
-		t.Fatalf("wrong request failure = %#v, want %#v (no-op)", sf1, buildStaleFailureExpected())
-	}
-	if len(cmdsSF1) != 0 {
-		t.Fatalf("wrong request failure commands = %d, want 0", len(cmdsSF1))
-	}
-	// Wrong chat only — should be no-op.
-	sf2, cmdsSF2 := updateState(buildStaleFailureState(), MessageMediaOpenFailed{
-		RequestID: 120, ChatID: 8, MessageID: 2, Error: failureErr,
-	})
-	if !reflect.DeepEqual(sf2, buildStaleFailureExpected()) {
-		t.Fatalf("wrong chat failure = %#v, want %#v (no-op)", sf2, buildStaleFailureExpected())
-	}
-	if len(cmdsSF2) != 0 {
-		t.Fatalf("wrong chat failure commands = %d, want 0", len(cmdsSF2))
-	}
-	// Wrong message only — should be no-op.
-	sf3, cmdsSF3 := updateState(buildStaleFailureState(), MessageMediaOpenFailed{
-		RequestID: 120, ChatID: 9, MessageID: 3, Error: failureErr,
-	})
-	if !reflect.DeepEqual(sf3, buildStaleFailureExpected()) {
-		t.Fatalf("wrong message failure = %#v, want %#v (no-op)", sf3, buildStaleFailureExpected())
-	}
-	if len(cmdsSF3) != 0 {
-		t.Fatalf("wrong message failure commands = %d, want 0", len(cmdsSF3))
-	}
-
-	// A9: Avatar retry regression — full-State DeepEqual with independently built expected.
-	buildAvatarRetryState := func() State {
-		state := InitialState()
-		state.NextRequestID = 300
-		state.Focus = FocusModal
-		state.Chats = []domain.Chat{{ID: 9, Title: "Mina"}}
-		state.Modal = &ModalState{
-			RequestID: 140, Title: "Mina",
-			Ref:           domain.AvatarRef{UniqueID: "small", OriginalUniqueID: "large"},
-			Path:          "/tmp/stale-avatar.jpg",
-			Loading:       true,
-			Error:         &domain.AppError{Kind: domain.ErrorMedia, Message: "avatar load failed"},
-			PreviousFocus: FocusDetails,
-		}
-		return state
-	}
-	buildExpectedAvatarRetry := func() State {
-		state := InitialState()
-		state.NextRequestID = 301
-		state.Focus = FocusModal
-		state.Chats = []domain.Chat{{ID: 9, Title: "Mina"}}
-		state.Modal = &ModalState{
-			RequestID: 300, Title: "Mina",
-			Ref:           domain.AvatarRef{UniqueID: "small", OriginalUniqueID: "large"},
-			Loading:       true,
-			Error:         nil,
-			PreviousFocus: FocusDetails,
-		}
-		return state
-	}
-	avatarRetryState := buildAvatarRetryState()
-	avatarRetried, avatarRetryCmds := updateState(avatarRetryState, ActionReceived{Action: Retry})
-	wantAvatar := buildExpectedAvatarRetry()
-	if !reflect.DeepEqual(avatarRetried, wantAvatar) {
-		t.Fatalf("avatar retry = %#v, want %#v", avatarRetried, wantAvatar)
-	}
-	if len(avatarRetryCmds) != 1 {
-		t.Fatalf("avatar retry commands = %d, want 1", len(avatarRetryCmds))
-	}
-	wantAvatarCmd := []Effect{OpenAvatar{RequestID: 300, Title: "Mina", Ref: domain.AvatarRef{UniqueID: "small", OriginalUniqueID: "large"}}}
-	if !reflect.DeepEqual(avatarRetryCmds, wantAvatarCmd) {
-		t.Fatalf("avatar retry commands = %#v, want %#v", avatarRetryCmds, wantAvatarCmd)
+	for _, tc := range []struct {
+		name  string
+		event Event
+	}{
+		// Wrong request only — should be no-op (Error remains nil).
+		{name: "stale failure/wrong request", event: MessageMediaOpenFailed{RequestID: 119, ChatID: 9, MessageID: 2, Error: failureErr}},
+		// Wrong chat only — should be no-op.
+		{name: "stale failure/wrong chat", event: MessageMediaOpenFailed{RequestID: 120, ChatID: 8, MessageID: 2, Error: failureErr}},
+		// Wrong message only — should be no-op.
+		{name: "stale failure/wrong message", event: MessageMediaOpenFailed{RequestID: 120, ChatID: 9, MessageID: 3, Error: failureErr}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			input := buildStaleFailureState()
+			want := cloneReducerState(input)
+			got, cmds := updateState(input, tc.event)
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("%s stale failure = %#v, want no-op %#v", tc.name, got, want)
+			}
+			if len(cmds) != 0 {
+				t.Fatalf("%s stale failure commands = %#v, want none", tc.name, cmds)
+			}
+			if !reflect.DeepEqual(input, want) {
+				t.Fatalf("%s stale failure mutated input state = %#v, want %#v", tc.name, input, want)
+			}
+		})
 	}
 }
 

@@ -2,8 +2,6 @@ package frontend
 
 import (
 	"image"
-	"os"
-	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -69,14 +67,4 @@ func TestAppModelHuhComposerSynchronizesMouseFocusTransition(t *testing.T) {
 		t.Fatalf("focus = %v, want FocusComposer", got)
 	}
 	assertHuhComposerHost(t, model, composerTextIdentity{ChatID: 9}, "draft", true, 42, 2)
-}
-
-func TestAppModelHuhComposerNeverDiscardsSyncCommands(t *testing.T) {
-	source, err := os.ReadFile("app_model.go")
-	if err != nil {
-		t.Fatalf("read app_model.go: %v", err)
-	}
-	if strings.Contains(string(source), "_ = m.syncComposerTextHost()") {
-		t.Fatal("AppModel.Update discards a composer host synchronization command")
-	}
 }

@@ -2,8 +2,6 @@ package frontend
 
 import (
 	"image"
-	"os"
-	"strings"
 	"testing"
 
 	"github.com/zylen-det/telegram-tui/internal/domain"
@@ -25,20 +23,4 @@ func TestComposerTextRectConsumesHiddenBannerRowsAtNarrowWidth(t *testing.T) {
 			t.Fatalf("edit-error text rect = %v, want %v", got, want)
 		}
 	})
-}
-
-func TestComposerBuilderUsesSharedTextHeight(t *testing.T) {
-	source, err := os.ReadFile("surface_composer.go")
-	if err != nil {
-		t.Fatalf("read surface_composer.go: %v", err)
-	}
-	body := string(source)
-	start := strings.Index(body, "textRect := composerTextRect(model, rect)")
-	if start < 0 {
-		t.Fatal("composer builder does not consume shared text rectangle")
-	}
-	tail := body[start:]
-	if !strings.Contains(tail, "clipComposerTextView(composerStr, textRect.Dx(), textRect.Dy())") {
-		t.Fatal("composer Huh renderer does not consume shared text width/height")
-	}
 }

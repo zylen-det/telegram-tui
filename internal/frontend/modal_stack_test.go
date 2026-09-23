@@ -2,7 +2,6 @@ package frontend
 
 import (
 	"image"
-	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -698,9 +697,9 @@ func TestModalStackClipsInlineToUnionOfEveryModalFrame(t *testing.T) {
 }
 
 // A new overlay joins the frame by registering a spec: it participates in the
-// dim/toast answers, is added to the root exactly once, is ordered by the
-// registry, and composeApplication is never touched.
-func TestModalStackFakeSpecParticipatesWithoutTouchingComposeApplication(t *testing.T) {
+// dim/toast answers, is added to the root exactly once, and is ordered by the
+// registry.
+func TestModalStackFakeSpecParticipates(t *testing.T) {
 	model := frameBaseModel(100, 24)
 	model.Toast = &domain.AppError{Message: "Message copied"}
 	model.PhotoSend = &PhotoSendState{ChatID: 2, Input: []rune("/tmp/photo.jpg")}
@@ -763,63 +762,4 @@ func TestModalStackFakeSpecParticipatesWithoutTouchingComposeApplication(t *test
 	if len(plainResult.inline) != 2 {
 		t.Fatalf("registered-overlays-only composition lost a placement the fake overlay crops: %+v", plainResult.inline)
 	}
-
-	// composeApplication must not name a concrete overlay at all: registering
-	// the fake above is the only change a new overlay needs.
-	body := composeApplicationSource(t)
-	for _, forbidden := range []string{
-		"model.Modal", "model.MessageMenu", "model.ReactionPicker", "model.ForwardPicker",
-		"model.StickerPicker", "model.PhotoSend", "model.MessageSearch", "model.ChatSearch",
-		"model.ChatActions", "model.PinnedMessages", "model.Topics", "model.Members",
-		"model.InviteLinks", "model.Administration", "model.ChatSettings", "model.Prompt",
-		"model.Focus ==", "buildMediaModalLayer", "buildActionModalLayer", "buildMembersLayer",
-		"buildStickerPickerLayer", "buildAuthorizationLayer", "clipInlinePlacements",
-	} {
-		if strings.Contains(body, forbidden) {
-			t.Errorf("composeApplication still names %q", forbidden)
-		}
-	}
-	for _, required := range []string{
-		"stack := defaultModalStack()", "stack.anyActive(ctx)", "stack.suppressesToast(ctx)",
-		"stack.compose(ctx, modalBase{", "compileHits(composed.interactions)", "composed.cursor",
-		"composed.overlay", "composed.inline",
-	} {
-		if !strings.Contains(body, required) {
-			t.Errorf("composeApplication no longer %q", required)
-		}
-	}
-
-	// The single attach lives in the stack, in exactly one place.
-	stackSource, err := os.ReadFile("modal_stack.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	composeBody := functionBody(t, string(stackSource), "func (s modalStack) compose")
-	if got := strings.Count(composeBody, "ctx.root.AddLayers("); got != 1 {
-		t.Errorf("compose attaches layers in %d places, want exactly one", got)
-	}
-}
-
-// composeApplicationSource returns the body of the frame composition function.
-func composeApplicationSource(t *testing.T) string {
-	t.Helper()
-	source, err := os.ReadFile("render_frame.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	return functionBody(t, string(source), "func composeApplication(")
-}
-
-func functionBody(t *testing.T, source, signature string) string {
-	t.Helper()
-	start := strings.Index(source, signature)
-	if start < 0 {
-		t.Fatalf("%q not found in the source", signature)
-	}
-	rest := source[start:]
-	end := strings.Index(rest[len(signature):], "\nfunc ")
-	if end < 0 {
-		t.Fatalf("%q is not followed by another function", signature)
-	}
-	return rest[:len(signature)+end]
 }
