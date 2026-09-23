@@ -106,24 +106,46 @@ func TestNarrowChatKeysSeparateActionsFromMessages(t *testing.T) {
 	state := model.Snapshot()
 	state.Focus = FocusChats
 	model.state = &state
-	entered, _ := updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
-	if state := entered.Snapshot(); state.ChatActions == nil || state.Focus != FocusChatActions {
-		t.Fatalf("Enter = focus %v actions %#v", state.Focus, state.ChatActions)
+	actions, _ := updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: 'a', Text: "a"}))
+	if state := actions.Snapshot(); state.ChatActions == nil || state.Focus != FocusChatActions {
+		t.Fatalf("a = focus %v actions %#v", state.Focus, state.ChatActions)
 	}
-	if plain := plainAppView(entered); !strings.Contains(plain, "Open chat") || strings.Contains(plain, "Hello from the group") {
-		t.Fatalf("Enter did not leave the action modal over the chat list:\n%s", plain)
+	if plain := plainAppView(actions); !strings.Contains(plain, "Open chat") || strings.Contains(plain, "Hello from the group") {
+		t.Fatalf("a did not leave the action modal over the chat list:\n%s", plain)
 	}
 
 	model = mainSurfaceModel(t, 70, 22)
 	state = model.Snapshot()
 	state.Focus = FocusChats
 	model.state = &state
-	opened, _ := updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: tea.KeyRight}))
+	opened, _ := updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
 	if state := opened.Snapshot(); state.ChatActions != nil || state.Focus != FocusConversation {
-		t.Fatalf("Right = focus %v actions %#v", state.Focus, state.ChatActions)
+		t.Fatalf("Enter = focus %v actions %#v", state.Focus, state.ChatActions)
 	}
 	if plain := plainAppView(opened); !strings.Contains(plain, "Hello from the group") {
-		t.Fatalf("Right did not open messages:\n%s", plain)
+		t.Fatalf("Enter did not open messages:\n%s", plain)
+	}
+}
+
+func TestChatInfoAndMessageInputKeys(t *testing.T) {
+	for _, width := range []int{70, 100, 140} {
+		model := mainSurfaceModel(t, width, 24)
+		state := model.Snapshot()
+		state.Focus = FocusConversation
+		model.state = &state
+
+		info, _ := updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: 'K', Text: "K", Mod: tea.ModShift}))
+		if got := info.Snapshot(); !got.DetailsOpen || got.Focus != FocusDetails {
+			t.Fatalf("width %d: K = details %t focus %v", width, got.DetailsOpen, got.Focus)
+		}
+		info, _ = updateAppModel(t, info, tea.KeyPressMsg(tea.Key{Code: 'K', Text: "K", Mod: tea.ModShift}))
+		if got := info.Snapshot(); got.DetailsOpen || got.Focus != FocusConversation {
+			t.Fatalf("width %d: second K = details %t focus %v", width, got.DetailsOpen, got.Focus)
+		}
+		input, _ := updateAppModel(t, info, tea.KeyPressMsg(tea.Key{Code: 'i', Text: "i"}))
+		if got := input.Snapshot(); got.Focus != FocusComposer {
+			t.Fatalf("width %d: i = focus %v, want composer", width, got.Focus)
+		}
 	}
 }
 

@@ -131,9 +131,6 @@ func mapKeyPress(focus Focus, msg tea.KeyPressMsg) (ActionReceived, bool) {
 	if focus == FocusDetails && key.Mod == 0 && keyText(key) == "m" {
 		return actionReceived(OpenMembers)
 	}
-	if focus == FocusDetails && key.Mod == 0 && keyText(key) == "l" {
-		return actionReceived(OpenInviteLinks)
-	}
 	if focus == FocusChats && key.Mod == 0 {
 		switch keyText(key) {
 		case "/":
@@ -142,23 +139,11 @@ func mapKeyPress(focus Focus, msg tea.KeyPressMsg) (ActionReceived, bool) {
 			return actionReceived(SelectNextUnread)
 		case "m":
 			return actionReceived(SelectNextMention)
-		case "l":
-			return actionReceived(OpenChat)
-		case "h":
-			// Leftward from the chat list targets the conversation pane via the
-			// explicit FocusPane reducer, which honors focusVisible; in narrow
-			// layouts where conversation is hidden it stays on FocusChats. This
-			// must not use FocusPrevious, which would wrap into the composer.
-			return ActionReceived{Action: FocusPane, TargetFocus: FocusConversation}, true
-		}
-		switch key.Code {
-		case tea.KeyRight:
-			return actionReceived(OpenChat)
-		case tea.KeyLeft:
-			// Same explicit semantic mapping as h.
-			return ActionReceived{Action: FocusPane, TargetFocus: FocusConversation}, true
-		case tea.KeyEnter:
+		case "a":
 			return actionReceived(OpenChatActionMenu)
+		}
+		if key.Code == tea.KeyEnter {
+			return actionReceived(OpenChat)
 		}
 	}
 	if focus == FocusConversation && key.Mod == 0 {
@@ -203,7 +188,9 @@ func mapKeyPress(focus Focus, msg tea.KeyPressMsg) (ActionReceived, bool) {
 		return actionReceived(FocusPrevious)
 	case key.Mod == 0 && key.Code == tea.KeyEnter:
 		return actionReceived(Activate)
-	case key.Mod == 0 && (keyText(key) == "i" || key.Code == tea.KeyF2):
+	case key.Mod == 0 && keyText(key) == "i":
+		return ActionReceived{Action: FocusPane, TargetFocus: FocusComposer}, true
+	case ((key.Mod == 0 || key.Mod == tea.ModShift) && keyText(key) == "K") || (key.Mod == 0 && key.Code == tea.KeyF2):
 		return actionReceived(ToggleDetails)
 	case key.Mod == 0 && key.Code == tea.KeyEscape:
 		return actionReceived(Close)

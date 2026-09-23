@@ -18,10 +18,18 @@ func TestSemanticInputMapsNavigationAndEditors(t *testing.T) {
 		{name: "down", focus: FocusChats, key: tea.Key{Code: tea.KeyDown}, want: ActionReceived{Action: SelectNext}},
 		{name: "j", focus: FocusChats, key: tea.Key{Text: "j", Code: 'j'}, want: ActionReceived{Action: SelectNext}},
 		{name: "up", focus: FocusChats, key: tea.Key{Code: tea.KeyUp}, want: ActionReceived{Action: SelectPrevious}},
-		{name: "left targets conversation", focus: FocusChats, key: tea.Key{Code: tea.KeyLeft}, want: ActionReceived{Action: FocusPane, TargetFocus: FocusConversation}},
-		{name: "h targets conversation", focus: FocusChats, key: tea.Key{Text: "h", Code: 'h'}, want: ActionReceived{Action: FocusPane, TargetFocus: FocusConversation}},
-		{name: "right opens chat", focus: FocusChats, key: tea.Key{Code: tea.KeyRight}, want: ActionReceived{Action: OpenChat}},
-		{name: "enter opens chat actions", focus: FocusChats, key: tea.Key{Code: tea.KeyEnter}, want: ActionReceived{Action: OpenChatActionMenu}},
+		{name: "left cycles back", focus: FocusChats, key: tea.Key{Code: tea.KeyLeft}, want: ActionReceived{Action: FocusPrevious}},
+		{name: "h cycles back", focus: FocusChats, key: tea.Key{Text: "h", Code: 'h'}, want: ActionReceived{Action: FocusPrevious}},
+		{name: "right cycles forward", focus: FocusChats, key: tea.Key{Code: tea.KeyRight}, want: ActionReceived{Action: FocusNext}},
+		{name: "l cycles forward", focus: FocusChats, key: tea.Key{Code: 'l', Text: "l"}, want: ActionReceived{Action: FocusNext}},
+		{name: "l cycles from info", focus: FocusDetails, key: tea.Key{Code: 'l', Text: "l"}, want: ActionReceived{Action: FocusNext}},
+		{name: "h cycles from info", focus: FocusDetails, key: tea.Key{Code: 'h', Text: "h"}, want: ActionReceived{Action: FocusPrevious}},
+		{name: "enter opens chat", focus: FocusChats, key: tea.Key{Code: tea.KeyEnter}, want: ActionReceived{Action: OpenChat}},
+		{name: "a opens chat actions", focus: FocusChats, key: tea.Key{Code: 'a', Text: "a"}, want: ActionReceived{Action: OpenChatActionMenu}},
+		{name: "K opens info", focus: FocusChats, key: tea.Key{Code: 'K', Text: "K", Mod: tea.ModShift}, want: ActionReceived{Action: ToggleDetails}},
+		{name: "K without shift modifier opens info", focus: FocusConversation, key: tea.Key{Code: 'K', Text: "K"}, want: ActionReceived{Action: ToggleDetails}},
+		{name: "i focuses input from chats", focus: FocusChats, key: tea.Key{Code: 'i', Text: "i"}, want: ActionReceived{Action: FocusPane, TargetFocus: FocusComposer}},
+		{name: "i focuses input from conversation", focus: FocusConversation, key: tea.Key{Code: 'i', Text: "i"}, want: ActionReceived{Action: FocusPane, TargetFocus: FocusComposer}},
 		{name: "tab", focus: FocusChats, key: tea.Key{Code: tea.KeyTab}, want: ActionReceived{Action: FocusNext}},
 		{name: "shift tab", focus: FocusChats, key: tea.Key{Code: tea.KeyTab, Mod: tea.ModShift}, want: ActionReceived{Action: FocusPrevious}},
 		{name: "details", focus: FocusChats, key: tea.Key{Code: tea.KeyF2}, want: ActionReceived{Action: ToggleDetails}},
@@ -206,18 +214,17 @@ func TestConversationLeftReturnsToChatsInEveryLayout(t *testing.T) {
 	}
 }
 
-// TestChatListLeftAndHFocusConversation proves the AppModel integration
-// contract for unmodified Left and h from the chat list. Through
-// AppModel.Update the focus lands on the conversation pane in Wide and Normal
-// layouts, while the reducer's focusVisible guard keeps it on FocusChats in
-// Narrow where the conversation pane is hidden behind the chat list page.
-func TestChatListLeftAndHFocusConversation(t *testing.T) {
+// Pane navigation never selects the focused chat or switches to the composer.
+// In narrow layout the hidden conversation cannot take focus from the list.
+func TestChatListPaneKeysCycleWithoutOpeningChat(t *testing.T) {
 	for _, keyTest := range []struct {
 		name string
 		key  tea.Key
 	}{
 		{name: "left", key: tea.Key{Code: tea.KeyLeft}},
 		{name: "h", key: tea.Key{Code: 'h', Text: "h"}},
+		{name: "right", key: tea.Key{Code: tea.KeyRight}},
+		{name: "l", key: tea.Key{Code: 'l', Text: "l"}},
 	} {
 		t.Run(keyTest.name, func(t *testing.T) {
 			for _, test := range []struct {
@@ -237,12 +244,41 @@ func TestChatListLeftAndHFocusConversation(t *testing.T) {
 					state := model.Snapshot()
 					state.Layout = test.layout
 					state.Focus = FocusChats
+					state.FocusedChat = 0 // Different from the selected conversation.
 					model.state = &state
 					model, _ = updateAppModel(t, model, tea.KeyPressMsg(keyTest.key))
-					if got := model.Snapshot().Focus; got != test.want {
-						t.Fatalf("AppModel.Update with %#v moved focus from FocusChats to %v, want %v", keyTest.key, got, test.want)
+					if got := model.Snapshot(); got.Focus != test.want || got.SelectedChat != state.SelectedChat || got.FocusedChat != state.FocusedChat || got.ChatActions != nil {
+						t.Fatalf("AppModel.Update with %#v = focus %v selected %d focused %d actions %#v, want focus %v and unchanged chat", keyTest.key, got.Focus, got.SelectedChat, got.FocusedChat, got.ChatActions, test.want)
 					}
 				})
+			}
+		})
+	}
+}
+
+func TestWideInfoPaneKeysWrapAroundWithoutFocusingInput(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		keys  []tea.Key
+		wants []Focus
+	}{
+		{name: "forward", keys: []tea.Key{{Code: 'l', Text: "l"}, {Code: tea.KeyRight}, {Code: 'l', Text: "l"}, {Code: tea.KeyRight}, {Code: tea.KeyTab}}, wants: []Focus{FocusConversation, FocusDetails, FocusChats, FocusConversation, FocusDetails}},
+		{name: "reverse", keys: []tea.Key{{Code: 'h', Text: "h"}, {Code: tea.KeyLeft}, {Code: 'h', Text: "h"}, {Code: tea.KeyTab, Mod: tea.ModShift}}, wants: []Focus{FocusDetails, FocusConversation, FocusChats, FocusDetails}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			model := mainSurfaceModel(t, 140, 24)
+			state := model.Snapshot()
+			state.Focus = FocusChats
+			state.FocusedChat = 0
+			state.DetailsOpen = true
+			state.DetailsChatID = state.Chats[state.SelectedChat].ID
+			model.state = &state
+			for index, key := range test.keys {
+				model, _ = updateAppModel(t, model, tea.KeyPressMsg(key))
+				got := model.Snapshot()
+				if got.Focus != test.wants[index] || got.SelectedChat != state.SelectedChat || got.FocusedChat != state.FocusedChat || !got.DetailsOpen {
+					t.Fatalf("%s step %d (%#v): focus %v selected %d focused %d info %t, want focus %v and unchanged chat", test.name, index, key, got.Focus, got.SelectedChat, got.FocusedChat, got.DetailsOpen, test.wants[index])
+				}
 			}
 		})
 	}

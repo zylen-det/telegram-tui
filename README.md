@@ -89,10 +89,13 @@ Credential lookup order is environment → config file → first-run prompt.
 | Action | Keys | Mouse |
 |---|---|---|
 | Move chat focus / list selection | `j` / `k` or Up / Down | Click a row or use the wheel |
-| Move between panes | `h` / `l` or Shift-Tab / Tab | Click a pane |
-| Open focused chat actions / activate | Enter | Click the action |
+| Cycle visible panes (not the message input) | `h` / `l` or Left / Right; Shift-Tab / Tab | Click a pane |
+| Open focused conversation | Enter in the chat list | — |
+| Chat actions | `a` in the chat list | Click an action |
+| Chat info | `K` or F2 | Click Info |
+| Focus message input | `i` in a conversation | Click the input |
+| Activate a message or modal action | Enter | Click the action |
 | Close or go back | Esc; `q` inside a modal | Click close or outside |
-| Open chat details | `i` or F2 | Click Info |
 | Search from the chat list | `/` | Click a result |
 | Next unread / mentioned chat | `u` / `m` in the chat list | — |
 | View pinned messages | `p` in a conversation | — |
@@ -104,7 +107,7 @@ Credential lookup order is environment → config file → first-run prompt.
 | Open the sticker picker | Ctrl+S | Click `[Sticker]` |
 | Stop the application | Ctrl-C | — |
 
-Moving through the chat list changes the focused row without replacing the selected conversation. Press Enter for actions on the focused chat, then choose **Open chat** to make it the selected conversation.
+Moving through the chat list changes the focused row without replacing the selected conversation. Press Enter to open the focused conversation; pane navigation wraps among visible Chats, Conversation, and Info panes without opening another chat. Press `a` for actions on the focused chat. Press `i` to focus the message input from a visible conversation.
 
 Typing `/` at the beginning of the composer opens bot-command completion where available. Plain `q` never quits the process; it only closes the current modal or page.
 

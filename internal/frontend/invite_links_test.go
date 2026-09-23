@@ -10,9 +10,6 @@ import (
 )
 
 func TestInviteLinksKeyboardAndInfoCapability(t *testing.T) {
-	if got, ok := mapKeyPress(FocusDetails, tea.KeyPressMsg(tea.Key{Code: 'l', Text: "l"})); !ok || got.Action != OpenInviteLinks {
-		t.Fatalf("details l = (%#v,%t)", got, ok)
-	}
 	for key, want := range map[tea.Key]Action{
 		{Code: tea.KeyDown}:   SelectNext,
 		{Code: tea.KeyUp}:     SelectPrevious,

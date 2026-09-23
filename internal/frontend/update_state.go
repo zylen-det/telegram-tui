@@ -4144,7 +4144,8 @@ func focusVisible(state State, focus Focus) bool {
 }
 
 func cycleFocus(state *State, reverse bool) {
-	order := []Focus{FocusChats, FocusConversation, FocusComposer, FocusDetails}
+	// The composer is entered explicitly with i, not by cycling through panes.
+	order := []Focus{FocusChats, FocusConversation, FocusDetails}
 	visible := make([]Focus, 0, len(order))
 	for _, focus := range order {
 		if focusVisible(*state, focus) {
@@ -4152,6 +4153,11 @@ func cycleFocus(state *State, reverse bool) {
 		}
 	}
 	if len(visible) == 0 {
+		return
+	}
+	// From the composer, either direction returns to the conversation pane.
+	if state.Focus == FocusComposer && focusVisible(*state, FocusConversation) {
+		state.Focus = FocusConversation
 		return
 	}
 	index := 0

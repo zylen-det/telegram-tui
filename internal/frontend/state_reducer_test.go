@@ -700,9 +700,9 @@ func TestSelectionFocusAndCloseActionsRespectLayoutAndDrafts(t *testing.T) {
 	if activated.Focus != FocusConversation || activated.SelectedChat != 1 || len(commands) == 0 {
 		t.Fatalf("wide activate = focus:%v selected:%d commands:%#v", activated.Focus, activated.SelectedChat, commands)
 	}
-	composer, _ := updateState(activated, ActionReceived{Action: FocusNext})
+	composer, _ := updateState(activated, ActionReceived{Action: FocusPane, TargetFocus: FocusComposer})
 	if composer.Focus != FocusComposer {
-		t.Fatalf("focus next = %v", composer.Focus)
+		t.Fatalf("focus composer = %v", composer.Focus)
 	}
 	closed, _ := updateState(composer, ActionReceived{Action: Close})
 	if closed.Focus != FocusComposer || closed.Drafts[2] != "" {
@@ -793,8 +793,18 @@ func TestFocusPaneAndCycleOnlyVisitVisiblePanes(t *testing.T) {
 	}{
 		{name: "narrow chat cannot focus hidden conversation", state: State{Layout: LayoutNarrow, Focus: FocusChats}, action: ActionReceived{Action: FocusPane, TargetFocus: FocusConversation}, wantFocus: FocusChats},
 		{name: "normal cycles chats to conversation", state: State{Layout: LayoutNormal, Focus: FocusChats}, action: ActionReceived{Action: FocusNext}, wantFocus: FocusConversation},
-		{name: "wide reverse wraps chats to composer", state: State{Layout: LayoutWide, Focus: FocusChats}, action: ActionReceived{Action: FocusPrevious}, wantFocus: FocusComposer},
+		{name: "wide reverse wraps chats to conversation", state: State{Layout: LayoutWide, Focus: FocusChats}, action: ActionReceived{Action: FocusPrevious}, wantFocus: FocusConversation},
+		{name: "wide conversation wraps to chats without info", state: State{Layout: LayoutWide, Focus: FocusConversation}, action: ActionReceived{Action: FocusNext}, wantFocus: FocusChats},
+		{name: "wide composer next returns to conversation", state: State{Layout: LayoutWide, Focus: FocusComposer}, action: ActionReceived{Action: FocusNext}, wantFocus: FocusConversation},
+		{name: "wide composer previous returns to conversation", state: State{Layout: LayoutWide, Focus: FocusComposer}, action: ActionReceived{Action: FocusPrevious}, wantFocus: FocusConversation},
+		{name: "wide info chats next to conversation", state: State{Layout: LayoutWide, Focus: FocusChats, DetailsOpen: true}, action: ActionReceived{Action: FocusNext}, wantFocus: FocusConversation},
+		{name: "wide info chats previous wraps to info", state: State{Layout: LayoutWide, Focus: FocusChats, DetailsOpen: true}, action: ActionReceived{Action: FocusPrevious}, wantFocus: FocusDetails},
+		{name: "wide info conversation next to info", state: State{Layout: LayoutWide, Focus: FocusConversation, DetailsOpen: true}, action: ActionReceived{Action: FocusNext}, wantFocus: FocusDetails},
+		{name: "wide info previous to conversation", state: State{Layout: LayoutWide, Focus: FocusDetails, DetailsOpen: true}, action: ActionReceived{Action: FocusPrevious}, wantFocus: FocusConversation},
+		{name: "wide info next wraps to chats", state: State{Layout: LayoutWide, Focus: FocusDetails, DetailsOpen: true}, action: ActionReceived{Action: FocusNext}, wantFocus: FocusChats},
 		{name: "normal details traps visible focus", state: State{Layout: LayoutNormal, Focus: FocusDetails, DetailsOpen: true}, action: ActionReceived{Action: FocusNext}, wantFocus: FocusDetails},
+		{name: "narrow details traps visible focus", state: State{Layout: LayoutNarrow, Focus: FocusDetails, DetailsOpen: true}, action: ActionReceived{Action: FocusPrevious}, wantFocus: FocusDetails},
+		{name: "narrow conversation wraps to chats", state: State{Layout: LayoutNarrow, Focus: FocusConversation}, action: ActionReceived{Action: FocusNext}, wantFocus: FocusChats},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
