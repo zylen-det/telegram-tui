@@ -200,11 +200,17 @@ git diff --check
 
 See [`docs/architecture.md`](docs/architecture.md) for package boundaries and [`docs/manual-acceptance.md`](docs/manual-acceptance.md) for real-account checks.
 
-For maintainers, a `v*` tag runs the release workflow and publishes a checksummed Linux x86-64 archive. The same artifact can be reproduced locally:
+For maintainers, write release notes to a temporary file and publish the release manually (GitHub creates the tag if it does not exist):
+
+```bash
+gh release create v0.4.0 --title v0.4.0 --notes-file /tmp/notes.md
+```
+
+Publishing the release triggers the workflow, which verifies and builds the checksummed Linux x86-64 archive and uploads it to that release. Pushing a tag alone does not run the release workflow. The same artifact can be reproduced locally:
 
 ```bash
 make tdlib
-make package VERSION=v0.1.0
+make package VERSION=v0.4.0
 (cd dist && sha256sum --check SHA256SUMS)
 ```
 

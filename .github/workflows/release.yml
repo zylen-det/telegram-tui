@@ -1,9 +1,8 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - "v[0-9]*"
+  release:
+    types: [published]
 
 permissions:
   contents: write
@@ -12,8 +11,12 @@ jobs:
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      VERSION: ${{ github.event.release.tag_name }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ github.event.release.tag_name }}
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -25,21 +28,15 @@ jobs:
       - name: Test TDLib integration
         run: make test-tdlib
       - name: Build release archive
-        run: make package VERSION="${GITHUB_REF_NAME}"
+        run: make package VERSION="${VERSION}"
       - name: Test one-line installer
         env:
           PREFIX: ${{ runner.temp }}/telegram-tui-install
           TELEGRAM_TUI_RELEASE_URL: file://${{ github.workspace }}/dist
-          VERSION: ${{ github.ref_name }}
         run: |
           cat scripts/install.sh | sh
           test "$("${PREFIX}/bin/telegram-tui" --version)" = "${VERSION}"
-      - name: Publish GitHub release
+      - name: Upload release assets
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            gh release upload "${GITHUB_REF_NAME}" dist/*.tar.gz dist/SHA256SUMS --clobber
-          else
-            gh release create "${GITHUB_REF_NAME}" dist/*.tar.gz dist/SHA256SUMS --verify-tag --generate-notes
-          fi
+        run: gh release upload "${VERSION}" dist/*.tar.gz dist/SHA256SUMS --clobber
