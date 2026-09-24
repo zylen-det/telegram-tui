@@ -10,7 +10,7 @@ func chatActionFrame(bounds image.Rectangle) image.Rectangle {
 	if bounds.Empty() {
 		return image.Rectangle{}
 	}
-	return centeredSurfaceRectangle(bounds, min(48, bounds.Dx()), min(14, bounds.Dy())).Intersect(bounds)
+	return centeredSurfaceRectangle(bounds, min(54, bounds.Dx()), min(14, bounds.Dy())).Intersect(bounds)
 }
 
 func buildChatActionLayer(model ViewModel, styles renderStyles, selectorView string) surfaceResult {
@@ -71,6 +71,7 @@ func chatActionRows(chat domain.Chat, menu *ChatActionMenuState) []modalRowSpec 
 			Label:    item.Label,
 			Selected: index == menu.Selected,
 			Action:   ActionReceived{Action: item.Action, ChatID: menu.ChatID},
+			Key:      actionModalShortcut(item.Action),
 		})
 	}
 	if menu.Working {

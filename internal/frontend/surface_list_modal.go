@@ -19,6 +19,7 @@ type modalRowSpec struct {
 	Selected bool
 	Action   ActionReceived
 	Header   bool
+	Key      string // direct activation key for action menus; empty on other lists
 }
 
 // buildListModal builds the shared action-list modal surface. Geometry is
@@ -137,10 +138,28 @@ func buildListModalWidth(bounds image.Rectangle, title string, rows []modalRowSp
 	// paint. An empty view adds no content and never falls back to legacy
 	// labels; non-status rows keep their manual rendering.
 	if injected && !selectorRect.Empty() {
-		view := clipSelectorHuhView(selectorView[0], selectorRect.Dx(), selectorRect.Dy())
+		viewWidth := selectorRect.Dx()
+		if len(rows) > 0 && rows[0].Key != "" && viewWidth > 2 {
+			viewWidth -= 2 // reserve a gap and the right-aligned shortcut cell
+		}
+		view := clipSelectorHuhView(selectorView[0], viewWidth, selectorRect.Dy())
 		if view != "" {
 			root.AddLayers(lipgloss.NewLayer(view).X(selectorRect.Min.X).Y(selectorRect.Min.Y).Z(zModalContent))
 		}
+	}
+
+	// Huh owns the selection/label paint; the shortcut is shared chrome on
+	// top of either paint path, never another selector label.
+	for _, row := range layout.Rows {
+		if row.Index < 0 || row.Index >= len(rows) || rows[row.Index].Key == "" || row.Rect.Dx() < 3 {
+			continue
+		}
+		keyStyle := styles.Muted
+		if rows[row.Index].Selected && !injected {
+			keyStyle = keyStyle.Background(styles.Selected.GetBackground())
+		}
+		local := row.Rect.Sub(frame.Min)
+		root.AddLayers(lipgloss.NewLayer(keyStyle.Render(rows[row.Index].Key)).X(local.Max.X - 1).Y(local.Min.Y).Z(zModalContent + 1))
 	}
 
 	return surfaceResult{
@@ -154,7 +173,7 @@ func buildListModalWidth(bounds image.Rectangle, title string, rows []modalRowSp
 
 // Both the renderer and the Huh selector host use this width so the reference
 // action fits on one line in normal-sized terminals.
-const messageActionModalWidth = 40
+const messageActionModalWidth = 48
 
 // buildActionModalLayer adapts the message action menu into the shared list
 // modal. Selection follows the generated capability-gated row order rather
@@ -295,6 +314,7 @@ func messageActionRows(menu *MessageActionMenu) []modalRowSpec {
 
 	for index := range rows {
 		rows[index].Selected = index == menu.Selected
+		rows[index].Key = actionModalShortcut(rows[index].Action.Action)
 	}
 	return rows
 }
@@ -370,6 +390,9 @@ func addModalRowLabel(rowLayer *lipgloss.Layer, row components.Row, spec modalRo
 		return
 	}
 	labelWidth := row.Rect.Dx() - 1
+	if spec.Key != "" {
+		labelWidth -= 2 // gap plus right-aligned key
+	}
 	if labelWidth <= 0 || spec.Label == "" {
 		return
 	}

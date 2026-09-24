@@ -230,6 +230,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		snapshot := m.Snapshot()
 		focus := snapshot.Focus
+		if received, consumed := mapActionModalKey(snapshot, msg); consumed {
+			if received.Action == NoAction {
+				return m, nil
+			}
+			commands := m.applyMessage(received)
+			return m, tea.Batch(m.deliver(commands), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost(), m.syncChatSettingsInputHosts(), m.syncListModalController())
+		}
 		if received, ok := mapCommandMenuKey(snapshot.CommandMenu != nil, msg); ok {
 			commands := m.applyMessage(received)
 			return m, tea.Batch(m.deliver(commands), m.syncComposerTextHost())

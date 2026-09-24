@@ -287,7 +287,7 @@ func TestPinMessageRowRendersLabelAndGating(t *testing.T) {
 	state.MessageMenu = &MessageActionMenu{ChatID: 2, MessageID: 7, Capabilities: domain.MessageCapabilities{Copy: true, Pin: true}}
 	model.state = &state
 	plain := plainAppView(model)
-	if !containsTrimmedLine(plain, "Pin") || containsTrimmedLine(plain, "Unpin") {
+	if !strings.Contains(plain, " Pin ") || strings.Contains(plain, " Unpin ") {
 		t.Fatalf("pin label = %q", plain)
 	}
 
@@ -295,7 +295,7 @@ func TestPinMessageRowRendersLabelAndGating(t *testing.T) {
 	state.MessageMenu = &MessageActionMenu{ChatID: 2, MessageID: 7, Pinned: true, Capabilities: domain.MessageCapabilities{Copy: true, Pin: true}}
 	model.state = &state
 	plain = plainAppView(model)
-	if !containsTrimmedLine(plain, "Unpin") || containsTrimmedLine(plain, "Pin") {
+	if !strings.Contains(plain, " Unpin ") || strings.Contains(plain, " Pin ") {
 		t.Fatalf("unpin label = %q", plain)
 	}
 
@@ -444,7 +444,7 @@ func TestReactionRowGatedOnLoadingErrorAndLocalCapability(t *testing.T) {
 	state.MessageMenu = &MessageActionMenu{ChatID: 2, MessageID: 7, CanReact: true, Capabilities: domain.MessageCapabilities{Copy: true, Reply: true}}
 	model.state = &state
 	plain := plainAppView(model)
-	if !containsTrimmedLine(plain, "React") {
+	if !strings.Contains(plain, " React ") {
 		t.Fatalf("React row missing when locally capable: %q", plain)
 	}
 
@@ -452,7 +452,7 @@ func TestReactionRowGatedOnLoadingErrorAndLocalCapability(t *testing.T) {
 	state.MessageMenu = &MessageActionMenu{ChatID: 2, MessageID: 7, CanReact: true, Loading: true, Capabilities: domain.MessageCapabilities{Copy: true, Reply: true}}
 	model.state = &state
 	plain = plainAppView(model)
-	if containsTrimmedLine(plain, "React") || !strings.Contains(plain, "Loading actions...") {
+	if strings.Contains(plain, " React ") || !strings.Contains(plain, "Loading actions...") {
 		t.Fatalf("React row rendered while loading: %q", plain)
 	}
 

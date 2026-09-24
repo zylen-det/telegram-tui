@@ -94,7 +94,7 @@ Credential lookup order is environment → config file → first-run prompt.
 | Chat actions | `a` in the chat list | Click an action once the menu is open |
 | Chat info | `K` or F2 | Click Info |
 | Focus message input | `i` in a conversation | Click the input |
-| Activate a message or modal action | Enter | Click the action |
+| Activate a message or modal action | Enter; action menus also show direct keys at the right of each option | Click the action |
 | Close or go back | Esc; `q` inside a modal | Click close or outside |
 | Search from the chat list | `/` | Click a result |
 | Next unread / mentioned chat | `u` / `m` in the chat list | — |
@@ -107,6 +107,8 @@ Credential lookup order is environment → config file → first-run prompt.
 | Send media or a document | Ctrl+O | Click `[Photo]` |
 | Open the sticker picker | Ctrl+S | Click `[Sticker]` |
 | Stop the application | Ctrl-C | — |
+
+In action menus, `j`/`k` move between options and Enter activates the selected one. Direct keys activate the indicated option without moving selection; only keys for visible actions are active. Message actions use `v` view/open media, `r` reply, `g` go to referenced message, `f` forward, `e` edit, `y` copy (yank), `i` user info, `a` react, `p` pin/unpin, `d` delete for self, and `D` delete for everyone. Chat actions use `o` open, `i` info, `a` archive/unarchive, `p` pin/unpin, `m` mute/unmute, `r` mark read/unread, `c` clear history, `d` delete, `l` leave, and `J` join (`j` remains navigation). Confirmation uses `c` cancel or `y` confirm. Esc/`q` goes back; Ctrl-C still quits.
 
 Moving through the chat list changes the focused row without replacing the selected conversation. Press Enter to open the focused conversation; pane navigation wraps among visible Chats, Conversation, and Info panes without opening another chat. Press `a` for actions on the focused chat. Press `i` to focus the message input from a visible conversation.
 
