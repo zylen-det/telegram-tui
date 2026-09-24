@@ -2,10 +2,8 @@ package frontend
 
 import (
 	"image/color"
-	"maps"
 	"math"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -25,47 +23,44 @@ const (
 
 var ReactionPalette = []string{"👍", "❤️", "🔥", "😁", "😮", "😢", "🙏", "🎉"}
 
-func updateState(input State, raw Event) (State, []Effect) {
+// updateState applies one event to the caller-owned state in place and returns
+// the effects the application loop must deliver. AppModel.Update is the sole
+// authoritative mutation loop; no other goroutine may call this.
+func updateState(state *State, raw Event) []Effect {
 	event := normalizeEvent(raw)
 	if event == nil {
-		return input, nil
+		return nil
 	}
 
 	// Composer typing is the hottest reducer path. It updates only a draft or
-	// the active edit target, so handle it with narrow copy-on-write rather
-	// than cloning the entire application state for every key repeat.
+	// the active edit target, so it is dispatched ahead of the general switch.
 	if event, ok := event.(ComposerValueChanged); ok {
-		return reduceComposerValueChanged(input, event)
+		return reduceComposerValueChanged(state, event)
 	}
 
 	// The remaining value events each own exactly one overlay (auth prompt,
-	// photo path, message search, chat search, chat settings input). They are
-	// dispatched before the clone so typing rewrites only that overlay, not the
-	// whole application state. Every one of them must copy-on-write its owned
-	// pointer state instead of mutating through it.
+	// photo path, message search, chat search, chat settings input).
 	switch event := event.(type) {
 	case PromptValueChanged:
-		return reducePromptValueChanged(input, event)
+		return reducePromptValueChanged(state, event)
 	case PhotoPathValueChanged:
-		return reducePhotoPathValueChanged(input, event)
+		return reducePhotoPathValueChanged(state, event)
 	case MessageSearchValueChanged:
-		return reduceMessageSearchValueChanged(input, event)
+		return reduceMessageSearchValueChanged(state, event)
 	case ChatSearchValueChanged:
-		return reduceChatSearchValueChanged(input, event)
+		return reduceChatSearchValueChanged(state, event)
 	case ChatSettingsValueChanged:
-		return reduceChatSettingsValueChanged(input, event)
+		return reduceChatSettingsValueChanged(state, event)
 	}
-
-	state := cloneReducerStateForEvent(input, event)
 
 	switch event := event.(type) {
 	case Started:
-		return state, []Effect{LoadBootstrap{}}
+		return []Effect{LoadBootstrap{}}
 	case Resized:
 		state.Width, state.Height = event.Width, event.Height
 		state.Layout = layoutForSize(event.Width, event.Height)
-		clampAllHistoryOffsets(&state)
-		resizeStickerPicker(&state)
+		clampAllHistoryOffsets(state)
+		resizeStickerPicker(state)
 	case ChatSettingsLoaded:
 		return reduceChatSettingsLoaded(state, event)
 	case ChatSettingsLoadFailed:
@@ -76,15 +71,15 @@ func updateState(input State, raw Event) (State, []Effect) {
 		return reduceChatSettingSaveFailed(state, event)
 	case ActionReceived:
 		if state.Quitting {
-			return state, nil
+			return nil
 		}
 		if event.Action == Quit {
 			state.Quitting = true
 			commands := []Effect{BeginShutdown{}}
-			if chatID, ok := activeChatID(state); ok {
+			if chatID, ok := activeChatID(*state); ok {
 				commands = append(commands, CloseChatCommand{ChatID: chatID})
 			}
-			return state, commands
+			return commands
 		}
 		if state.Prompt != nil {
 			return reducePromptAction(state, event)
@@ -149,46 +144,46 @@ func updateState(input State, raw Event) (State, []Effect) {
 			state.Administration.Loading = false
 			state.Administration.Error = &domain.AppError{Kind: domain.ErrorNetwork, Op: "load administration", Message: "Could not load administration"}
 		}
-		return state, nil
+		return nil
 	case MemberAdministrationLoadFailed:
 		if state.Administration != nil && state.Administration.RequestID == event.RequestID && state.Administration.ChatID == event.ChatID && state.Administration.UserID == event.UserID && state.Administration.MemberLoading {
 			state.Administration.MemberLoading = false
 			state.Administration.Error = &domain.AppError{Kind: domain.ErrorNetwork, Op: "load administration", Message: "Could not load administration"}
 		}
-		return state, nil
+		return nil
 	case DefaultPermissionsSaved:
-		if state.Administration != nil && state.Administration.RequestID == event.RequestID && state.Administration.ChatID == event.ChatID && state.Administration.UserID == 0 && state.Administration.Mode == AdministrationDefaultPermissions && state.Administration.Working && administrationChatActive(state, event.ChatID) {
-			adminToast(&state, "Permissions saved")
+		if state.Administration != nil && state.Administration.RequestID == event.RequestID && state.Administration.ChatID == event.ChatID && state.Administration.UserID == 0 && state.Administration.Mode == AdministrationDefaultPermissions && state.Administration.Working && administrationChatActive(*state, event.ChatID) {
+			adminToast(state, "Permissions saved")
 			state.Administration = nil
 			state.Focus = FocusDetails
 		}
-		return state, nil
+		return nil
 	case DefaultPermissionsSaveFailed:
-		if state.Administration != nil && state.Administration.RequestID == event.RequestID && state.Administration.ChatID == event.ChatID && state.Administration.UserID == 0 && state.Administration.Mode == AdministrationDefaultPermissions && state.Administration.Working && administrationChatActive(state, event.ChatID) {
+		if state.Administration != nil && state.Administration.RequestID == event.RequestID && state.Administration.ChatID == event.ChatID && state.Administration.UserID == 0 && state.Administration.Mode == AdministrationDefaultPermissions && state.Administration.Working && administrationChatActive(*state, event.ChatID) {
 			state.Administration.Working = false
 			state.Administration.Notice = "Could not save permissions"
-			adminToast(&state, "Could not save permissions")
+			adminToast(state, "Could not save permissions")
 		}
-		return state, nil
+		return nil
 	case MemberAdministrationApplied:
-		if state.Administration != nil && state.Administration.RequestID == event.RequestID && state.Administration.ChatID == event.ChatID && state.Administration.UserID == event.UserID && state.Administration.PendingAction == event.Action && state.Administration.Working && administrationChatActive(state, event.ChatID) {
-			adminToast(&state, "Member updated")
+		if state.Administration != nil && state.Administration.RequestID == event.RequestID && state.Administration.ChatID == event.ChatID && state.Administration.UserID == event.UserID && state.Administration.PendingAction == event.Action && state.Administration.Working && administrationChatActive(*state, event.ChatID) {
+			adminToast(state, "Member updated")
 			state.Administration = nil
 			state.Focus = FocusDetails
-			state, commands := openMembers(state)
+			commands := openMembers(state)
 			if state.Members != nil {
 				state.Members.Notice = "Member updated"
 			}
-			return state, commands
+			return commands
 		}
-		return state, nil
+		return nil
 	case MemberAdministrationApplyFailed:
-		if state.Administration != nil && state.Administration.RequestID == event.RequestID && state.Administration.ChatID == event.ChatID && state.Administration.UserID == event.UserID && state.Administration.PendingAction == event.Action && state.Administration.Working && administrationChatActive(state, event.ChatID) {
+		if state.Administration != nil && state.Administration.RequestID == event.RequestID && state.Administration.ChatID == event.ChatID && state.Administration.UserID == event.UserID && state.Administration.PendingAction == event.Action && state.Administration.Working && administrationChatActive(*state, event.ChatID) {
 			state.Administration.Working = false
 			state.Administration.Notice = "Could not update member"
-			adminToast(&state, "Could not update member")
+			adminToast(state, "Could not update member")
 		}
-		return state, nil
+		return nil
 	case MemberUsernameCopied:
 		return reduceMemberUsernameCopied(state, event)
 	case MemberUsernameCopyFailed:
@@ -220,7 +215,7 @@ func updateState(input State, raw Event) (State, []Effect) {
 	case TelegramEvent:
 		return reduceTelegramUpdate(state, event)
 	case DraftSaved:
-		if key, ok := showAllActive(state); ok && event.ChatID == key.ChatID && event.TopicID == 0 {
+		if key, ok := showAllActive(*state); ok && event.ChatID == key.ChatID && event.TopicID == 0 {
 			syncState, exists := state.TopicDraftSync[key]
 			if exists && syncState.RequestID == event.RequestID {
 				syncState.Pending = false
@@ -254,7 +249,7 @@ func updateState(input State, raw Event) (State, []Effect) {
 					delete(state.TopicDraftDates, key)
 				}
 				state.TopicDraftSync[key] = syncState
-				setForumTopicDraftSnapshot(&state, key, syncState.Draft)
+				setForumTopicDraftSnapshot(state, key, syncState.Draft)
 			}
 			break
 		}
@@ -269,16 +264,16 @@ func updateState(input State, raw Event) (State, []Effect) {
 				delete(state.DraftDates, event.ChatID)
 			}
 			state.DraftSync[event.ChatID] = syncState
-			setChatDraftSnapshot(&state, event.ChatID, syncState.Draft)
+			setChatDraftSnapshot(state, event.ChatID, syncState.Draft)
 		}
 	case DraftSaveFailed:
 		if event.TopicID == 0 {
-			if key, ok := showAllActive(state); ok && event.ChatID == key.ChatID {
+			if key, ok := showAllActive(*state); ok && event.ChatID == key.ChatID {
 				syncState, exists := state.TopicDraftSync[key]
 				if exists && syncState.RequestID == event.RequestID {
 					syncState.Pending = false
 					state.TopicDraftSync[key] = syncState
-					setToast(&state, draftSyncError(), 3*time.Second)
+					setToast(state, draftSyncError(), 3*time.Second)
 				}
 				break
 			}
@@ -289,7 +284,7 @@ func updateState(input State, raw Event) (State, []Effect) {
 			if exists && syncState.RequestID == event.RequestID {
 				syncState.Pending = false
 				state.TopicDraftSync[key] = syncState
-				setToast(&state, draftSyncError(), 3*time.Second)
+				setToast(state, draftSyncError(), 3*time.Second)
 			}
 			break
 		}
@@ -297,7 +292,7 @@ func updateState(input State, raw Event) (State, []Effect) {
 		if exists && syncState.RequestID == event.RequestID {
 			syncState.Pending = false
 			state.DraftSync[event.ChatID] = syncState
-			setToast(&state, draftSyncError(), 3*time.Second)
+			setToast(state, draftSyncError(), 3*time.Second)
 		}
 	case TerminalFocusChanged:
 		state.TerminalFocused = event.Focused
@@ -324,9 +319,9 @@ func updateState(input State, raw Event) (State, []Effect) {
 				failure := event.Error
 				history.Error = &failure
 				state.TopicHistory[key] = history
-				if activeID, active := activeChatID(state); active && activeID == event.ChatID && state.SelectedTopics[event.ChatID] == event.TopicID {
+				if activeID, active := activeChatID(*state); active && activeID == event.ChatID && state.SelectedTopics[event.ChatID] == event.TopicID {
 					failure := event.Error
-					setToast(&state, failure, 4*time.Second)
+					setToast(state, failure, 4*time.Second)
 				}
 			}
 			break
@@ -337,9 +332,9 @@ func updateState(input State, raw Event) (State, []Effect) {
 			failure := event.Error
 			history.Error = &failure
 			state.History[event.ChatID] = history
-			if activeID, active := activeChatID(state); active && activeID == event.ChatID {
+			if activeID, active := activeChatID(*state); active && activeID == event.ChatID {
 				failure := event.Error
-				setToast(&state, failure, 4*time.Second)
+				setToast(state, failure, 4*time.Second)
 			}
 		}
 	case MessagePropertiesLoaded:
@@ -362,43 +357,43 @@ func updateState(input State, raw Event) (State, []Effect) {
 			clampMessageMenuSelection(state.MessageMenu)
 		}
 	case TextQueued:
-		replaceQueuedMessage(&state, event)
+		replaceQueuedMessage(state, event)
 	case TextQueueFailed:
-		failQueuedMessage(&state, event)
+		failQueuedMessage(state, event)
 	case PhotoQueued:
-		replaceQueuedPhoto(&state, event)
+		replaceQueuedPhoto(state, event)
 		if idx := messageIndex(state.Messages[event.ChatID], event.Message.ID); idx >= 0 {
 			msg := state.Messages[event.ChatID][idx]
-			if cmds := requestMissingThumbnails(&state, []domain.Message{msg}); len(cmds) > 0 {
-				return state, cmds
+			if cmds := requestMissingThumbnails(state, []domain.Message{msg}); len(cmds) > 0 {
+				return cmds
 			}
 		}
 	case PhotoQueueFailed:
-		failQueuedPhoto(&state, event)
+		failQueuedPhoto(state, event)
 	case VideoQueued:
-		replaceQueuedVideo(&state, event)
+		replaceQueuedVideo(state, event)
 		if idx := messageIndex(state.Messages[event.ChatID], event.Message.ID); idx >= 0 {
 			msg := state.Messages[event.ChatID][idx]
-			if cmds := requestMissingThumbnails(&state, []domain.Message{msg}); len(cmds) > 0 {
-				return state, cmds
+			if cmds := requestMissingThumbnails(state, []domain.Message{msg}); len(cmds) > 0 {
+				return cmds
 			}
 		}
 	case VideoQueueFailed:
-		failQueuedVideo(&state, event)
+		failQueuedVideo(state, event)
 	case AudioQueued:
-		replaceQueuedAudio(&state, event)
+		replaceQueuedAudio(state, event)
 	case AudioQueueFailed:
-		failQueuedAudio(&state, event)
+		failQueuedAudio(state, event)
 	case DocumentQueued:
-		replaceQueuedDocument(&state, event)
+		replaceQueuedDocument(state, event)
 		if idx := messageIndex(state.Messages[event.ChatID], event.Message.ID); idx >= 0 {
 			msg := state.Messages[event.ChatID][idx]
-			if cmds := requestMissingThumbnails(&state, []domain.Message{msg}); len(cmds) > 0 {
-				return state, cmds
+			if cmds := requestMissingThumbnails(state, []domain.Message{msg}); len(cmds) > 0 {
+				return cmds
 			}
 		}
 	case DocumentQueueFailed:
-		failQueuedDocument(&state, event)
+		failQueuedDocument(state, event)
 	case StickersLoaded:
 		return reduceStickersLoaded(state, event)
 	case StickersLoadFailed:
@@ -408,17 +403,17 @@ func updateState(input State, raw Event) (State, []Effect) {
 	case StickerThumbnailFailed:
 		return reduceStickerThumbnailFailed(state, event)
 	case StickerQueued:
-		if !replaceQueuedSticker(&state, event) {
-			return state, nil
+		if !replaceQueuedSticker(state, event) {
+			return nil
 		}
 		if idx := messageIndex(state.Messages[event.ChatID], event.Message.ID); idx >= 0 {
 			message := state.Messages[event.ChatID][idx]
-			if commands := requestMissingThumbnails(&state, []domain.Message{message}); len(commands) > 0 {
-				return state, commands
+			if commands := requestMissingThumbnails(state, []domain.Message{message}); len(commands) > 0 {
+				return commands
 			}
 		}
 	case StickerQueueFailed:
-		failQueuedSticker(&state, event)
+		failQueuedSticker(state, event)
 	case TextEdited:
 		if editTargetMatches(state.EditTarget, event.RequestID, event.ChatID, event.MessageID) {
 			if index := messageIndex(state.Messages[event.ChatID], event.MessageID); index >= 0 {
@@ -433,7 +428,7 @@ func updateState(input State, raw Event) (State, []Effect) {
 			}
 			state.EditTarget = nil
 			state.Focus = FocusComposer
-			restoreActiveDraftReply(&state)
+			restoreActiveDraftReply(state)
 		}
 	case TextEditFailed:
 		if editTargetMatches(state.EditTarget, event.RequestID, event.ChatID, event.MessageID) {
@@ -444,16 +439,16 @@ func updateState(input State, raw Event) (State, []Effect) {
 	case MessageDeleted:
 		if messageMenuMatches(state.MessageMenu, event.RequestID, event.ChatID, event.MessageID) {
 			clearDraftReply := state.DraftReplies[event.ChatID] == event.MessageID
-			state = deleteMessageSuccess(state, event.ChatID, event.MessageID)
+			deleteMessageSuccess(state, event.ChatID, event.MessageID)
 			if clearDraftReply {
 				delete(state.DraftReplies, event.ChatID)
-				return state, []Effect{queueDraftSave(&state, event.ChatID)}
+				return []Effect{queueDraftSave(state, event.ChatID)}
 			}
 		}
 	case MessageDeleteFailed:
 		if messageMenuMatches(state.MessageMenu, event.RequestID, event.ChatID, event.MessageID) {
 			failure := domain.AppError{Kind: domain.ErrorInternal, Op: "delete message", Message: "Delete failed"}
-			setToast(&state, failure, 3*time.Second)
+			setToast(state, failure, 3*time.Second)
 		}
 	case MessagePinChanged:
 		if messageMenuMatches(state.MessageMenu, event.RequestID, event.ChatID, event.MessageID) {
@@ -465,7 +460,7 @@ func updateState(input State, raw Event) (State, []Effect) {
 				label = "Message pinned"
 			}
 			success := domain.AppError{Message: label}
-			setToast(&state, success, 2*time.Second)
+			setToast(state, success, 2*time.Second)
 			state.MessageMenu = nil
 			state.Focus = FocusConversation
 		}
@@ -476,7 +471,7 @@ func updateState(input State, raw Event) (State, []Effect) {
 				label = "Unpin failed"
 			}
 			failure := domain.AppError{Kind: domain.ErrorInternal, Op: "pin message", Message: label}
-			setToast(&state, failure, 3*time.Second)
+			setToast(state, failure, 3*time.Second)
 			state.MessageMenu = nil
 			state.Focus = FocusConversation
 		}
@@ -487,14 +482,14 @@ func updateState(input State, raw Event) (State, []Effect) {
 				label = "Reaction removed"
 			}
 			success := domain.AppError{Message: label}
-			setToast(&state, success, 2*time.Second)
+			setToast(state, success, 2*time.Second)
 			state.ReactionPicker = nil
 			state.Focus = FocusConversation
 		}
 	case ReactionFailed:
 		if reactionPickerMatches(state.ReactionPicker, event.RequestID, event.ChatID, event.MessageID) {
 			failure := domain.AppError{Kind: domain.ErrorInternal, Op: "react to message", Message: "Reaction failed"}
-			setToast(&state, failure, 3*time.Second)
+			setToast(state, failure, 3*time.Second)
 			state.ReactionPicker = nil
 			state.Focus = FocusConversation
 		}
@@ -503,14 +498,14 @@ func updateState(input State, raw Event) (State, []Effect) {
 			state.ForwardPicker = nil
 			state.Focus = FocusConversation
 			success := domain.AppError{Message: "Message forwarded"}
-			setToast(&state, success, 2*time.Second)
+			setToast(state, success, 2*time.Second)
 		}
 	case MessageForwardFailed:
 		if forwardPickerMatches(state.ForwardPicker, event.RequestID, event.DestinationChatID, state.Chats) {
 			state.ForwardPicker = nil
 			state.Focus = FocusConversation
 			failure := domain.AppError{Kind: domain.ErrorInternal, Op: "forward message", Message: "Forward failed"}
-			setToast(&state, failure, 3*time.Second)
+			setToast(state, failure, 3*time.Second)
 		}
 	case AvatarRendered:
 		entry := state.Avatars[event.Key]
@@ -563,7 +558,7 @@ func updateState(input State, raw Event) (State, []Effect) {
 			if idx >= 0 && state.Messages[event.ChatID][idx].Kind == domain.MessageVideo && mediaIdentityMatches(state.Messages[event.ChatID][idx].Media.File, event.File) {
 				state.Messages[event.ChatID][idx].Media.File = event.File
 				delete(state.VideoOpenPending, event.MessageID)
-				setToast(&state, domain.AppError{Message: "Video opened"}, 2*time.Second)
+				setToast(state, domain.AppError{Message: "Video opened"}, 2*time.Second)
 			}
 		}
 		// Audio toast path mirrors Video without a terminal modal.
@@ -573,7 +568,7 @@ func updateState(input State, raw Event) (State, []Effect) {
 			if idx >= 0 && state.Messages[event.ChatID][idx].Kind == domain.MessageAudio && mediaIdentityMatches(state.Messages[event.ChatID][idx].Media.File, event.File) {
 				state.Messages[event.ChatID][idx].Media.File = event.File
 				delete(state.AudioOpenPending, event.MessageID)
-				setToast(&state, domain.AppError{Message: "Audio opened"}, 2*time.Second)
+				setToast(state, domain.AppError{Message: "Audio opened"}, 2*time.Second)
 			}
 		}
 		// Attachment toast path: title-aware, stale-guarded by request, chat,
@@ -588,7 +583,7 @@ func updateState(input State, raw Event) (State, []Effect) {
 				state.Messages[event.ChatID][idx].Media.File = event.File
 				delete(state.AttachmentOpenPending, attachmentKey)
 				if _, success, _ := attachmentToasts(pending.Title); success != "" {
-					setToast(&state, domain.AppError{Message: success}, 2*time.Second)
+					setToast(state, domain.AppError{Message: success}, 2*time.Second)
 				}
 			}
 		}
@@ -602,9 +597,9 @@ func updateState(input State, raw Event) (State, []Effect) {
 			state.Thumbnails[event.ChatID] = make(map[domain.MessageID]thumbnail.Block)
 		}
 		state.Thumbnails[event.ChatID][event.MessageID] = event.Block
-		return state, nil
+		return nil
 	case ThumbnailDownloadFailed:
-		return state, nil // silent; placeholder stays
+		return nil // silent; placeholder stays
 	case MessageMediaOpenFailed:
 		if state.Modal != nil && state.Modal.RequestID == event.RequestID && state.Modal.MediaChatID == event.ChatID && state.Modal.MediaMessageID == event.MessageID {
 			state.Modal.Loading = false
@@ -619,7 +614,7 @@ func updateState(input State, raw Event) (State, []Effect) {
 			if idx >= 0 && state.Messages[event.ChatID][idx].Kind == domain.MessageVideo {
 				delete(state.VideoOpenPending, event.MessageID)
 				// Sanitize: strip Cause from failure to avoid leaking private details.
-				setToast(&state, domain.AppError{Kind: event.Error.Kind, Op: event.Error.Op, Message: event.Error.Message}, 2*time.Second)
+				setToast(state, domain.AppError{Kind: event.Error.Kind, Op: event.Error.Op, Message: event.Error.Message}, 2*time.Second)
 			}
 		}
 		// Audio failures use the same stale and privacy guards.
@@ -628,7 +623,7 @@ func updateState(input State, raw Event) (State, []Effect) {
 			idx := messageIndex(state.Messages[event.ChatID], event.MessageID)
 			if idx >= 0 && state.Messages[event.ChatID][idx].Kind == domain.MessageAudio {
 				delete(state.AudioOpenPending, event.MessageID)
-				setToast(&state, domain.AppError{Kind: event.Error.Kind, Op: event.Error.Op, Message: event.Error.Message}, 2*time.Second)
+				setToast(state, domain.AppError{Kind: event.Error.Kind, Op: event.Error.Op, Message: event.Error.Message}, 2*time.Second)
 			}
 		}
 		// Attachment failures clear pending only when request, chat, message,
@@ -641,7 +636,7 @@ func updateState(input State, raw Event) (State, []Effect) {
 				mediaIdentityMatches(state.Messages[event.ChatID][idx].Media.File, pending.File) {
 				delete(state.AttachmentOpenPending, attachmentKey)
 				failure := mediaOpenError(pending.Title, nil)
-				setToast(&state, failure, 2*time.Second)
+				setToast(state, failure, 2*time.Second)
 			}
 		}
 	case StartupFailed:
@@ -649,22 +644,22 @@ func updateState(input State, raw Event) (State, []Effect) {
 		state.Fatal = &failure
 		if !state.Quitting {
 			state.Quitting = true
-			return state, []Effect{BeginShutdown{}}
+			return []Effect{BeginShutdown{}}
 		}
 	case ShutdownComplete:
 		if event.Error != nil {
 			failure := *event.Error
-			setToast(&state, failure, 4*time.Second)
+			setToast(state, failure, 4*time.Second)
 		}
 	case OperationFailed:
 		failure := event.Error
-		setToast(&state, failure, 4*time.Second)
+		setToast(state, failure, 4*time.Second)
 	case ClipboardWriteFailed:
 		failure := event.Error
-		setToast(&state, failure, 4*time.Second)
+		setToast(state, failure, 4*time.Second)
 	case ClipboardWritten:
 		success := domain.AppError{Message: "Message copied"}
-		setToast(&state, success, 2*time.Second)
+		setToast(state, success, 2*time.Second)
 	case ToastExpired:
 		if state.Toast != nil && event.Generation == state.ToastGeneration {
 			state.Toast = nil
@@ -674,14 +669,14 @@ func updateState(input State, raw Event) (State, []Effect) {
 		state.Prompt = &PromptState{Prompt: event.Prompt, PreviousFocus: state.Focus}
 		state.Focus = FocusAuth
 	}
-	return state, nil
+	return nil
 }
 
 func administrationChatActive(state State, chatID domain.ChatID) bool {
 	return chatID != 0 && chatIndex(state.Chats, chatID) >= 0
 }
 
-func reduceTelegramUpdate(state State, event TelegramEvent) (State, []Effect) {
+func reduceTelegramUpdate(state *State, event TelegramEvent) []Effect {
 	switch update := event.Value.(type) {
 	case *telegram.Ready:
 		if update != nil {
@@ -749,32 +744,32 @@ func reduceTelegramUpdate(state State, event TelegramEvent) (State, []Effect) {
 			return reduceTelegramUpdate(state, event)
 		}
 	case telegram.Ready:
-		requestID := allocateRequestID(&state)
+		requestID := allocateRequestID(state)
 		state.ChatRequestID = requestID
 		state.ChatsLoading = true
 		state.ChatsError = nil
-		return state, []Effect{LoadChats{RequestID: requestID, Cursor: telegram.ChatCursor{Limit: pageSize}}}
+		return []Effect{LoadChats{RequestID: requestID, Cursor: telegram.ChatCursor{Limit: pageSize}}}
 	case telegram.ConnectionChanged:
 		state.Connection = update.State
 	case telegram.ChatUpserted:
-		selectedID, _ := activeChatID(state)
-		focusedID, _ := focusedChatID(state)
+		selectedID, _ := activeChatID(*state)
+		focusedID, _ := focusedChatID(*state)
 		if update.Chat.IsArchived && (state.ChatActions == nil || state.ChatActions.ChatID != update.Chat.ID || !state.ChatActions.Working) {
-			removeChatFromMainList(&state, update.Chat.ID, false)
+			removeChatFromMainList(state, update.Chat.ID, false)
 			if state.ChatActions != nil && state.ChatActions.ChatID == update.Chat.ID {
 				state.Focus = state.ChatActions.PreviousFocus
 				state.ChatActions = nil
 			}
-			return state, nil
+			return nil
 		}
 		upsertChat(&state.Chats, update.Chat)
 		sortChats(state.Chats)
-		preserveChatSelection(&state, selectedID)
-		preserveChatFocus(&state, focusedID)
-		applyCloudDraft(&state, update.Chat.ID, update.Chat.Draft)
-		return state, requestMissingChatAvatars(&state, []domain.Chat{update.Chat})
+		preserveChatSelection(state, selectedID)
+		preserveChatFocus(state, focusedID)
+		applyCloudDraft(state, update.Chat.ID, update.Chat.Draft)
+		return requestMissingChatAvatars(state, []domain.Chat{update.Chat})
 	case telegram.DraftChanged:
-		applyCloudDraft(&state, update.ChatID, update.Draft)
+		applyCloudDraft(state, update.ChatID, update.Draft)
 	case telegram.MessageUpserted:
 		return reduceMessageUpsertedAndNotify(state, update.Message)
 	case telegram.MessageContentUpdated:
@@ -796,12 +791,12 @@ func reduceTelegramUpdate(state State, event TelegramEvent) (State, []Effect) {
 			// TDLib may populate media refs after a send (e.g. a photo reply whose
 			// thumbnail was pending). Re-request any now-reachable inline
 			// thumbnail that has not been rendered yet.
-			commands = append(commands, requestMissingThumbnails(&state, []domain.Message{state.Messages[update.ChatID][index]})...)
+			commands = append(commands, requestMissingThumbnails(state, []domain.Message{state.Messages[update.ChatID][index]})...)
 		}
 		if state.EditTarget != nil && state.EditTarget.ChatID == update.ChatID && state.EditTarget.MessageID == update.MessageID {
 			state.EditTarget = nil
 		}
-		return state, commands
+		return commands
 	case telegram.MessageEdited:
 		if index := messageIndex(state.Messages[update.ChatID], update.MessageID); index >= 0 {
 			state.Messages[update.ChatID][index].EditedAt = update.EditedAt
@@ -810,7 +805,7 @@ func reduceTelegramUpdate(state State, event TelegramEvent) (State, []Effect) {
 		if index := messageIndex(state.Messages[update.ChatID], update.MessageID); index >= 0 {
 			state.Messages[update.ChatID][index].Pinned = update.Pinned
 		}
-		reconcilePinnedMessages(&state, update.ChatID, update.MessageID, update.Pinned)
+		reconcilePinnedMessages(state, update.ChatID, update.MessageID, update.Pinned)
 	case telegram.MessageReactionsUpdated:
 		if index := messageIndex(state.Messages[update.ChatID], update.MessageID); index >= 0 {
 			state.Messages[update.ChatID][index].Reactions = append([]domain.MessageReaction(nil), update.Reactions...)
@@ -821,7 +816,7 @@ func reduceTelegramUpdate(state State, event TelegramEvent) (State, []Effect) {
 			// from_cache=true. The messages still exist in the database and can
 			// be retrieved again; the application keeps its own bounded in-memory
 			// copies, so cache eviction must not remove them from the UI.
-			return state, nil
+			return nil
 		}
 		deleted := make(map[domain.MessageID]struct{}, len(update.MessageIDs))
 		clearDraftReply := false
@@ -836,33 +831,33 @@ func reduceTelegramUpdate(state State, event TelegramEvent) (State, []Effect) {
 			}
 		}
 		state.Messages[update.ChatID] = messages
-		reconcileReplyTarget(&state, update.ChatID)
-		reconcileEditTarget(&state, update.ChatID)
-		reconcileForwardPicker(&state)
-		reconcileReactionPicker(&state)
+		reconcileReplyTarget(state, update.ChatID)
+		reconcileEditTarget(state, update.ChatID)
+		reconcileForwardPicker(state)
+		reconcileReactionPicker(state)
 		if state.SelectedMessageChat == update.ChatID {
-			reconcileMessageSelection(&state)
+			reconcileMessageSelection(state)
 		}
 		if clearDraftReply {
 			delete(state.DraftReplies, update.ChatID)
-			return state, []Effect{queueDraftSave(&state, update.ChatID)}
+			return []Effect{queueDraftSave(state, update.ChatID)}
 		}
 	case telegram.MessageSendSucceeded:
-		replaceSentMessage(&state, update.OldID, update.Message)
+		replaceSentMessage(state, update.OldID, update.Message)
 		if idx := messageIndex(state.Messages[update.Message.ChatID], update.Message.ID); idx >= 0 {
 			msg := state.Messages[update.Message.ChatID][idx]
-			if cmds := requestMissingThumbnails(&state, []domain.Message{msg}); len(cmds) > 0 {
-				return state, cmds
+			if cmds := requestMissingThumbnails(state, []domain.Message{msg}); len(cmds) > 0 {
+				return cmds
 			}
 		}
 	case telegram.MessageSendFailed:
-		failSentMessage(&state, update, event.ReceivedAt)
+		failSentMessage(state, update, event.ReceivedAt)
 	case telegram.ForumTopicInfoChanged:
 		return reduceForumTopicInfoChanged(state, update)
 	case telegram.ForumTopicStateChanged:
 		return reduceForumTopicStateChanged(state, update)
 	}
-	return state, nil
+	return nil
 }
 
 func reconcilePinnedMessages(state *State, chatID domain.ChatID, messageID domain.MessageID, pinned bool) {
@@ -910,21 +905,21 @@ func reconcilePinnedMessages(state *State, chatID domain.ChatID, messageID domai
 	view.Selected = max(0, min(len(view.Results)-1, view.Selected))
 }
 
-func reduceChatsLoaded(state State, event ChatsLoaded) (State, []Effect) {
+func reduceChatsLoaded(state *State, event ChatsLoaded) []Effect {
 	if event.RequestID != state.ChatRequestID {
-		return state, nil
+		return nil
 	}
-	selectedID, selected := activeChatID(state)
-	focusedID, focused := focusedChatID(state)
+	selectedID, selected := activeChatID(*state)
+	focusedID, focused := focusedChatID(*state)
 	state.Chats = append([]domain.Chat(nil), event.Page.Chats...)
 	sortChats(state.Chats)
 	if selected {
-		preserveChatSelection(&state, selectedID)
+		preserveChatSelection(state, selectedID)
 	} else if len(state.Chats) > 0 {
 		state.SelectedChat = 0
 	}
 	if focused {
-		preserveChatFocus(&state, focusedID)
+		preserveChatFocus(state, focusedID)
 	} else if len(state.Chats) > 0 {
 		state.FocusedChat = state.SelectedChat
 	}
@@ -932,27 +927,27 @@ func reduceChatsLoaded(state State, event ChatsLoaded) (State, []Effect) {
 	state.ChatsLoaded = true
 	state.ChatsError = nil
 	for _, chat := range event.Page.Chats {
-		applyCloudDraft(&state, chat.ID, chat.Draft)
+		applyCloudDraft(state, chat.ID, chat.Draft)
 	}
 
 	commands := make([]Effect, 0)
-	if chatID, ok := activeChatID(state); ok && !state.Chats[state.SelectedChat].IsForum {
-		commands = append(commands, requestHistoryIfAbsent(&state, chatID)...)
+	if chatID, ok := activeChatID(*state); ok && !state.Chats[state.SelectedChat].IsForum {
+		commands = append(commands, requestHistoryIfAbsent(state, chatID)...)
 	}
-	commands = append(commands, requestMissingChatAvatars(&state, event.Page.Chats)...)
-	return state, commands
+	commands = append(commands, requestMissingChatAvatars(state, event.Page.Chats)...)
+	return commands
 }
 
-func reduceMessagesLoaded(state State, event MessagesLoaded) (State, []Effect) {
+func reduceMessagesLoaded(state *State, event MessagesLoaded) []Effect {
 	state.Messages[event.ChatID] = limitMessagesForOlderPage(
 		mergeMessages(state.Messages[event.ChatID], event.Page.Messages),
 	)
-	reconcileReplyTarget(&state, event.ChatID)
-	reconcileEditTarget(&state, event.ChatID)
-	reconcileForwardPicker(&state)
-	reconcileReactionPicker(&state)
+	reconcileReplyTarget(state, event.ChatID)
+	reconcileEditTarget(state, event.ChatID)
+	reconcileForwardPicker(state)
+	reconcileReactionPicker(state)
 	if state.SelectedMessageChat == event.ChatID {
-		reconcileMessageSelection(&state)
+		reconcileMessageSelection(state)
 	}
 	if event.TopicID != 0 {
 		return reduceTopicMessagesLoaded(state, event)
@@ -960,7 +955,7 @@ func reduceMessagesLoaded(state State, event MessagesLoaded) (State, []Effect) {
 	history, exists := state.History[event.ChatID]
 	current := exists && history.RequestID == event.RequestID
 	if !current {
-		return state, nil
+		return nil
 	}
 	history.Loading = false
 	history.Error = nil
@@ -970,11 +965,11 @@ func reduceMessagesLoaded(state State, event MessagesLoaded) (State, []Effect) {
 	}
 	history.ViewOffset = clampOffset(history.ViewOffset, len(state.Messages[event.ChatID]))
 	state.History[event.ChatID] = history
-	activeID, active := activeChatID(state)
+	activeID, active := activeChatID(*state)
 	if !active || activeID != event.ChatID {
-		return state, nil
+		return nil
 	}
-	restoreActiveDraftReply(&state)
+	restoreActiveDraftReply(state)
 	if state.SelectedMessage == 0 {
 		messages := state.Messages[event.ChatID]
 		if len(messages) > 0 {
@@ -982,21 +977,21 @@ func reduceMessagesLoaded(state State, event MessagesLoaded) (State, []Effect) {
 			state.SelectedMessageChat = event.ChatID
 		}
 	}
-	commands := requestMissingMessageAvatars(&state, event.Page.Messages)
-	commands = append(commands, requestMissingThumbnails(&state, event.Page.Messages)...)
-	return state, commands
+	commands := requestMissingMessageAvatars(state, event.Page.Messages)
+	commands = append(commands, requestMissingThumbnails(state, event.Page.Messages)...)
+	return commands
 }
 
-func reduceMessageUpserted(state State, message domain.Message) (State, []Effect) {
+func reduceMessageUpserted(state *State, message domain.Message) []Effect {
 	messages := state.Messages[message.ChatID]
 	existed := messageIndex(messages, message.ID) >= 0
 	state.Messages[message.ChatID] = limitMessages(mergeMessages(messages, []domain.Message{message}))
-	reconcileReplyTarget(&state, message.ChatID)
-	reconcileEditTarget(&state, message.ChatID)
-	reconcileForwardPicker(&state)
-	reconcileReactionPicker(&state)
+	reconcileReplyTarget(state, message.ChatID)
+	reconcileEditTarget(state, message.ChatID)
+	reconcileForwardPicker(state)
+	reconcileReactionPicker(state)
 	if state.SelectedMessageChat == message.ChatID {
-		reconcileMessageSelection(&state)
+		reconcileMessageSelection(state)
 	}
 	chatMessages := state.Messages[message.ChatID]
 	newest := len(chatMessages) > 0 && chatMessages[len(chatMessages)-1].ID == message.ID
@@ -1005,14 +1000,14 @@ func reduceMessageUpserted(state State, message domain.Message) (State, []Effect
 		state.Chats[chatIndex].LastMessage = latest.DisplayText()
 		state.Chats[chatIndex].LastMessageAt = latest.SentAt.Unix()
 		state.Chats[chatIndex].Order = latest.SentAt.Unix()
-		selectedID, _ := activeChatID(state)
-		focusedID, _ := focusedChatID(state)
+		selectedID, _ := activeChatID(*state)
+		focusedID, _ := focusedChatID(*state)
 		sortChats(state.Chats)
-		preserveChatSelection(&state, selectedID)
-		preserveChatFocus(&state, focusedID)
+		preserveChatSelection(state, selectedID)
+		preserveChatFocus(state, focusedID)
 	}
-	if activeID, ok := activeChatID(state); ok && activeID == message.ChatID {
-		restoreActiveDraftReply(&state)
+	if activeID, ok := activeChatID(*state); ok && activeID == message.ChatID {
+		restoreActiveDraftReply(state)
 		history := state.History[message.ChatID]
 		if !existed && newest && history.ViewOffset > 0 {
 			history.ViewOffset++
@@ -1023,51 +1018,51 @@ func reduceMessageUpserted(state State, message domain.Message) (State, []Effect
 			state.SelectedMessageChat = message.ChatID
 		}
 	}
-	commands := requestMissingMessageAvatars(&state, []domain.Message{message})
-	commands = append(commands, requestMissingThumbnails(&state, []domain.Message{message})...)
-	return state, commands
+	commands := requestMissingMessageAvatars(state, []domain.Message{message})
+	commands = append(commands, requestMissingThumbnails(state, []domain.Message{message})...)
+	return commands
 }
 
 // reduceMessageUpsertedAndNotify is like reduceMessageUpserted but also
 // emits a ShowDesktopNotification command when the terminal is unfocused,
 // the message is incoming (not outgoing), non-service, and the chat is
 // unmuted.  Re-upserts (existed==true) suppress notifications.
-func reduceMessageUpsertedAndNotify(state State, message domain.Message) (State, []Effect) {
+func reduceMessageUpsertedAndNotify(state *State, message domain.Message) []Effect {
 	// Capture existence BEFORE the upsert so we can filter on it.
 	existed := messageIndex(state.Messages[message.ChatID], message.ID) >= 0
 
-	state, commands := reduceMessageUpserted(state, message)
+	commands := reduceMessageUpserted(state, message)
 
 	// Only notify on new messages while the terminal is unfocused.
 	// The initial state has TerminalFocused=true, so nothing fires on
 	// startup before focus reporting begins.
 	if state.TerminalFocused {
-		return state, commands
+		return commands
 	}
 
 	// Outgoing, service, or already-seen messages do not trigger.
 	if message.Outgoing || message.Service || message.Kind == domain.MessageService || existed {
-		return state, commands
+		return commands
 	}
 
 	// Check that the chat is known and unmuted.
 	chatIdx := chatIndex(state.Chats, message.ChatID)
 	if chatIdx < 0 {
-		return state, commands
+		return commands
 	}
 	if state.Chats[chatIdx].Muted {
-		return state, commands
+		return commands
 	}
 
 	// Build the notification body.
 	body := buildNotificationBody(message)
 	if body == "" {
-		return state, commands
+		return commands
 	}
 
 	title := strings.Join(strings.Fields(state.Chats[chatIdx].Title), " ")
 	commands = append(commands, ShowDesktopNotification{Title: title, Body: body})
-	return state, commands
+	return commands
 }
 
 const notificationBodyLimit = 240 // runes
@@ -1105,18 +1100,17 @@ func buildNotificationBody(message domain.Message) string {
 	return string(runes[:notificationBodyLimit-1]) + "…"
 }
 
-func reduceThumbnailDownloaded(state State, event ThumbnailDownloaded) (State, []Effect) {
+func reduceThumbnailDownloaded(state *State, event ThumbnailDownloaded) []Effect {
 	if index := messageIndex(state.Messages[event.ChatID], event.MessageID); index >= 0 {
 		message := state.Messages[event.ChatID][index]
 		message.Media.Thumbnail.Downloaded = true
 		message.Media.Thumbnail.LocalPath = event.File.LocalPath
 		state.Messages[event.ChatID][index] = message
 	}
-	return state, nil
+	return nil
 }
 
-func reducePromptAction(state State, event ActionReceived) (State, []Effect) {
-	state.Prompt = clonePromptState(state.Prompt)
+func reducePromptAction(state *State, event ActionReceived) []Effect {
 	switch event.Action {
 	case ComposerBackspace:
 		if size := len(state.Prompt.Input); size > 0 {
@@ -1127,16 +1121,16 @@ func reducePromptAction(state State, event ActionReceived) (State, []Effect) {
 		state.Focus = state.Prompt.PreviousFocus
 		state.Prompt.Input = nil
 		state.Prompt = nil
-		return state, []Effect{command}
+		return []Effect{command}
 	case NoAction:
 		if event.Rune != 0 {
 			state.Prompt.Input = append(state.Prompt.Input, event.Rune)
 		}
 	}
-	return state, nil
+	return nil
 }
 
-func reduceAction(state State, event ActionReceived) (State, []Effect) {
+func reduceAction(state *State, event ActionReceived) []Effect {
 	if state.CommandMenu != nil {
 		switch event.Action {
 		case CommandMenuNext, CommandMenuPrevious, CommandMenuActivate, CommandMenuDismiss:
@@ -1161,18 +1155,18 @@ func reduceAction(state State, event ActionReceived) (State, []Effect) {
 			state.Modal = nil
 		case Retry:
 			if state.Modal.Error != nil {
-				requestID := allocateRequestID(&state)
+				requestID := allocateRequestID(state)
 				state.Modal.RequestID = requestID
 				state.Modal.Loading = true
 				state.Modal.Error = nil
 				state.Modal.Path = ""
 				if mediaEligible(state.Modal.MediaFile) {
-					return state, []Effect{OpenMessageMediaFile{RequestID: requestID, ChatID: state.Modal.MediaChatID, MessageID: state.Modal.MediaMessageID, Title: state.Modal.Title, File: state.Modal.MediaFile}}
+					return []Effect{OpenMessageMediaFile{RequestID: requestID, ChatID: state.Modal.MediaChatID, MessageID: state.Modal.MediaMessageID, Title: state.Modal.Title, File: state.Modal.MediaFile}}
 				}
-				return state, []Effect{OpenAvatar{RequestID: requestID, Title: state.Modal.Title, Ref: state.Modal.Ref}}
+				return []Effect{OpenAvatar{RequestID: requestID, Title: state.Modal.Title, Ref: state.Modal.Ref}}
 			}
 		}
-		return state, nil
+		return nil
 	}
 	if state.Topics != nil {
 		return reduceTopicsAction(state, event)
@@ -1204,7 +1198,7 @@ func reduceAction(state State, event ActionReceived) (State, []Effect) {
 	}
 	if state.MessageMenu != nil {
 		if state.MessageMenu.JumpRequestID != 0 && event.Action != Close {
-			return state, nil
+			return nil
 		}
 		switch event.Action {
 		case Close:
@@ -1227,47 +1221,47 @@ func reduceAction(state State, event ActionReceived) (State, []Effect) {
 		case GoToReferencedMessage:
 			return beginReferencedMessageJump(state)
 		case ReplyMessage:
-			if message, ok := messageByIdentity(state, state.MessageMenu.ChatID, state.MessageMenu.MessageID); ok && state.MessageMenu.Capabilities.Reply {
+			if message, ok := messageByIdentity(*state, state.MessageMenu.ChatID, state.MessageMenu.MessageID); ok && state.MessageMenu.Capabilities.Reply {
 				return beginReply(state, message)
 			}
 		case ForwardMessageSource:
-			if message, ok := messageByIdentity(state, state.MessageMenu.ChatID, state.MessageMenu.MessageID); ok && state.MessageMenu.Capabilities.Forward {
+			if message, ok := messageByIdentity(*state, state.MessageMenu.ChatID, state.MessageMenu.MessageID); ok && state.MessageMenu.Capabilities.Forward {
 				return beginForward(state, message)
 			}
 		case EditMessage:
-			if message, ok := messageByIdentity(state, state.MessageMenu.ChatID, state.MessageMenu.MessageID); ok && state.MessageMenu.Capabilities.Edit && editableMessage(message) {
+			if message, ok := messageByIdentity(*state, state.MessageMenu.ChatID, state.MessageMenu.MessageID); ok && state.MessageMenu.Capabilities.Edit && editableMessage(message) {
 				return beginEdit(state, message)
 			}
 		case DeleteMessage:
-			if _, ok := messageByIdentity(state, state.MessageMenu.ChatID, state.MessageMenu.MessageID); ok && state.MessageMenu.Capabilities.DeleteForSelf {
+			if _, ok := messageByIdentity(*state, state.MessageMenu.ChatID, state.MessageMenu.MessageID); ok && state.MessageMenu.Capabilities.DeleteForSelf {
 				return beginDelete(state, state.MessageMenu, false)
 			}
 		case PinMessage:
-			if _, ok := messageByIdentity(state, state.MessageMenu.ChatID, state.MessageMenu.MessageID); ok && state.MessageMenu.Capabilities.Pin {
+			if _, ok := messageByIdentity(*state, state.MessageMenu.ChatID, state.MessageMenu.MessageID); ok && state.MessageMenu.Capabilities.Pin {
 				return beginPin(state, state.MessageMenu)
 			}
 		case ReactMessage:
-			if message, ok := messageByIdentity(state, state.MessageMenu.ChatID, state.MessageMenu.MessageID); ok && reactRowVisible(state.MessageMenu) {
+			if message, ok := messageByIdentity(*state, state.MessageMenu.ChatID, state.MessageMenu.MessageID); ok && reactRowVisible(state.MessageMenu) {
 				return beginReact(state, message)
 			}
 		case DeleteForEveryone:
-			if _, ok := messageByIdentity(state, state.MessageMenu.ChatID, state.MessageMenu.MessageID); ok && state.MessageMenu.Capabilities.DeleteForAll {
+			if _, ok := messageByIdentity(*state, state.MessageMenu.ChatID, state.MessageMenu.MessageID); ok && state.MessageMenu.Capabilities.DeleteForAll {
 				return beginDelete(state, state.MessageMenu, true)
 			}
 		case CopyMessage:
-			if message, ok := messageByIdentity(state, state.MessageMenu.ChatID, state.MessageMenu.MessageID); ok && state.MessageMenu.Capabilities.Copy {
+			if message, ok := messageByIdentity(*state, state.MessageMenu.ChatID, state.MessageMenu.MessageID); ok && state.MessageMenu.Capabilities.Copy {
 				state.Focus = state.MessageMenu.PreviousFocus
 				state.MessageMenu = nil
-				return state, []Effect{WriteClipboard{Text: message.DisplayText()}}
+				return []Effect{WriteClipboard{Text: message.DisplayText()}}
 			}
 		case ViewUserInfo:
 			menu := state.MessageMenu
-			if message, ok := messageByIdentity(state, menu.ChatID, menu.MessageID); ok && menu.UserID != 0 && message.Sender.Kind == domain.SenderUser && domain.UserID(message.Sender.ID) == menu.UserID {
+			if message, ok := messageByIdentity(*state, menu.ChatID, menu.MessageID); ok && menu.UserID != 0 && message.Sender.Kind == domain.SenderUser && domain.UserID(message.Sender.ID) == menu.UserID {
 				state.MessageMenu = nil
 				return openUserInfo(state, message.ChatID, menu.UserID, menu.PreviousFocus)
 			}
 		}
-		return state, nil
+		return nil
 	}
 	if state.ReactionPicker != nil {
 		return reduceReactionPicker(state, event)
@@ -1282,25 +1276,25 @@ func reduceAction(state State, event ActionReceived) (State, []Effect) {
 			state.Modal = nil
 		case Retry:
 			if state.Modal.Error != nil {
-				requestID := allocateRequestID(&state)
+				requestID := allocateRequestID(state)
 				state.Modal.RequestID = requestID
 				state.Modal.Loading = true
 				state.Modal.Error = nil
 				state.Modal.Path = ""
 				if mediaEligible(state.Modal.MediaFile) {
-					return state, []Effect{OpenMessageMediaFile{RequestID: requestID, ChatID: state.Modal.MediaChatID, MessageID: state.Modal.MediaMessageID, Title: state.Modal.Title, File: state.Modal.MediaFile}}
+					return []Effect{OpenMessageMediaFile{RequestID: requestID, ChatID: state.Modal.MediaChatID, MessageID: state.Modal.MediaMessageID, Title: state.Modal.Title, File: state.Modal.MediaFile}}
 				}
-				return state, []Effect{OpenAvatar{RequestID: requestID, Title: state.Modal.Title, Ref: state.Modal.Ref}}
+				return []Effect{OpenAvatar{RequestID: requestID, Title: state.Modal.Title, Ref: state.Modal.Ref}}
 			}
 		}
-		return state, nil
+		return nil
 	}
 
 	switch event.Action {
 	case FocusChat:
 		if index := chatIndex(state.Chats, event.ChatID); index >= 0 {
 			state.FocusedChat = index
-			if focusVisible(state, FocusChats) {
+			if focusVisible(*state, FocusChats) {
 				state.Focus = FocusChats
 			}
 		}
@@ -1320,7 +1314,7 @@ func reduceAction(state State, event ActionReceived) (State, []Effect) {
 			if state.SelectedChat >= 0 && state.SelectedChat < len(state.Chats) {
 				previousID := state.Chats[state.SelectedChat].ID
 				if previousID != event.ChatID {
-					releaseDraftGuard(&state, previousID)
+					releaseDraftGuard(state, previousID)
 					commands = append(commands, CloseChatCommand{ChatID: previousID})
 				}
 			}
@@ -1329,13 +1323,13 @@ func reduceAction(state State, event ActionReceived) (State, []Effect) {
 			if state.DetailsOpen {
 				state.DetailsChatID = event.ChatID
 			}
-			restoreActiveDraftReply(&state)
-			clampDetailsSelection(&state)
-			selectNewestMessage(&state, event.ChatID)
-			commands = append(commands, requestHistoryIfAbsent(&state, event.ChatID)...)
+			restoreActiveDraftReply(state)
+			clampDetailsSelection(state)
+			selectNewestMessage(state, event.ChatID)
+			commands = append(commands, requestHistoryIfAbsent(state, event.ChatID)...)
 			commands = append(commands, OpenChatCommand{ChatID: event.ChatID})
-			commands = append(commands, requestMissingMessageAvatars(&state, state.Messages[event.ChatID])...)
-			return state, commands
+			commands = append(commands, requestMissingMessageAvatars(state, state.Messages[event.ChatID])...)
+			return commands
 		}
 	case SelectNextUnread, SelectNextMention:
 		if state.Focus != FocusChats {
@@ -1345,18 +1339,18 @@ func reduceAction(state State, event ActionReceived) (State, []Effect) {
 		if event.Action == SelectNextMention {
 			match = func(chat domain.Chat) bool { return chat.UnreadMentionCount > 0 }
 		}
-		if chatID, ok := nextMatchingChatID(state, match); ok {
+		if chatID, ok := nextMatchingChatID(*state, match); ok {
 			return reduceAction(state, ActionReceived{Action: FocusChat, ChatID: chatID})
 		}
 		message := "No unread chats"
 		if event.Action == SelectNextMention {
 			message = "No unread mentions"
 		}
-		setToast(&state, domain.AppError{Message: message}, 2*time.Second)
+		setToast(state, domain.AppError{Message: message}, 2*time.Second)
 	case SelectNext, SelectPrevious:
 		if state.Focus == FocusDetails {
 			count := 0
-			if chat, ok := detailsChat(state); ok {
+			if chat, ok := detailsChat(*state); ok {
 				count = detailsActionCount(chat)
 			}
 			if count > 0 {
@@ -1375,17 +1369,17 @@ func reduceAction(state State, event ActionReceived) (State, []Effect) {
 		if event.Action == SelectPrevious {
 			delta = -1
 		}
-		focused := focusedChatIndex(state)
+		focused := focusedChatIndex(*state)
 		if focused < 0 {
 			break
 		}
 		state.FocusedChat = max(0, min(len(state.Chats)-1, focused+delta))
 	case FocusPane:
-		if focusVisible(state, event.TargetFocus) {
+		if focusVisible(*state, event.TargetFocus) {
 			state.Focus = event.TargetFocus
 		}
 	case FocusNext, FocusPrevious:
-		cycleFocus(&state, event.Action == FocusPrevious)
+		cycleFocus(state, event.Action == FocusPrevious)
 	case Activate:
 		return activate(state, event)
 	case SelectMessage:
@@ -1396,61 +1390,61 @@ func reduceAction(state State, event ActionReceived) (State, []Effect) {
 	case OpenMessageActionMenu:
 		return openMessageActionMenu(state)
 	case EditMessage:
-		opened, commands := openMessageActionMenu(state)
-		if opened.MessageMenu != nil {
-			opened.MessageMenu.PreferEdit = true
+		commands := openMessageActionMenu(state)
+		if state.MessageMenu != nil {
+			state.MessageMenu.PreferEdit = true
 		}
-		return opened, commands
+		return commands
 	case SelectNextMessage, SelectPreviousMessage:
-		selectAdjacentMessage(&state, event.Action == SelectPreviousMessage)
+		selectAdjacentMessage(state, event.Action == SelectPreviousMessage)
 	case CopyMessage:
-		if message, ok := selectedMessage(state); ok && message.Capabilities().Copy {
-			return state, []Effect{WriteClipboard{Text: message.DisplayText()}}
+		if message, ok := selectedMessage(*state); ok && message.Capabilities().Copy {
+			return []Effect{WriteClipboard{Text: message.DisplayText()}}
 		}
 	case ReplyMessage:
-		if message, ok := selectedMessage(state); ok && message.Capabilities().Reply {
+		if message, ok := selectedMessage(*state); ok && message.Capabilities().Reply {
 			return beginReply(state, message)
 		}
 	case CancelReply:
-		if allKey, ok := showAllActive(state); ok {
+		if allKey, ok := showAllActive(*state); ok {
 			if state.TopicDraftReplies[allKey] != 0 || state.ReplyTarget != nil {
 				state.ReplyTarget = nil
 				if state.TopicDraftReplies == nil {
 					state.TopicDraftReplies = make(map[topicKey]domain.MessageID)
 				}
 				delete(state.TopicDraftReplies, allKey)
-				return state, []Effect{queueTopicDraftSave(&state, allKey)}
+				return []Effect{queueTopicDraftSave(state, allKey)}
 			}
 			state.ReplyTarget = nil
 			break
 		}
-		if key, ok := activeTopicKey(state); ok {
+		if key, ok := activeTopicKey(*state); ok {
 			if state.TopicDraftReplies[key] != 0 || state.ReplyTarget != nil {
 				state.ReplyTarget = nil
 				if state.TopicDraftReplies == nil {
 					state.TopicDraftReplies = make(map[topicKey]domain.MessageID)
 				}
 				delete(state.TopicDraftReplies, key)
-				return state, []Effect{queueTopicDraftSave(&state, key)}
+				return []Effect{queueTopicDraftSave(state, key)}
 			}
 			state.ReplyTarget = nil
 			break
 		}
-		if chatID, ok := activeChatID(state); ok && (state.DraftReplies[chatID] != 0 || state.ReplyTarget != nil) {
+		if chatID, ok := activeChatID(*state); ok && (state.DraftReplies[chatID] != 0 || state.ReplyTarget != nil) {
 			state.ReplyTarget = nil
 			delete(state.DraftReplies, chatID)
-			return state, []Effect{queueDraftSave(&state, chatID)}
+			return []Effect{queueDraftSave(state, chatID)}
 		}
 		state.ReplyTarget = nil
 	case CancelEdit:
 		state.EditTarget = nil
-		restoreActiveDraftReply(&state)
+		restoreActiveDraftReply(state)
 	case ToggleDetails:
 		if state.DetailsOpen {
 			state.DetailsOpen = false
 			state.DetailsChatID = 0
 			state.Focus = state.FocusBeforeInfo
-		} else if chatID, ok := activeChatID(state); ok {
+		} else if chatID, ok := activeChatID(*state); ok {
 			state.FocusBeforeInfo = state.Focus
 			state.DetailsOpen = true
 			state.DetailsChatID = chatID
@@ -1464,64 +1458,64 @@ func reduceAction(state State, event ActionReceived) (State, []Effect) {
 			state.Focus = state.FocusBeforeInfo
 		} else if state.Focus == FocusComposer && state.EditTarget != nil {
 			state.EditTarget = nil
-			restoreActiveDraftReply(&state)
+			restoreActiveDraftReply(state)
 		} else if state.Focus == FocusComposer && state.ReplyTarget != nil {
-			if allKey, ok := showAllActive(state); ok {
+			if allKey, ok := showAllActive(*state); ok {
 				state.ReplyTarget = nil
 				if state.TopicDraftReplies == nil {
 					state.TopicDraftReplies = make(map[topicKey]domain.MessageID)
 				}
 				delete(state.TopicDraftReplies, allKey)
-				return state, []Effect{queueTopicDraftSave(&state, allKey)}
+				return []Effect{queueTopicDraftSave(state, allKey)}
 			}
-			if key, ok := activeTopicKey(state); ok {
+			if key, ok := activeTopicKey(*state); ok {
 				state.ReplyTarget = nil
 				if state.TopicDraftReplies == nil {
 					state.TopicDraftReplies = make(map[topicKey]domain.MessageID)
 				}
 				delete(state.TopicDraftReplies, key)
-				return state, []Effect{queueTopicDraftSave(&state, key)}
+				return []Effect{queueTopicDraftSave(state, key)}
 			}
-			if chatID, ok := activeChatID(state); ok {
+			if chatID, ok := activeChatID(*state); ok {
 				state.ReplyTarget = nil
 				delete(state.DraftReplies, chatID)
-				return state, []Effect{queueDraftSave(&state, chatID)}
+				return []Effect{queueDraftSave(state, chatID)}
 			}
 			state.ReplyTarget = nil
 		} else if state.Focus == FocusComposer {
-			if allKey, ok := showAllActive(state); ok {
+			if allKey, ok := showAllActive(*state); ok {
 				if state.TopicDraftReplies[allKey] != 0 {
 					if state.TopicDraftReplies == nil {
 						state.TopicDraftReplies = make(map[topicKey]domain.MessageID)
 					}
 					delete(state.TopicDraftReplies, allKey)
-					return state, []Effect{queueTopicDraftSave(&state, allKey)}
+					return []Effect{queueTopicDraftSave(state, allKey)}
 				}
 				if state.TopicDrafts[allKey] != "" {
 					state.TopicDrafts[allKey] = ""
-					return state, []Effect{queueTopicDraftSave(&state, allKey)}
+					return []Effect{queueTopicDraftSave(state, allKey)}
 				}
 			}
-			if key, ok := activeTopicKey(state); ok {
+			if key, ok := activeTopicKey(*state); ok {
 				if state.TopicDraftReplies[key] != 0 {
 					if state.TopicDraftReplies == nil {
 						state.TopicDraftReplies = make(map[topicKey]domain.MessageID)
 					}
 					delete(state.TopicDraftReplies, key)
-					return state, []Effect{queueTopicDraftSave(&state, key)}
+					return []Effect{queueTopicDraftSave(state, key)}
 				}
 				if state.TopicDrafts[key] != "" {
 					state.TopicDrafts[key] = ""
-					return state, []Effect{queueTopicDraftSave(&state, key)}
+					return []Effect{queueTopicDraftSave(state, key)}
 				}
-			} else if chatID, ok := activeChatID(state); ok {
+			} else if chatID, ok := activeChatID(*state); ok {
 				if state.DraftReplies[chatID] != 0 {
 					delete(state.DraftReplies, chatID)
-					return state, []Effect{queueDraftSave(&state, chatID)}
+					return []Effect{queueDraftSave(state, chatID)}
 				}
 				if state.Drafts[chatID] != "" {
 					state.Drafts[chatID] = ""
-					return state, []Effect{queueDraftSave(&state, chatID)}
+					return []Effect{queueDraftSave(state, chatID)}
 				}
 			}
 			state.Focus = FocusConversation
@@ -1567,13 +1561,13 @@ func reduceAction(state State, event ActionReceived) (State, []Effect) {
 	case OpenDetailsAvatar:
 		return openDetailsAvatar(state)
 	}
-	return state, nil
+	return nil
 }
 
-func activate(state State, event ActionReceived) (State, []Effect) {
-	chatID, ok := activeChatID(state)
+func activate(state *State, event ActionReceived) []Effect {
+	chatID, ok := activeChatID(*state)
 	if !ok {
-		return state, nil
+		return nil
 	}
 	switch state.Focus {
 	case FocusChats:
@@ -1584,17 +1578,17 @@ func activate(state State, event ActionReceived) (State, []Effect) {
 			messageID = state.SelectedMessage
 		}
 		if index := messageIndex(state.Messages[chatID], messageID); index >= 0 && state.Messages[chatID][index].SendState == domain.SendFailed {
-			if command, retried := retryMessage(&state, messageID, event.At); retried {
-				return state, []Effect{command}
+			if command, retried := retryMessage(state, messageID, event.At); retried {
+				return []Effect{command}
 			}
-			return state, nil
+			return nil
 		}
 		return openMessageActionMenu(state)
 	case FocusDetails:
-		clampDetailsSelection(&state)
-		chat, ok := detailsChat(state)
+		clampDetailsSelection(state)
+		chat, ok := detailsChat(*state)
 		if !ok {
-			return state, nil
+			return nil
 		}
 		items := DetailsActionItems(chat)
 		if state.DetailsSelected >= 0 && state.DetailsSelected < len(items) {
@@ -1611,24 +1605,24 @@ func activate(state State, event ActionReceived) (State, []Effect) {
 		}
 		return openDetailsAvatar(state)
 	}
-	return state, nil
+	return nil
 }
 
-func compose(state State, event ActionReceived) (State, []Effect) {
+func compose(state *State, event ActionReceived) []Effect {
 	if state.Focus != FocusComposer {
-		return state, nil
+		return nil
 	}
-	chatID, ok := activeChatID(state)
+	chatID, ok := activeChatID(*state)
 	if !ok {
-		return state, nil
+		return nil
 	}
 	if state.EditTarget != nil {
-		if state.EditTarget.ChatID != chatID || !editableTargetPresent(state) {
+		if state.EditTarget.ChatID != chatID || !editableTargetPresent(*state) {
 			state.EditTarget = nil
-			return state, nil
+			return nil
 		}
 		if state.EditTarget.Submitting {
-			return state, nil
+			return nil
 		}
 		switch event.Action {
 		case NoAction:
@@ -1644,15 +1638,15 @@ func compose(state State, event ActionReceived) (State, []Effect) {
 			state.EditTarget.Buffer += "\n"
 		case ComposerSubmit:
 			if strings.TrimSpace(state.EditTarget.Buffer) == "" || state.EditTarget.Buffer == state.EditTarget.Original {
-				return state, nil
+				return nil
 			}
-			requestID := allocateRequestID(&state)
+			requestID := allocateRequestID(state)
 			state.EditTarget.RequestID = requestID
 			state.EditTarget.Submitting = true
 			state.EditTarget.Error = nil
-			return state, []Effect{EditText{RequestID: requestID, ChatID: state.EditTarget.ChatID, MessageID: state.EditTarget.MessageID, Text: state.EditTarget.Buffer}}
+			return []Effect{EditText{RequestID: requestID, ChatID: state.EditTarget.ChatID, MessageID: state.EditTarget.MessageID, Text: state.EditTarget.Buffer}}
 		}
-		return state, nil
+		return nil
 	}
 	changed := false
 	switch event.Action {
@@ -1671,14 +1665,14 @@ func compose(state State, event ActionReceived) (State, []Effect) {
 		state.Drafts[chatID] += "\n"
 		changed = true
 	case ComposerSubmit:
-		if forumTopicClosed(state, chatID) {
-			return state, nil
+		if forumTopicClosed(*state, chatID) {
+			return nil
 		}
-		key, topicOK := activeTopicKey(state)
-		allKey, allOK := showAllActive(state)
+		key, topicOK := activeTopicKey(*state)
+		allKey, allOK := showAllActive(*state)
 		if !topicOK && !allOK && state.Chats[state.SelectedChat].IsForum {
 			// A forum without a selected topic has no composer target.
-			return state, nil
+			return nil
 		}
 		chat := state.Chats[state.SelectedChat]
 		var text string
@@ -1700,13 +1694,13 @@ func compose(state State, event ActionReceived) (State, []Effect) {
 			}
 		}
 		if strings.TrimSpace(text) == "" || !chat.CanSend || state.Connection != domain.ConnectionOnline {
-			return state, nil
+			return nil
 		}
-		localID := allocateLocalID(&state)
-		requestID := allocateRequestID(&state)
+		localID := allocateLocalID(state)
+		requestID := allocateRequestID(state)
 		sendTopicID := domain.TopicID(0)
 		if allOK {
-			sendTopicID = generalTopicID(state, chatID)
+			sendTopicID = generalTopicID(*state, chatID)
 		} else if topicOK {
 			sendTopicID = key.TopicID
 		}
@@ -1729,30 +1723,30 @@ func compose(state State, event ActionReceived) (State, []Effect) {
 				state.ReplyTarget = nil
 			}
 			state.SelectedMessage = localID
-			return state, []Effect{
+			return []Effect{
 				SendText{RequestID: requestID, LocalID: localID, ChatID: chatID, TopicID: sendTopicID, Text: text, ReplyToMessageID: replyID},
-				queueTopicDraftSave(&state, draftKey),
+				queueTopicDraftSave(state, draftKey),
 			}
 		}
 		state.Drafts[chatID] = ""
 		delete(state.DraftReplies, chatID)
 		state.ReplyTarget = nil
 		state.SelectedMessage = localID
-		return state, []Effect{
+		return []Effect{
 			SendText{RequestID: requestID, LocalID: localID, ChatID: chatID, Text: text, ReplyToMessageID: replyID},
-			queueDraftSave(&state, chatID),
+			queueDraftSave(state, chatID),
 		}
 	}
 	if changed {
-		return state, []Effect{queueDraftSave(&state, chatID)}
+		return []Effect{queueDraftSave(state, chatID)}
 	}
-	return state, nil
+	return nil
 }
 
-func paginate(state State, action Action) (State, []Effect) {
-	chatID, ok := activeChatID(state)
+func paginate(state *State, action Action) []Effect {
+	chatID, ok := activeChatID(*state)
 	if !ok {
-		return state, nil
+		return nil
 	}
 	history := state.History[chatID]
 	step := max(1, (state.Height-6)/2)
@@ -1760,47 +1754,47 @@ func paginate(state State, action Action) (State, []Effect) {
 		history.ViewOffset = max(0, history.ViewOffset-step)
 		history.FollowSelection = false
 		state.History[chatID] = history
-		return state, nil
+		return nil
 	}
 	messages := state.Messages[chatID]
 	target := history.ViewOffset + step
 	history.ViewOffset = clampOffset(target, len(messages))
 	history.FollowSelection = false
 	if target >= len(messages) && !history.Loading && !history.Done {
-		requestID := allocateRequestID(&state)
+		requestID := allocateRequestID(state)
 		history.Loading = true
 		history.RequestID = requestID
 		cursor := telegram.MessageCursor{FromMessageID: history.OldestID, Limit: pageSize}
 		state.History[chatID] = history
-		return state, []Effect{LoadMessages{RequestID: requestID, ChatID: chatID, Cursor: cursor}}
+		return []Effect{LoadMessages{RequestID: requestID, ChatID: chatID, Cursor: cursor}}
 	}
 	state.History[chatID] = history
-	return state, nil
+	return nil
 }
 
-func retry(state State, event ActionReceived) (State, []Effect) {
+func retry(state *State, event ActionReceived) []Effect {
 	if event.AvatarKey != "" {
 		entry, ok := state.Avatars[event.AvatarKey]
 		if ok && entry.Error != nil {
 			entry.Loading = true
 			entry.Error = nil
 			state.Avatars[event.AvatarKey] = entry
-			return state, []Effect{RenderAvatar{Key: event.AvatarKey, Ref: entry.Ref, Role: entry.Role}}
+			return []Effect{RenderAvatar{Key: event.AvatarKey, Ref: entry.Ref, Role: entry.Role}}
 		}
-		return state, nil
+		return nil
 	}
-	if command, ok := retryMessage(&state, event.MessageID, event.At); ok {
-		return state, []Effect{command}
+	if command, ok := retryMessage(state, event.MessageID, event.At); ok {
+		return []Effect{command}
 	}
-	if chatID, ok := activeChatID(state); ok {
+	if chatID, ok := activeChatID(*state); ok {
 		history := state.History[chatID]
 		if history.Error != nil && !history.Loading {
-			requestID := allocateRequestID(&state)
+			requestID := allocateRequestID(state)
 			history.Loading = true
 			history.Error = nil
 			history.RequestID = requestID
 			state.History[chatID] = history
-			return state, []Effect{LoadMessages{
+			return []Effect{LoadMessages{
 				RequestID: requestID,
 				ChatID:    chatID,
 				Cursor: telegram.MessageCursor{
@@ -1810,7 +1804,7 @@ func retry(state State, event ActionReceived) (State, []Effect) {
 			}}
 		}
 	}
-	return state, nil
+	return nil
 }
 
 func retryMessage(state *State, messageID domain.MessageID, at time.Time) (Effect, bool) {
@@ -1968,26 +1962,26 @@ func requestMissingThumbnails(state *State, messages []domain.Message) []Effect 
 	return commands
 }
 
-func openPhotoSend(state State) (State, []Effect) {
+func openPhotoSend(state *State) []Effect {
 	// Guards: online, can send, no active edit session, valid chat.
 	if state.Connection != domain.ConnectionOnline {
-		return state, nil
+		return nil
 	}
 	if state.EditTarget != nil {
-		return state, nil
+		return nil
 	}
 	if state.Chats == nil {
-		return state, nil
+		return nil
 	}
 	if state.SelectedChat < 0 || state.SelectedChat >= len(state.Chats) {
-		return state, nil
+		return nil
 	}
 	chat := state.Chats[state.SelectedChat]
 	if !chat.CanSend {
-		return state, nil
+		return nil
 	}
-	if forumTopicClosed(state, chat.ID) {
-		return state, nil
+	if forumTopicClosed(*state, chat.ID) {
+		return nil
 	}
 	ps := state.PhotoSend
 	if ps == nil {
@@ -2002,10 +1996,10 @@ func openPhotoSend(state State) (State, []Effect) {
 	}
 	state.PhotoSend = ps
 	state.Focus = FocusPhotoSend
-	return state, nil
+	return nil
 }
 
-func reducePhotoSend(state State, event ActionReceived) (State, []Effect) {
+func reducePhotoSend(state *State, event ActionReceived) []Effect {
 	ps := state.PhotoSend
 	switch event.Action {
 	case NoAction:
@@ -2019,30 +2013,30 @@ func reducePhotoSend(state State, event ActionReceived) (State, []Effect) {
 	case Close:
 		state.Focus = ps.PreviousFocus
 		state.PhotoSend = nil
-		return state, nil
+		return nil
 	case PhotoSendSubmit:
 		// Submit contract:
 		// 1. chatID must still be active
-		activeChatIDVal, activeOk := activeChatID(state)
+		activeChatIDVal, activeOk := activeChatID(*state)
 		if !activeOk || activeChatIDVal != ps.ChatID {
-			return state, nil
+			return nil
 		}
 		path := string(ps.Input)
 		if strings.TrimSpace(path) == "" {
-			return state, nil
+			return nil
 		}
 		// Recheck guards
 		chatIdx := chatIndex(state.Chats, activeChatIDVal)
 		if chatIdx < 0 || !state.Chats[chatIdx].CanSend || state.Connection != domain.ConnectionOnline || state.EditTarget != nil {
-			return state, nil
+			return nil
 		}
 		caption := state.Drafts[activeChatIDVal]
 		replyID := domain.MessageID(0)
 		if state.ReplyTarget != nil && state.ReplyTarget.ChatID == activeChatIDVal {
 			replyID = state.ReplyTarget.MessageID
 		}
-		localID := allocateLocalID(&state)
-		requestID := allocateRequestID(&state)
+		localID := allocateLocalID(state)
+		requestID := allocateRequestID(state)
 		isVideo := isVideoPath(path)
 		isAudio := isAudioPath(path)
 		isPhoto := isPhotoPath(path)
@@ -2088,13 +2082,13 @@ func reducePhotoSend(state State, event ActionReceived) (State, []Effect) {
 		state.Focus = FocusConversation
 		state.SelectedMessageChat = activeChatIDVal
 		state.SelectedMessage = localID
-		saveDraftCommand := queueDraftSave(&state, activeChatIDVal)
+		saveDraftCommand := queueDraftSave(state, activeChatIDVal)
 		if isVideo {
 			if state.VideoSendRequests == nil {
 				state.VideoSendRequests = make(map[domain.MessageID]uint64)
 			}
 			state.VideoSendRequests[localID] = requestID
-			return state, []Effect{SendVideo{
+			return []Effect{SendVideo{
 				RequestID:        requestID,
 				LocalID:          localID,
 				ChatID:           activeChatIDVal,
@@ -2109,7 +2103,7 @@ func reducePhotoSend(state State, event ActionReceived) (State, []Effect) {
 				state.AudioSendRequests = make(map[domain.MessageID]uint64)
 			}
 			state.AudioSendRequests[localID] = requestID
-			return state, []Effect{SendAudio{
+			return []Effect{SendAudio{
 				RequestID:        requestID,
 				LocalID:          localID,
 				ChatID:           activeChatIDVal,
@@ -2124,7 +2118,7 @@ func reducePhotoSend(state State, event ActionReceived) (State, []Effect) {
 				state.DocumentSendRequests = make(map[domain.MessageID]uint64)
 			}
 			state.DocumentSendRequests[localID] = requestID
-			return state, []Effect{SendDocument{
+			return []Effect{SendDocument{
 				RequestID:        requestID,
 				LocalID:          localID,
 				ChatID:           activeChatIDVal,
@@ -2138,7 +2132,7 @@ func reducePhotoSend(state State, event ActionReceived) (State, []Effect) {
 			state.PhotoSendRequests = make(map[domain.MessageID]uint64)
 		}
 		state.PhotoSendRequests[localID] = requestID
-		return state, []Effect{SendPhoto{
+		return []Effect{SendPhoto{
 			RequestID:        requestID,
 			LocalID:          localID,
 			ChatID:           activeChatIDVal,
@@ -2149,10 +2143,10 @@ func reducePhotoSend(state State, event ActionReceived) (State, []Effect) {
 		}, saveDraftCommand}
 	default:
 		// every other action is full-state no-op
-		return state, nil
+		return nil
 	}
 	state.PhotoSend = ps
-	return state, nil
+	return nil
 }
 
 // isVideoPath returns true if the file path looks like a video file.
@@ -2973,10 +2967,10 @@ func selectAdjacentMessage(state *State, previous bool) {
 	}
 }
 
-func openMessageActionMenu(state State) (State, []Effect) {
-	message, ok := selectedMessage(state)
+func openMessageActionMenu(state *State) []Effect {
+	message, ok := selectedMessage(*state)
 	if !ok {
-		return state, nil
+		return nil
 	}
 	local := domain.MessageCapabilities{Copy: true}
 	canReact := false
@@ -3010,12 +3004,12 @@ func openMessageActionMenu(state State) (State, []Effect) {
 	state.MessageMenu = &MessageActionMenu{ChatID: message.ChatID, MessageID: message.ID, ReferencedMessageID: referenceID, UserID: senderID, Pinned: message.Pinned, Capabilities: local, PreviousFocus: state.Focus, CanReact: canReact, MediaFile: mediaFile, MediaKind: message.Kind}
 	state.Focus = FocusModal
 	if message.ID <= 0 || message.SendState == domain.SendPending || message.SendState == domain.SendFailed || message.Service || message.Kind == domain.MessageService {
-		return state, nil
+		return nil
 	}
-	requestID := allocateRequestID(&state)
+	requestID := allocateRequestID(state)
 	state.MessageMenu.RequestID = requestID
 	state.MessageMenu.Loading = true
-	return state, []Effect{GetMessageProperties{RequestID: requestID, ChatID: message.ChatID, MessageID: message.ID}}
+	return []Effect{GetMessageProperties{RequestID: requestID, ChatID: message.ChatID, MessageID: message.ID}}
 }
 
 func messageMenuMatches(menu *MessageActionMenu, requestID uint64, chatID domain.ChatID, messageID domain.MessageID) bool {
@@ -3243,32 +3237,32 @@ func editableMessage(message domain.Message) bool {
 	return message.ID > 0 && message.Kind == domain.MessageText && !message.Service && message.SendState != domain.SendPending && message.SendState != domain.SendFailed
 }
 
-func beginEdit(state State, message domain.Message) (State, []Effect) {
+func beginEdit(state *State, message domain.Message) []Effect {
 	state.EditTarget = &EditTarget{ChatID: message.ChatID, MessageID: message.ID, Original: message.Text, Buffer: message.Text}
 	state.MessageMenu = nil
 	state.ReplyTarget = nil
 	state.Focus = FocusComposer
-	return state, nil
+	return nil
 }
 
-func beginDelete(state State, menu *MessageActionMenu, revoke bool) (State, []Effect) {
-	requestID := allocateRequestID(&state)
+func beginDelete(state *State, menu *MessageActionMenu, revoke bool) []Effect {
+	requestID := allocateRequestID(state)
 	menu.RequestID = requestID
 	state.MessageMenu = menu
-	return state, []Effect{DeleteMessageCommand{RequestID: requestID, ChatID: menu.ChatID, MessageID: menu.MessageID, Revoke: revoke}}
+	return []Effect{DeleteMessageCommand{RequestID: requestID, ChatID: menu.ChatID, MessageID: menu.MessageID, Revoke: revoke}}
 }
 
-func beginPin(state State, menu *MessageActionMenu) (State, []Effect) {
-	requestID := allocateRequestID(&state)
+func beginPin(state *State, menu *MessageActionMenu) []Effect {
+	requestID := allocateRequestID(state)
 	menu.RequestID = requestID
 	state.MessageMenu = menu
-	return state, []Effect{PinMessageCommand{RequestID: requestID, ChatID: menu.ChatID, MessageID: menu.MessageID, Unpin: menu.Pinned}}
+	return []Effect{PinMessageCommand{RequestID: requestID, ChatID: menu.ChatID, MessageID: menu.MessageID, Unpin: menu.Pinned}}
 }
 
-func deleteMessageSuccess(state State, chatID domain.ChatID, messageID domain.MessageID) State {
+func deleteMessageSuccess(state *State, chatID domain.ChatID, messageID domain.MessageID) {
 	index := messageIndex(state.Messages[chatID], messageID)
 	if index >= 0 {
-		removeMessageAt(&state, chatID, index)
+		removeMessageAt(state, chatID, index)
 	}
 	if state.SelectedMessageChat == chatID && state.SelectedMessage == messageID {
 		messages := state.Messages[chatID]
@@ -3292,11 +3286,10 @@ func deleteMessageSuccess(state State, chatID domain.ChatID, messageID domain.Me
 	}
 	state.MessageMenu = nil
 	state.Focus = FocusConversation
-	return state
 }
 
-func beginForward(state State, message domain.Message) (State, []Effect) {
-	requestID := allocateRequestID(&state)
+func beginForward(state *State, message domain.Message) []Effect {
+	requestID := allocateRequestID(state)
 	state.ForwardPicker = &ForwardPicker{
 		SourceChatID:    message.ChatID,
 		SourceMessageID: message.ID,
@@ -3305,10 +3298,10 @@ func beginForward(state State, message domain.Message) (State, []Effect) {
 	}
 	state.MessageMenu = nil
 	state.Focus = FocusForwardPicker
-	return state, nil
+	return nil
 }
 
-func reduceForwardPicker(state State, event ActionReceived) (State, []Effect) {
+func reduceForwardPicker(state *State, event ActionReceived) []Effect {
 	picker := state.ForwardPicker
 	switch event.Action {
 	case SelectNext, SelectPrevious:
@@ -3326,7 +3319,7 @@ func reduceForwardPicker(state State, event ActionReceived) (State, []Effect) {
 		state.Focus = FocusConversation
 		return reduceAction(state, event)
 	case Activate:
-		if _, ok := messageByIdentity(state, picker.SourceChatID, picker.SourceMessageID); !ok {
+		if _, ok := messageByIdentity(*state, picker.SourceChatID, picker.SourceMessageID); !ok {
 			state.ForwardPicker = nil
 			state.Focus = FocusConversation
 			break
@@ -3348,7 +3341,7 @@ func reduceForwardPicker(state State, event ActionReceived) (State, []Effect) {
 		if destination == 0 {
 			break
 		}
-		return state, []Effect{ForwardMessageCommand{
+		return []Effect{ForwardMessageCommand{
 			RequestID:         picker.RequestID,
 			SourceChatID:      picker.SourceChatID,
 			SourceMessageID:   picker.SourceMessageID,
@@ -3358,7 +3351,7 @@ func reduceForwardPicker(state State, event ActionReceived) (State, []Effect) {
 		state.ForwardPicker = nil
 		state.Focus = FocusConversation
 	}
-	return state, nil
+	return nil
 }
 
 func forwardPickerMatches(picker *ForwardPicker, requestID uint64, destinationChatID domain.ChatID, chats []domain.Chat) bool {
@@ -3477,8 +3470,8 @@ func reactionChosen(reactions []domain.MessageReaction, emoji string) bool {
 	return false
 }
 
-func beginReact(state State, message domain.Message) (State, []Effect) {
-	requestID := allocateRequestID(&state)
+func beginReact(state *State, message domain.Message) []Effect {
+	requestID := allocateRequestID(state)
 	state.ReactionPicker = &ReactionPicker{
 		ChatID:    message.ChatID,
 		MessageID: message.ID,
@@ -3486,28 +3479,28 @@ func beginReact(state State, message domain.Message) (State, []Effect) {
 	}
 	state.MessageMenu = nil
 	state.Focus = FocusReactionPicker
-	return state, nil
+	return nil
 }
 
-func openMediaModalFromMenu(state State) (State, []Effect) {
+func openMediaModalFromMenu(state *State) []Effect {
 	menu := state.MessageMenu
 	if menu == nil || !mediaEligible(menu.MediaFile) {
-		return state, nil
+		return nil
 	}
 	file := menu.MediaFile
-	currentMessage, ok := messageByIdentity(state, menu.ChatID, menu.MessageID)
+	currentMessage, ok := messageByIdentity(*state, menu.ChatID, menu.MessageID)
 	if !ok {
-		return state, nil
+		return nil
 	}
 
 	// Check for Video first — video follows toast+no-modal path.
 	if currentMessage.Kind == domain.MessageVideo {
 		currentFile, eligible := messageVideoFile(currentMessage)
 		if !eligible {
-			return state, nil
+			return nil
 		}
 		if !mediaIdentityMatches(currentFile, file) {
-			return state, nil
+			return nil
 		}
 		chatID := menu.ChatID
 		messageID := menu.MessageID
@@ -3515,10 +3508,10 @@ func openMediaModalFromMenu(state State) (State, []Effect) {
 		// Stale-guard: if already pending for this message, suppress.
 		if _, pending := state.VideoOpenPending[messageID]; pending {
 			state.MessageMenu = nil
-			return state, nil
+			return nil
 		}
 
-		requestID := allocateRequestID(&state)
+		requestID := allocateRequestID(state)
 		if state.VideoOpenPending == nil {
 			state.VideoOpenPending = make(map[domain.MessageID]uint64)
 		}
@@ -3526,30 +3519,30 @@ func openMediaModalFromMenu(state State) (State, []Effect) {
 
 		state.MessageMenu = nil
 		state.Focus = FocusConversation
-		setToast(&state, domain.AppError{Message: "Opening video…"}, 2*time.Second)
-		return state, []Effect{OpenMessageMediaFile{RequestID: requestID, ChatID: chatID, MessageID: messageID, Title: "Video", File: file}}
+		setToast(state, domain.AppError{Message: "Opening video…"}, 2*time.Second)
+		return []Effect{OpenMessageMediaFile{RequestID: requestID, ChatID: chatID, MessageID: messageID, Title: "Video", File: file}}
 	}
 
 	if currentMessage.Kind == domain.MessageAudio {
 		currentFile, eligible := messageAudioFile(currentMessage)
 		if !eligible || !mediaIdentityMatches(currentFile, file) {
-			return state, nil
+			return nil
 		}
 		chatID := menu.ChatID
 		messageID := menu.MessageID
 		if _, pending := state.AudioOpenPending[messageID]; pending {
 			state.MessageMenu = nil
-			return state, nil
+			return nil
 		}
-		requestID := allocateRequestID(&state)
+		requestID := allocateRequestID(state)
 		if state.AudioOpenPending == nil {
 			state.AudioOpenPending = make(map[domain.MessageID]uint64)
 		}
 		state.AudioOpenPending[messageID] = requestID
 		state.MessageMenu = nil
 		state.Focus = FocusConversation
-		setToast(&state, domain.AppError{Message: "Opening audio…"}, 2*time.Second)
-		return state, []Effect{OpenMessageMediaFile{RequestID: requestID, ChatID: chatID, MessageID: messageID, Title: "Audio", File: file}}
+		setToast(state, domain.AppError{Message: "Opening audio…"}, 2*time.Second)
+		return []Effect{OpenMessageMediaFile{RequestID: requestID, ChatID: chatID, MessageID: messageID, Title: "Audio", File: file}}
 	}
 
 	// Attachment paths (File, Animation, Voice note, Video note) follow the
@@ -3557,16 +3550,16 @@ func openMediaModalFromMenu(state State) (State, []Effect) {
 	if title, ok := attachmentTitleForKind(currentMessage.Kind); ok {
 		currentFile, eligible := messageKindFile(currentMessage, currentMessage.Kind)
 		if !eligible || !mediaIdentityMatches(currentFile, file) {
-			return state, nil
+			return nil
 		}
 		chatID := menu.ChatID
 		messageID := menu.MessageID
 		attachmentKey := attachmentOpenKey{ChatID: chatID, MessageID: messageID}
 		if _, pending := state.AttachmentOpenPending[attachmentKey]; pending {
 			state.MessageMenu = nil
-			return state, nil
+			return nil
 		}
-		requestID := allocateRequestID(&state)
+		requestID := allocateRequestID(state)
 		if state.AttachmentOpenPending == nil {
 			state.AttachmentOpenPending = make(map[attachmentOpenKey]attachmentOpenRequest)
 		}
@@ -3579,18 +3572,18 @@ func openMediaModalFromMenu(state State) (State, []Effect) {
 		state.MessageMenu = nil
 		state.Focus = FocusConversation
 		if opening, _, _ := attachmentToasts(title); opening != "" {
-			setToast(&state, domain.AppError{Message: opening}, 2*time.Second)
+			setToast(state, domain.AppError{Message: opening}, 2*time.Second)
 		}
-		return state, []Effect{OpenMessageMediaFile{RequestID: requestID, ChatID: chatID, MessageID: messageID, Title: title, File: file}}
+		return []Effect{OpenMessageMediaFile{RequestID: requestID, ChatID: chatID, MessageID: messageID, Title: title, File: file}}
 	}
 
 	// Photo path — keep existing modal behavior.
 	currentFile, eligible := messagePhotoFile(currentMessage)
 	if !eligible {
-		return state, nil
+		return nil
 	}
 	if !mediaIdentityMatches(currentFile, file) {
-		return state, nil
+		return nil
 	}
 	chatID := menu.ChatID
 	messageID := menu.MessageID
@@ -3608,9 +3601,9 @@ func openMediaModalFromMenu(state State) (State, []Effect) {
 			Loading:        false,
 			PreviousFocus:  previousFocus,
 		}
-		return state, nil
+		return nil
 	}
-	requestID := allocateRequestID(&state)
+	requestID := allocateRequestID(state)
 	state.Modal = &ModalState{
 		RequestID:      requestID,
 		Title:          "Photo",
@@ -3620,10 +3613,10 @@ func openMediaModalFromMenu(state State) (State, []Effect) {
 		Loading:        true,
 		PreviousFocus:  previousFocus,
 	}
-	return state, []Effect{OpenMessageMediaFile{RequestID: requestID, ChatID: chatID, MessageID: messageID, Title: "Photo", File: file}}
+	return []Effect{OpenMessageMediaFile{RequestID: requestID, ChatID: chatID, MessageID: messageID, Title: "Photo", File: file}}
 }
 
-func reduceReactionPicker(state State, event ActionReceived) (State, []Effect) {
+func reduceReactionPicker(state *State, event ActionReceived) []Effect {
 	picker := state.ReactionPicker
 	switch event.Action {
 	case SelectNext, SelectPrevious:
@@ -3654,12 +3647,12 @@ func reduceReactionPicker(state State, event ActionReceived) (State, []Effect) {
 		}
 		emoji := ReactionPalette[index]
 		remove := reactionChosen(state.Messages[picker.ChatID][messageIdx].Reactions, emoji)
-		return state, []Effect{ReactToMessage{RequestID: picker.RequestID, ChatID: picker.ChatID, MessageID: picker.MessageID, Emoji: emoji, Remove: remove}}
+		return []Effect{ReactToMessage{RequestID: picker.RequestID, ChatID: picker.ChatID, MessageID: picker.MessageID, Emoji: emoji, Remove: remove}}
 	case Close:
 		state.ReactionPicker = nil
 		state.Focus = FocusConversation
 	}
-	return state, nil
+	return nil
 }
 
 func reactionPickerMatches(picker *ReactionPicker, requestID uint64, chatID domain.ChatID, messageID domain.MessageID) bool {
@@ -3691,155 +3684,121 @@ func editableTargetPresent(state State) bool {
 	return ok && editableMessage(message)
 }
 
-func cloneChatDraftWriteState(state State) State {
-	state.DraftSync = maps.Clone(state.DraftSync)
-	if state.DraftSync == nil {
-		state.DraftSync = make(map[domain.ChatID]DraftSyncState)
-	}
-	state.Chats = slices.Clone(state.Chats)
-	return state
-}
-
-func cloneTopicDraftWriteState(state State, key topicKey) State {
-	state.TopicDraftSync = maps.Clone(state.TopicDraftSync)
-	if state.TopicDraftSync == nil {
-		state.TopicDraftSync = make(map[topicKey]DraftSyncState)
-	}
-	state.ForumTopics = maps.Clone(state.ForumTopics)
-	if byTopic := state.ForumTopics[key.ChatID]; byTopic != nil {
-		state.ForumTopics[key.ChatID] = maps.Clone(byTopic)
-	}
-	return state
-}
-
-func reduceComposerValueChanged(state State, event ComposerValueChanged) (State, []Effect) {
+func reduceComposerValueChanged(state *State, event ComposerValueChanged) []Effect {
 	if state.Quitting {
-		return state, nil
+		return nil
 	}
 	if state.Focus != FocusComposer {
-		return state, nil
+		return nil
 	}
-	activeID, active := activeChatID(state)
+	activeID, active := activeChatID(*state)
 	if !active || activeID != event.ChatID {
-		return state, nil
+		return nil
 	}
 
 	// Edit mode: EditTarget is set.
 	if state.EditTarget != nil {
 		if event.EditMessageID == 0 {
 			// Zero edit ID with an edit target present — no-op; do not fall back to draft.
-			return state, nil
+			return nil
 		}
 		if event.ChatID != state.EditTarget.ChatID || event.EditMessageID != state.EditTarget.MessageID {
-			return state, nil
+			return nil
 		}
 		if state.EditTarget.Submitting {
-			return state, nil
+			return nil
 		}
-		if !editableTargetPresent(state) {
-			return state, nil
+		if !editableTargetPresent(*state) {
+			return nil
 		}
-		if state.EditTarget.Buffer == event.Value {
-			return state, nil
+		target := state.EditTarget
+		if target.Buffer == event.Value {
+			return nil
 		}
-		target := *state.EditTarget
 		target.Buffer = event.Value
-		state.EditTarget = &target
-		return state, nil
+		return nil
 	}
 
 	// Draft mode: EditTarget is nil.
 	if event.EditMessageID != 0 {
-		return state, nil
+		return nil
 	}
-	if allKey, ok := showAllActive(state); ok {
+	if allKey, ok := showAllActive(*state); ok {
 		if state.TopicDrafts[allKey] == event.Value {
-			return state, nil
+			return nil
 		}
-		drafts := make(map[topicKey]string, len(state.TopicDrafts)+1)
-		for topic, draft := range state.TopicDrafts {
-			drafts[topic] = draft
+		if state.TopicDrafts == nil {
+			state.TopicDrafts = make(map[topicKey]string)
 		}
-		drafts[allKey] = event.Value
-		state.TopicDrafts = drafts
-		state = cloneTopicDraftWriteState(state, allKey)
-		commands := syncCommandMenuForValue(&state, event.ChatID, event.Value)
-		commands = append(commands, queueTopicDraftSave(&state, allKey))
-		return state, commands
+		state.TopicDrafts[allKey] = event.Value
+		commands := syncCommandMenuForValue(state, event.ChatID, event.Value)
+		commands = append(commands, queueTopicDraftSave(state, allKey))
+		return commands
 	}
-	if key, ok := activeTopicKey(state); ok {
+	if key, ok := activeTopicKey(*state); ok {
 		if state.TopicDrafts[key] == event.Value {
-			return state, nil
+			return nil
 		}
-		drafts := make(map[topicKey]string, len(state.TopicDrafts)+1)
-		for topic, draft := range state.TopicDrafts {
-			drafts[topic] = draft
+		if state.TopicDrafts == nil {
+			state.TopicDrafts = make(map[topicKey]string)
 		}
-		drafts[key] = event.Value
-		state.TopicDrafts = drafts
-		state = cloneTopicDraftWriteState(state, key)
-		commands := syncCommandMenuForValue(&state, event.ChatID, event.Value)
-		commands = append(commands, queueTopicDraftSave(&state, key))
-		return state, commands
+		state.TopicDrafts[key] = event.Value
+		commands := syncCommandMenuForValue(state, event.ChatID, event.Value)
+		commands = append(commands, queueTopicDraftSave(state, key))
+		return commands
 	}
 	if state.SelectedChat >= 0 && state.SelectedChat < len(state.Chats) && state.Chats[state.SelectedChat].IsForum {
 		// A forum without a selected topic (and not in ALL mode) has no
 		// composer target.
-		return state, nil
+		return nil
 	}
 	if state.Drafts[event.ChatID] == event.Value {
-		return state, nil
+		return nil
 	}
-	drafts := make(map[domain.ChatID]string, len(state.Drafts)+1)
-	for chatID, draft := range state.Drafts {
-		drafts[chatID] = draft
+	if state.Drafts == nil {
+		state.Drafts = make(map[domain.ChatID]string)
 	}
-	drafts[event.ChatID] = event.Value
-	state.Drafts = drafts
-	state = cloneChatDraftWriteState(state)
-	commands := syncCommandMenuForValue(&state, event.ChatID, event.Value)
-	commands = append(commands, queueDraftSave(&state, event.ChatID))
-	return state, commands
+	state.Drafts[event.ChatID] = event.Value
+	commands := syncCommandMenuForValue(state, event.ChatID, event.Value)
+	commands = append(commands, queueDraftSave(state, event.ChatID))
+	return commands
 }
 
-func reducePromptValueChanged(state State, event PromptValueChanged) (State, []Effect) {
+func reducePromptValueChanged(state *State, event PromptValueChanged) []Effect {
 	if state.Prompt == nil {
-		return state, nil
+		return nil
 	}
 	if state.Focus != FocusAuth {
-		return state, nil
+		return nil
 	}
 	if event.PromptID == 0 {
-		return state, nil
+		return nil
 	}
 	if state.Prompt.Prompt.ID != event.PromptID {
-		return state, nil
+		return nil
 	}
 	if state.Quitting {
-		return state, nil
+		return nil
 	}
-	// Copy-on-write: the caller's State keeps its own PromptState.
-	prompt := *state.Prompt
-	prompt.Input = []rune(event.Value)
-	state.Prompt = &prompt
-	return state, nil
+	state.Prompt.Input = []rune(event.Value)
+	return nil
 }
 
-func reducePhotoPathValueChanged(state State, event PhotoPathValueChanged) (State, []Effect) {
+func reducePhotoPathValueChanged(state *State, event PhotoPathValueChanged) []Effect {
 	if state.PhotoSend == nil {
-		return state, nil
+		return nil
 	}
 	if state.Focus != FocusPhotoSend {
-		return state, nil
+		return nil
 	}
 	if event.ChatID == 0 {
-		return state, nil
+		return nil
 	}
 	if state.PhotoSend.ChatID != event.ChatID {
-		return state, nil
+		return nil
 	}
 	if state.Quitting {
-		return state, nil
+		return nil
 	}
 	input := make([]rune, 0, len(event.Value))
 	for _, r := range event.Value {
@@ -3848,15 +3807,12 @@ func reducePhotoPathValueChanged(state State, event PhotoPathValueChanged) (Stat
 		}
 		input = append(input, r)
 	}
-	// Copy-on-write: the caller's State keeps its own PhotoSendState.
-	photo := *state.PhotoSend
-	photo.Input = input
-	state.PhotoSend = &photo
-	return state, nil
+	state.PhotoSend.Input = input
+	return nil
 }
 
-func beginReply(state State, message domain.Message) (State, []Effect) {
-	if allKey, ok := showAllActive(state); ok && message.ChatID == allKey.ChatID {
+func beginReply(state *State, message domain.Message) []Effect {
+	if allKey, ok := showAllActive(*state); ok && message.ChatID == allKey.ChatID {
 		// In ALL mode any visible message is a reply target; the reply is
 		// stored at the ALL key (TopicID 0) and sent to the General topic.
 		state.ReplyTarget = replyTargetFromMessage(message)
@@ -3867,7 +3823,7 @@ func beginReply(state State, message domain.Message) (State, []Effect) {
 		state.TopicDraftReplies[allKey] = message.ID
 		state.MessageMenu = nil
 		state.Focus = FocusComposer
-		return state, []Effect{queueTopicDraftSave(&state, allKey)}
+		return []Effect{queueTopicDraftSave(state, allKey)}
 	}
 	state.ReplyTarget = replyTargetFromMessage(message)
 	if message.TopicID != 0 {
@@ -3878,7 +3834,7 @@ func beginReply(state State, message domain.Message) (State, []Effect) {
 		state.TopicDraftReplies[key] = message.ID
 		state.MessageMenu = nil
 		state.Focus = FocusComposer
-		return state, []Effect{queueTopicDraftSave(&state, key)}
+		return []Effect{queueTopicDraftSave(state, key)}
 	}
 	if state.DraftReplies == nil {
 		state.DraftReplies = make(map[domain.ChatID]domain.MessageID)
@@ -3886,7 +3842,7 @@ func beginReply(state State, message domain.Message) (State, []Effect) {
 	state.DraftReplies[message.ChatID] = message.ID
 	state.MessageMenu = nil
 	state.Focus = FocusComposer
-	return state, []Effect{queueDraftSave(&state, message.ChatID)}
+	return []Effect{queueDraftSave(state, message.ChatID)}
 }
 
 func replyTargetFromMessage(message domain.Message) *ReplyTarget {
@@ -4225,685 +4181,10 @@ func avatarPixelDimensions(role avatar.Role) (int, int) {
 	return 6, 6
 }
 
-func clonePromptState(prompt *PromptState) *PromptState {
-	if prompt == nil {
-		return nil
-	}
-	clone := *prompt
-	clone.Input = append([]rune(nil), prompt.Input...)
-	return &clone
-}
-
-// cloneReducerStateForEvent keeps the reducer's copy-on-write contract while
-// avoiding the legacy whole-state clone for events whose mutation surface is
-// known and narrow. Complex/cold paths still fall back to cloneReducerState;
-// they can be migrated independently without weakening input-state isolation.
-func cloneReducerStateForEvent(state State, event Event) State {
-	switch event := event.(type) {
-	case Started, TerminalFocusChanged, ChatsLoadFailed, StartupFailed,
-		ShutdownComplete, OperationFailed, ClipboardWriteFailed, ClipboardWritten,
-		ToastExpired, PromptRequested:
-		// These reducers only replace scalar or top-level pointer fields.
-		return state
-	case Resized:
-		clone := state
-		clone.History = maps.Clone(state.History)
-		if clone.History == nil {
-			clone.History = make(map[domain.ChatID]HistoryState)
-		}
-		if state.StickerPicker != nil {
-			picker := *state.StickerPicker
-			clone.StickerPicker = &picker
-		}
-		return clone
-	case ChatsLoaded:
-		clone := cloneCloudDraftState(state)
-		clone.History = maps.Clone(state.History)
-		if clone.History == nil {
-			clone.History = make(map[domain.ChatID]HistoryState)
-		}
-		clone.Avatars = maps.Clone(state.Avatars)
-		if clone.Avatars == nil {
-			clone.Avatars = make(map[string]AvatarState)
-		}
-		return clone
-	case MessagesLoaded:
-		return cloneMessagesLoadedState(state)
-	case ActionReceived:
-		return cloneReducerStateForAction(state, event)
-	case TelegramEvent:
-		return cloneReducerStateForTelegramEvent(state, event)
-	default:
-		return cloneReducerState(state)
-	}
-}
-
-func cloneReducerStateForAction(state State, event ActionReceived) State {
-	if event.Action == Quit {
-		// Quit changes only top-level fields and emits shutdown commands.
-		return state
-	}
-	if reducerHasRoutedOverlay(state) {
-		return cloneReducerState(state)
-	}
-	switch event.Action {
-	case FocusPane, FocusNext, FocusPrevious, ToggleDetails, SelectMessage:
-		return state
-	case SelectChat:
-		if chatIndex(state.Chats, event.ChatID) >= 0 {
-			return cloneChatSelectionState(state)
-		}
-	case SelectNext, SelectPrevious:
-		if state.Focus == FocusDetails {
-			return state
-		}
-		if _, ok := adjacentChatID(state, event.Action == SelectPrevious); ok {
-			return cloneChatSelectionState(state)
-		}
-	case SelectNextUnread, SelectNextMention:
-		if state.Focus != FocusChats {
-			return state
-		}
-		match := func(chat domain.Chat) bool { return chat.UnreadCount > 0 }
-		if event.Action == SelectNextMention {
-			match = func(chat domain.Chat) bool { return chat.UnreadMentionCount > 0 }
-		}
-		_, ok := nextMatchingChatID(state, match)
-		if !ok {
-			return state
-		}
-		return cloneChatSelectionState(state)
-	case SelectNextMessage, SelectPreviousMessage, PageUp, PageDown:
-		clone := state
-		clone.History = maps.Clone(state.History)
-		if clone.History == nil {
-			clone.History = make(map[domain.ChatID]HistoryState)
-		}
-		return clone
-	}
-	return cloneReducerState(state)
-}
-
-func adjacentChatID(state State, previous bool) (domain.ChatID, bool) {
-	if len(state.Chats) == 0 || state.SelectedChat < 0 || state.SelectedChat >= len(state.Chats) {
-		return 0, false
-	}
-	delta := 1
-	if previous {
-		delta = -1
-	}
-	index := max(0, min(len(state.Chats)-1, state.SelectedChat+delta))
-	return state.Chats[index].ID, true
-}
-
-func cloneChatSelectionState(state State) State {
-	clone := state
-	clone.DraftSync = maps.Clone(state.DraftSync)
-	if clone.DraftSync == nil {
-		clone.DraftSync = make(map[domain.ChatID]DraftSyncState)
-	}
-	clone.TopicDraftSync = maps.Clone(state.TopicDraftSync)
-	if clone.TopicDraftSync == nil {
-		clone.TopicDraftSync = make(map[topicKey]DraftSyncState)
-	}
-	clone.History = maps.Clone(state.History)
-	if clone.History == nil {
-		clone.History = make(map[domain.ChatID]HistoryState)
-	}
-	clone.Avatars = maps.Clone(state.Avatars)
-	if clone.Avatars == nil {
-		clone.Avatars = make(map[string]AvatarState)
-	}
-	return clone
-}
-
-// reducerHasRoutedOverlay mirrors reduceAction's dispatch gates. If one is
-// active, even a navigation-looking action belongs to that feature reducer and
-// therefore needs the existing conservative clone until that feature owns its
-// own copy-on-write preparation.
-func reducerHasRoutedOverlay(state State) bool {
-	return state.Prompt != nil ||
-		state.CommandMenu != nil ||
-		state.ChatSearch != nil ||
-		state.ChatActions != nil ||
-		state.Modal != nil ||
-		state.Topics != nil ||
-		state.Members != nil ||
-		state.Administration != nil ||
-		state.ChatSettings != nil ||
-		state.InviteLinks != nil ||
-		state.PinnedMessages != nil ||
-		state.MessageSearch != nil ||
-		state.StickerPicker != nil ||
-		state.PhotoSend != nil ||
-		state.MessageMenu != nil ||
-		state.ReactionPicker != nil ||
-		state.ForwardPicker != nil
-}
-
-func cloneReducerStateForTelegramEvent(state State, event TelegramEvent) State {
-	switch update := event.Value.(type) {
-	case *telegram.Ready:
-		if update == nil {
-			return state
-		}
-		event.Value = *update
-		return cloneReducerStateForTelegramEvent(state, event)
-	case *telegram.Closed:
-		if update == nil {
-			return state
-		}
-		event.Value = *update
-		return cloneReducerStateForTelegramEvent(state, event)
-	case *telegram.ConnectionChanged:
-		if update == nil {
-			return state
-		}
-		event.Value = *update
-		return cloneReducerStateForTelegramEvent(state, event)
-	case *telegram.ChatUpserted:
-		if update == nil {
-			return state
-		}
-		event.Value = *update
-		return cloneReducerStateForTelegramEvent(state, event)
-	case *telegram.DraftChanged:
-		if update == nil {
-			return state
-		}
-		event.Value = *update
-		return cloneReducerStateForTelegramEvent(state, event)
-	case *telegram.MessageUpserted:
-		if update == nil {
-			return state
-		}
-		event.Value = *update
-		return cloneReducerStateForTelegramEvent(state, event)
-	case *telegram.MessageContentUpdated:
-		if update == nil {
-			return state
-		}
-		event.Value = *update
-		return cloneReducerStateForTelegramEvent(state, event)
-	case *telegram.MessageEdited:
-		if update == nil {
-			return state
-		}
-		event.Value = *update
-		return cloneReducerStateForTelegramEvent(state, event)
-	case *telegram.MessageReactionsUpdated:
-		if update == nil {
-			return state
-		}
-		event.Value = *update
-		return cloneReducerStateForTelegramEvent(state, event)
-	case telegram.Ready, telegram.Closed, telegram.ConnectionChanged:
-		// These update paths only change scalar fields (or are no-ops).
-		return state
-	case telegram.ChatUpserted:
-		clone := cloneCloudDraftState(state)
-		clone.Avatars = maps.Clone(state.Avatars)
-		if clone.Avatars == nil {
-			clone.Avatars = make(map[string]AvatarState)
-		}
-		return clone
-	case telegram.DraftChanged:
-		return cloneCloudDraftState(state)
-	case telegram.MessageUpserted:
-		return cloneMessageUpsertState(state)
-	case telegram.MessageContentUpdated:
-		return cloneMessageMutationState(state, update.ChatID)
-	case telegram.MessageEdited:
-		return cloneMessageMutationState(state, update.ChatID)
-	case telegram.MessageReactionsUpdated:
-		return cloneMessageMutationState(state, update.ChatID)
-	default:
-		return cloneReducerState(state)
-	}
-}
-
-func cloneCloudDraftState(state State) State {
-	clone := state
-	clone.Chats = slices.Clone(state.Chats)
-	clone.Drafts = maps.Clone(state.Drafts)
-	if clone.Drafts == nil {
-		clone.Drafts = make(map[domain.ChatID]string)
-	}
-	clone.DraftReplies = maps.Clone(state.DraftReplies)
-	if clone.DraftReplies == nil {
-		clone.DraftReplies = make(map[domain.ChatID]domain.MessageID)
-	}
-	clone.DraftDates = maps.Clone(state.DraftDates)
-	if clone.DraftDates == nil {
-		clone.DraftDates = make(map[domain.ChatID]int64)
-	}
-	clone.DraftSync = maps.Clone(state.DraftSync)
-	if clone.DraftSync == nil {
-		clone.DraftSync = make(map[domain.ChatID]DraftSyncState)
-	}
-	clone.TopicDrafts = maps.Clone(state.TopicDrafts)
-	if clone.TopicDrafts == nil {
-		clone.TopicDrafts = make(map[topicKey]string)
-	}
-	clone.TopicDraftReplies = maps.Clone(state.TopicDraftReplies)
-	if clone.TopicDraftReplies == nil {
-		clone.TopicDraftReplies = make(map[topicKey]domain.MessageID)
-	}
-	clone.TopicDraftDates = maps.Clone(state.TopicDraftDates)
-	if clone.TopicDraftDates == nil {
-		clone.TopicDraftDates = make(map[topicKey]int64)
-	}
-	clone.TopicDraftSync = maps.Clone(state.TopicDraftSync)
-	if clone.TopicDraftSync == nil {
-		clone.TopicDraftSync = make(map[topicKey]DraftSyncState)
-	}
-	return clone
-}
-
-func cloneMessagesLoadedState(state State) State {
-	clone := state
-	clone.Messages = maps.Clone(state.Messages)
-	if clone.Messages == nil {
-		clone.Messages = make(map[domain.ChatID][]domain.Message)
-	}
-	clone.History = maps.Clone(state.History)
-	if clone.History == nil {
-		clone.History = make(map[domain.ChatID]HistoryState)
-	}
-	clone.TopicHistory = maps.Clone(state.TopicHistory)
-	if clone.TopicHistory == nil {
-		clone.TopicHistory = make(map[topicKey]HistoryState)
-	}
-	clone.Avatars = maps.Clone(state.Avatars)
-	if clone.Avatars == nil {
-		clone.Avatars = make(map[string]AvatarState)
-	}
-	return clone
-}
-
-// cloneMessageMutationState copies only the Messages map and the one chat slice
-// whose message structs may be changed. Nested message data stays shared until
-// a reducer replaces it; the optimized update paths replace, rather than edit,
-// reaction/media values.
-func cloneMessageMutationState(state State, chatID domain.ChatID) State {
-	clone := state
-	clone.Messages = maps.Clone(state.Messages)
-	if clone.Messages == nil {
-		clone.Messages = make(map[domain.ChatID][]domain.Message)
-	}
-	clone.Messages[chatID] = slices.Clone(state.Messages[chatID])
-	return clone
-}
-
-// A message upsert rebuilds the affected chat's message slice through
-// mergeMessages, so it only needs ownership of the containing map plus the
-// small branches that the upsert may update while reconciling chat metadata,
-// history and avatar work.
-func cloneMessageUpsertState(state State) State {
-	clone := state
-	clone.Messages = maps.Clone(state.Messages)
-	if clone.Messages == nil {
-		clone.Messages = make(map[domain.ChatID][]domain.Message)
-	}
-	clone.Chats = slices.Clone(state.Chats)
-	clone.History = maps.Clone(state.History)
-	if clone.History == nil {
-		clone.History = make(map[domain.ChatID]HistoryState)
-	}
-	clone.Avatars = maps.Clone(state.Avatars)
-	if clone.Avatars == nil {
-		clone.Avatars = make(map[string]AvatarState)
-	}
-	return clone
-}
-
-func cloneReducerState(state State) State {
-	clone := state
-	clone.Chats = append([]domain.Chat(nil), state.Chats...)
-	clone.Messages = make(map[domain.ChatID][]domain.Message, len(state.Messages))
-	for chatID, messages := range state.Messages {
-		clone.Messages[chatID] = make([]domain.Message, len(messages))
-		for index, message := range messages {
-			clone.Messages[chatID][index] = cloneDomainMessage(message)
-		}
-	}
-	clone.Drafts = make(map[domain.ChatID]string, len(state.Drafts))
-	for chatID, draft := range state.Drafts {
-		clone.Drafts[chatID] = draft
-	}
-	clone.DraftReplies = make(map[domain.ChatID]domain.MessageID, len(state.DraftReplies))
-	for chatID, replyID := range state.DraftReplies {
-		clone.DraftReplies[chatID] = replyID
-	}
-	clone.DraftDates = make(map[domain.ChatID]int64, len(state.DraftDates))
-	for chatID, date := range state.DraftDates {
-		clone.DraftDates[chatID] = date
-	}
-	clone.DraftSync = make(map[domain.ChatID]DraftSyncState, len(state.DraftSync))
-	for chatID, syncState := range state.DraftSync {
-		clone.DraftSync[chatID] = syncState
-	}
-	clone.Avatars = make(map[string]AvatarState, len(state.Avatars))
-	for key, entry := range state.Avatars {
-		entry.Cells = clonePixelAvatar(entry.Cells)
-		entry.Error = cloneDomainError(entry.Error)
-		clone.Avatars[key] = entry
-	}
-	clone.History = make(map[domain.ChatID]HistoryState, len(state.History))
-	for chatID, history := range state.History {
-		clone.History[chatID] = history
-	}
-	if state.Modal != nil {
-		modal := *state.Modal
-		modal.Error = cloneDomainError(state.Modal.Error)
-		clone.Modal = &modal
-	}
-	clone.Prompt = clonePromptState(state.Prompt)
-	if state.MessageMenu != nil {
-		menu := *state.MessageMenu
-		clone.MessageMenu = &menu
-	}
-	if state.ForwardPicker != nil {
-		picker := *state.ForwardPicker
-		clone.ForwardPicker = &picker
-	}
-	if state.ReactionPicker != nil {
-		picker := *state.ReactionPicker
-		clone.ReactionPicker = &picker
-	}
-	if state.ReplyTarget != nil {
-		target := *state.ReplyTarget
-		clone.ReplyTarget = &target
-	}
-	if state.EditTarget != nil {
-		target := *state.EditTarget
-		target.Error = cloneDomainError(state.EditTarget.Error)
-		clone.EditTarget = &target
-	}
-	clone.Toast = cloneDomainError(state.Toast)
-	clone.Fatal = cloneDomainError(state.Fatal)
-	clone.ChatsError = cloneDomainError(state.ChatsError)
-	if state.PhotoSend != nil {
-		ps := *state.PhotoSend
-		ps.Input = append([]rune(nil), state.PhotoSend.Input...)
-		clone.PhotoSend = &ps
-	}
-	if state.PhotoSendRequests != nil {
-		clone.PhotoSendRequests = make(map[domain.MessageID]uint64, len(state.PhotoSendRequests))
-		for k, v := range state.PhotoSendRequests {
-			clone.PhotoSendRequests[k] = v
-		}
-	}
-	if state.VideoSendRequests != nil {
-		clone.VideoSendRequests = make(map[domain.MessageID]uint64, len(state.VideoSendRequests))
-		for k, v := range state.VideoSendRequests {
-			clone.VideoSendRequests[k] = v
-		}
-	}
-	if state.AudioSendRequests != nil {
-		clone.AudioSendRequests = make(map[domain.MessageID]uint64, len(state.AudioSendRequests))
-		for k, v := range state.AudioSendRequests {
-			clone.AudioSendRequests[k] = v
-		}
-	}
-	if state.DocumentSendRequests != nil {
-		clone.DocumentSendRequests = make(map[domain.MessageID]uint64, len(state.DocumentSendRequests))
-		for k, v := range state.DocumentSendRequests {
-			clone.DocumentSendRequests[k] = v
-		}
-	}
-	if state.StickerSendRequests != nil {
-		clone.StickerSendRequests = make(map[domain.MessageID]uint64, len(state.StickerSendRequests))
-		for k, v := range state.StickerSendRequests {
-			clone.StickerSendRequests[k] = v
-		}
-	}
-	if state.StickerPicker != nil {
-		picker := *state.StickerPicker
-		picker.Error = cloneDomainError(state.StickerPicker.Error)
-		picker.Catalog = append([]domain.StickerRef(nil), state.StickerPicker.Catalog...)
-		clone.StickerPicker = &picker
-	}
-	clone.BotCommandCatalogs = make(map[domain.ChatID]BotCommandCatalogState, len(state.BotCommandCatalogs))
-	for chatID, catalog := range state.BotCommandCatalogs {
-		catalog.Commands = append([]domain.BotCommand(nil), catalog.Commands...)
-		catalog.Error = cloneDomainError(catalog.Error)
-		clone.BotCommandCatalogs[chatID] = catalog
-	}
-	if state.CommandMenu != nil {
-		menu := *state.CommandMenu
-		menu.Candidates = append([]domain.BotCommand(nil), state.CommandMenu.Candidates...)
-		menu.Error = cloneDomainError(state.CommandMenu.Error)
-		clone.CommandMenu = &menu
-	}
-	if state.ChatSearch != nil {
-		search := *state.ChatSearch
-		search.Input = append([]rune(nil), state.ChatSearch.Input...)
-		search.LocalChats = make([]domain.Chat, len(state.ChatSearch.LocalChats))
-		for index, chat := range state.ChatSearch.LocalChats {
-			search.LocalChats[index] = cloneDomainChat(chat)
-		}
-		search.PublicChats = make([]domain.Chat, len(state.ChatSearch.PublicChats))
-		for index, chat := range state.ChatSearch.PublicChats {
-			search.PublicChats[index] = cloneDomainChat(chat)
-		}
-		search.GlobalMessages = make([]domain.Message, len(state.ChatSearch.GlobalMessages))
-		for index, msg := range state.ChatSearch.GlobalMessages {
-			search.GlobalMessages[index] = cloneDomainMessage(msg)
-		}
-		search.PublicError = cloneDomainError(state.ChatSearch.PublicError)
-		search.MessagesError = cloneDomainError(state.ChatSearch.MessagesError)
-		clone.ChatSearch = &search
-	}
-	if state.MessageSearch != nil {
-		search := *state.MessageSearch
-		search.Input = append([]rune(nil), state.MessageSearch.Input...)
-		search.Results = make([]domain.Message, len(state.MessageSearch.Results))
-		for index, message := range state.MessageSearch.Results {
-			search.Results[index] = cloneDomainMessage(message)
-		}
-		search.Error = cloneDomainError(state.MessageSearch.Error)
-		clone.MessageSearch = &search
-	}
-	if state.ChatActions != nil {
-		menu := *state.ChatActions
-		clone.ChatActions = &menu
-	}
-	if state.Members != nil {
-		members := *state.Members
-		members.Results = append([]domain.ChatMember(nil), state.Members.Results...)
-		members.Error = cloneDomainError(state.Members.Error)
-		if state.Members.Detail != nil {
-			detail := *state.Members.Detail
-			members.Detail = &detail
-		}
-		clone.Members = &members
-	}
-	if state.InviteLinks != nil {
-		links := *state.InviteLinks
-		links.Links = append([]telegram.InviteLink(nil), state.InviteLinks.Links...)
-		links.Error = cloneDomainError(state.InviteLinks.Error)
-		if state.InviteLinks.Primary != nil {
-			primary := *state.InviteLinks.Primary
-			links.Primary = &primary
-		}
-		clone.InviteLinks = &links
-	}
-	if state.Administration != nil {
-		admin := *state.Administration
-		admin.Error = cloneDomainError(state.Administration.Error)
-		if state.Administration.Snapshot != nil {
-			v := *state.Administration.Snapshot
-			admin.Snapshot = &v
-		}
-		if state.Administration.MemberStatus != nil {
-			v := *state.Administration.MemberStatus
-			admin.MemberStatus = &v
-		}
-		if state.Administration.ReturnMembers != nil {
-			v := *state.Administration.ReturnMembers
-			v.Results = append([]domain.ChatMember(nil), state.Administration.ReturnMembers.Results...)
-			v.Error = cloneDomainError(state.Administration.ReturnMembers.Error)
-			if state.Administration.ReturnMembers.Detail != nil {
-				detail := *state.Administration.ReturnMembers.Detail
-				v.Detail = &detail
-			}
-			admin.ReturnMembers = &v
-		}
-		clone.Administration = &admin
-	}
-	if state.ChatSettings != nil {
-		settings := *state.ChatSettings
-		settings.TitleInput = append([]rune(nil), state.ChatSettings.TitleInput...)
-		settings.DescriptionInput = append([]rune(nil), state.ChatSettings.DescriptionInput...)
-		settings.Error = cloneDomainError(state.ChatSettings.Error)
-		if state.ChatSettings.Snapshot != nil {
-			snapshot := *state.ChatSettings.Snapshot
-			settings.Snapshot = &snapshot
-		}
-		clone.ChatSettings = &settings
-	}
-	if state.PinnedMessages != nil {
-		pinned := *state.PinnedMessages
-		pinned.Results = make([]domain.Message, len(state.PinnedMessages.Results))
-		for index, message := range state.PinnedMessages.Results {
-			pinned.Results[index] = cloneDomainMessage(message)
-		}
-		pinned.Error = cloneDomainError(state.PinnedMessages.Error)
-		clone.PinnedMessages = &pinned
-	}
-	if state.StickerThumbnails != nil {
-		clone.StickerThumbnails = make(map[int32]thumbnail.Block, len(state.StickerThumbnails))
-		for id, block := range state.StickerThumbnails {
-			clone.StickerThumbnails[id] = block
-		}
-	}
-	if state.StickerThumbnailRequests != nil {
-		clone.StickerThumbnailRequests = make(map[int32]uint64, len(state.StickerThumbnailRequests))
-		for id, requestID := range state.StickerThumbnailRequests {
-			clone.StickerThumbnailRequests[id] = requestID
-		}
-	}
-	if state.Thumbnails != nil {
-		clone.Thumbnails = make(map[domain.ChatID]map[domain.MessageID]thumbnail.Block, len(state.Thumbnails))
-		for chatID, byMsg := range state.Thumbnails {
-			inner := make(map[domain.MessageID]thumbnail.Block, len(byMsg))
-			for mid, block := range byMsg {
-				inner[mid] = block
-			}
-			clone.Thumbnails[chatID] = inner
-		}
-	}
-	if state.VideoOpenPending != nil {
-		clone.VideoOpenPending = make(map[domain.MessageID]uint64, len(state.VideoOpenPending))
-		for k, v := range state.VideoOpenPending {
-			clone.VideoOpenPending[k] = v
-		}
-	}
-	if state.AudioOpenPending != nil {
-		clone.AudioOpenPending = make(map[domain.MessageID]uint64, len(state.AudioOpenPending))
-		for k, v := range state.AudioOpenPending {
-			clone.AudioOpenPending[k] = v
-		}
-	}
-	if state.AttachmentOpenPending != nil {
-		clone.AttachmentOpenPending = make(map[attachmentOpenKey]attachmentOpenRequest, len(state.AttachmentOpenPending))
-		for k, v := range state.AttachmentOpenPending {
-			clone.AttachmentOpenPending[k] = v
-		}
-	}
-	if state.Topics != nil {
-		topics := *state.Topics
-		topics.Results = make([]domain.ForumTopic, len(state.Topics.Results))
-		copy(topics.Results, state.Topics.Results)
-		topics.Error = cloneDomainError(state.Topics.Error)
-		clone.Topics = &topics
-	}
-	if state.ForumTopics != nil {
-		clone.ForumTopics = make(map[domain.ChatID]map[domain.TopicID]domain.ForumTopic, len(state.ForumTopics))
-		for chatID, byTopic := range state.ForumTopics {
-			inner := make(map[domain.TopicID]domain.ForumTopic, len(byTopic))
-			for topicID, topic := range byTopic {
-				inner[topicID] = topic
-			}
-			clone.ForumTopics[chatID] = inner
-		}
-	}
-	if state.ShowAll != nil {
-		clone.ShowAll = make(map[domain.ChatID]bool, len(state.ShowAll))
-		for chatID, enabled := range state.ShowAll {
-			clone.ShowAll[chatID] = enabled
-		}
-	}
-	if state.SelectedTopics != nil {
-		clone.SelectedTopics = make(map[domain.ChatID]domain.TopicID, len(state.SelectedTopics))
-		for chatID, topicID := range state.SelectedTopics {
-			clone.SelectedTopics[chatID] = topicID
-		}
-	}
-	if state.TopicHistory != nil {
-		clone.TopicHistory = make(map[topicKey]HistoryState, len(state.TopicHistory))
-		for key, history := range state.TopicHistory {
-			clone.TopicHistory[key] = history
-		}
-	}
-	if state.TopicDrafts != nil {
-		clone.TopicDrafts = make(map[topicKey]string, len(state.TopicDrafts))
-		for key, draft := range state.TopicDrafts {
-			clone.TopicDrafts[key] = draft
-		}
-	}
-	if state.TopicDraftReplies != nil {
-		clone.TopicDraftReplies = make(map[topicKey]domain.MessageID, len(state.TopicDraftReplies))
-		for key, replyID := range state.TopicDraftReplies {
-			clone.TopicDraftReplies[key] = replyID
-		}
-	}
-	if state.TopicDraftDates != nil {
-		clone.TopicDraftDates = make(map[topicKey]int64, len(state.TopicDraftDates))
-		for key, date := range state.TopicDraftDates {
-			clone.TopicDraftDates[key] = date
-		}
-	}
-	if state.TopicDraftSync != nil {
-		clone.TopicDraftSync = make(map[topicKey]DraftSyncState, len(state.TopicDraftSync))
-		for key, syncState := range state.TopicDraftSync {
-			clone.TopicDraftSync[key] = syncState
-		}
-	}
-	return clone
-}
-
 func cloneDomainMessage(message domain.Message) domain.Message {
 	message.Failure = cloneDomainError(message.Failure)
 	message.Reactions = append([]domain.MessageReaction(nil), message.Reactions...)
 	return message
-}
-
-func cloneDomainChat(chat domain.Chat) domain.Chat {
-	return domain.Chat{
-		ID:                 chat.ID,
-		Kind:               chat.Kind,
-		IsForum:            chat.IsForum,
-		Title:              chat.Title,
-		Username:           chat.Username,
-		Avatar:             chat.Avatar,
-		LastMessage:        chat.LastMessage,
-		LastMessageAt:      chat.LastMessageAt,
-		UnreadCount:        chat.UnreadCount,
-		UnreadMentionCount: chat.UnreadMentionCount,
-		Muted:              chat.Muted,
-		CanSend:            chat.CanSend,
-		CanReact:           chat.CanReact,
-		IsPinned:           chat.IsPinned,
-		IsArchived:         chat.IsArchived,
-		IsMarkedUnread:     chat.IsMarkedUnread,
-		CanDeleteForSelf:   chat.CanDeleteForSelf,
-		CanDeleteForAll:    chat.CanDeleteForAll,
-		IsMember:           chat.IsMember,
-		Order:              chat.Order,
-		Draft:              chat.Draft,
-	}
 }
 
 func cloneDomainError(value *domain.AppError) *domain.AppError {

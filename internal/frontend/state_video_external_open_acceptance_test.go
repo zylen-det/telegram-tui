@@ -15,7 +15,8 @@ func TestVideoExternalOpenAcceptance_EligibleReceivedVideoActionAndNoDoubleDispa
 	file := domain.MediaFileRef{ID: 701, UniqueID: "video-main", CanDownload: true}
 	state := videoExternalOpenAcceptanceState(file, false)
 
-	menuState, propertyCommands := updateState(state, ActionReceived{Action: OpenMessageActionMenu})
+	propertyCommands := updateState(&state, ActionReceived{Action: OpenMessageActionMenu})
+	menuState := state
 	if len(propertyCommands) != 1 {
 		t.Fatalf("message-property commands = %#v, want one", propertyCommands)
 	}
@@ -23,7 +24,8 @@ func TestVideoExternalOpenAcceptance_EligibleReceivedVideoActionAndNoDoubleDispa
 		t.Fatalf("eligible received Video menu = %#v, want exact main file", menuState.MessageMenu)
 	}
 
-	started, commands := updateState(menuState, ActionReceived{Action: ViewMessageMedia})
+	commands := updateState(&menuState, ActionReceived{Action: ViewMessageMedia})
+	started := menuState
 	wantCommand := []Effect{OpenMessageMediaFile{RequestID: 41, ChatID: 9, MessageID: 77, Title: "Video", File: file}}
 	if !reflect.DeepEqual(commands, wantCommand) {
 		t.Fatalf("Video open commands = %#v, want %#v", commands, wantCommand)
@@ -35,21 +37,22 @@ func TestVideoExternalOpenAcceptance_EligibleReceivedVideoActionAndNoDoubleDispa
 		t.Fatalf("starting toast = %#v, want Opening video…", started.Toast)
 	}
 
-	duplicate, duplicateCommands := updateState(started, ActionReceived{Action: ViewMessageMedia})
-	if len(duplicateCommands) != 0 || !reflect.DeepEqual(duplicate, started) {
-		t.Fatalf("duplicate activation changed state or dispatched: state=%#v commands=%#v", duplicate, duplicateCommands)
+	duplicateCommands := updateState(&started, ActionReceived{Action: ViewMessageMedia})
+	if len(duplicateCommands) != 0 || started.VideoOpenPending[77] != 41 || started.Toast == nil || started.Toast.Message != "Opening video…" {
+		t.Fatalf("duplicate activation changed pending open: state=%#v commands=%#v", started, duplicateCommands)
 	}
 
-	pendingMenu, _ := updateState(started, ActionReceived{Action: OpenMessageActionMenu})
+	updateState(&started, ActionReceived{Action: OpenMessageActionMenu})
+	pendingMenu := started
 	if pendingMenu.MessageMenu == nil {
 		t.Fatal("message action menu did not reopen while Video launch was pending")
 	}
 	if pendingMenu.MessageMenu.MediaFile != (domain.MediaFileRef{}) {
 		t.Fatalf("pending Video exposed a second open action: %#v", pendingMenu.MessageMenu.MediaFile)
 	}
-	pendingAfterAction, pendingCommands := updateState(pendingMenu, ActionReceived{Action: ViewMessageMedia})
-	if len(pendingCommands) != 0 || !reflect.DeepEqual(pendingAfterAction, pendingMenu) {
-		t.Fatalf("pending Video double-dispatched: state=%#v commands=%#v", pendingAfterAction, pendingCommands)
+	pendingCommands := updateState(&pendingMenu, ActionReceived{Action: ViewMessageMedia})
+	if len(pendingCommands) != 0 || pendingMenu.VideoOpenPending[77] != 41 || pendingMenu.MessageMenu == nil || pendingMenu.MessageMenu.MediaFile != (domain.MediaFileRef{}) {
+		t.Fatalf("pending Video double-dispatched: state=%#v commands=%#v", pendingMenu, pendingCommands)
 	}
 }
 
@@ -72,7 +75,8 @@ func TestVideoExternalOpenAcceptance_VisibilityEligibility(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			state := videoExternalOpenAcceptanceState(test.file, test.outgoing)
 			state.Messages[9][0].Kind = test.kind
-			opened, _ := updateState(state, ActionReceived{Action: OpenMessageActionMenu})
+			updateState(&state, ActionReceived{Action: OpenMessageActionMenu})
+			opened := state
 			visible := opened.MessageMenu != nil && opened.MessageMenu.MediaFile != (domain.MediaFileRef{})
 			if visible != test.want {
 				t.Fatalf("open action visible = %t, want %t; menu=%#v", visible, test.want, opened.MessageMenu)
@@ -82,7 +86,8 @@ func TestVideoExternalOpenAcceptance_VisibilityEligibility(t *testing.T) {
 
 	photo := videoExternalOpenAcceptanceState(remote, false)
 	photo.Messages[9][0].Kind = domain.MessagePhoto
-	openedPhoto, _ := updateState(photo, ActionReceived{Action: OpenMessageActionMenu})
+	updateState(&photo, ActionReceived{Action: OpenMessageActionMenu})
+	openedPhoto := photo
 	if openedPhoto.MessageMenu == nil || !reflect.DeepEqual(openedPhoto.MessageMenu.MediaFile, remote) {
 		t.Fatal("existing received-Photo View image eligibility regressed")
 	}
@@ -90,8 +95,10 @@ func TestVideoExternalOpenAcceptance_VisibilityEligibility(t *testing.T) {
 
 func TestVideoExternalOpenAcceptance_CorrelationStaleResultsRetryAndToasts(t *testing.T) {
 	file := domain.MediaFileRef{ID: 701, UniqueID: "video-main", CanDownload: true}
-	menuState, _ := updateState(videoExternalOpenAcceptanceState(file, false), ActionReceived{Action: OpenMessageActionMenu})
-	started, _ := updateState(menuState, ActionReceived{Action: ViewMessageMedia})
+	menuState := videoExternalOpenAcceptanceState(file, false)
+	updateState(&menuState, ActionReceived{Action: OpenMessageActionMenu})
+	updateState(&menuState, ActionReceived{Action: ViewMessageMedia})
+	started := menuState
 
 	for _, staleEvent := range []Event{
 		MessageMediaOpened{RequestID: 40, ChatID: 9, MessageID: 77, Title: "Video", File: domain.MediaFileRef{ID: 701, Downloaded: true, LocalPath: "/tmp/wrong-request.mp4"}},
@@ -100,37 +107,43 @@ func TestVideoExternalOpenAcceptance_CorrelationStaleResultsRetryAndToasts(t *te
 		MessageMediaOpened{RequestID: 41, ChatID: 9, MessageID: 77, Title: "Video", File: domain.MediaFileRef{ID: 999, Downloaded: true, LocalPath: "/tmp/wrong-file.mp4"}},
 		MessageMediaOpenFailed{RequestID: 40, ChatID: 9, MessageID: 77, Error: domain.AppError{Kind: domain.ErrorMedia, Message: "Could not open video"}},
 	} {
-		got, commands := updateState(started, staleEvent)
-		if len(commands) != 0 || !reflect.DeepEqual(got, started) {
-			t.Fatalf("stale %T changed state or emitted commands: state=%#v commands=%#v", staleEvent, got, commands)
+		commands := updateState(&started, staleEvent)
+		if len(commands) != 0 || started.VideoOpenPending[77] != 41 || started.Messages[9][0].Media.File != file || started.Toast == nil || started.Toast.Message != "Opening video…" {
+			t.Fatalf("stale %T changed pending open: state=%#v commands=%#v", staleEvent, started, commands)
 		}
 	}
 
 	openedFile := domain.MediaFileRef{ID: 701, UniqueID: "video-main", CanDownload: true, Downloaded: true, LocalPath: "/tmp/video.mp4"}
-	succeeded, commands := updateState(started, MessageMediaOpened{RequestID: 41, ChatID: 9, MessageID: 77, Title: "Video", File: openedFile})
+	commands := updateState(&started, MessageMediaOpened{RequestID: 41, ChatID: 9, MessageID: 77, Title: "Video", File: openedFile})
+	succeeded := started
 	if len(commands) != 0 || !reflect.DeepEqual(succeeded.Messages[9][0].Media.File, openedFile) {
 		t.Fatalf("matched success = file:%#v commands:%#v", succeeded.Messages[9][0].Media.File, commands)
 	}
 	if succeeded.Toast == nil || succeeded.Toast.Message != "Video opened" || succeeded.Modal != nil {
 		t.Fatalf("success presentation = toast:%#v modal:%#v", succeeded.Toast, succeeded.Modal)
 	}
-	duplicateSuccess, _ := updateState(succeeded, MessageMediaOpened{RequestID: 41, ChatID: 9, MessageID: 77, Title: "Video", File: openedFile})
-	if !reflect.DeepEqual(duplicateSuccess, succeeded) {
-		t.Fatal("duplicate success relaunched or rewrote completed Video state")
+	duplicateCommands := updateState(&succeeded, MessageMediaOpened{RequestID: 41, ChatID: 9, MessageID: 77, Title: "Video", File: openedFile})
+	if len(duplicateCommands) != 0 || len(succeeded.VideoOpenPending) != 0 || succeeded.Messages[9][0].Media.File != openedFile || succeeded.Toast == nil || succeeded.Toast.Message != "Video opened" {
+		t.Fatalf("duplicate success changed completed Video state: %#v effects=%#v", succeeded, duplicateCommands)
 	}
 
-	menuState2, _ := updateState(videoExternalOpenAcceptanceState(file, false), ActionReceived{Action: OpenMessageActionMenu})
-	started2, _ := updateState(menuState2, ActionReceived{Action: ViewMessageMedia})
+	menuState2 := videoExternalOpenAcceptanceState(file, false)
+	updateState(&menuState2, ActionReceived{Action: OpenMessageActionMenu})
+	updateState(&menuState2, ActionReceived{Action: ViewMessageMedia})
+	started2 := menuState2
 	private := "private-platform-cause"
-	failed, commands := updateState(started2, MessageMediaOpenFailed{RequestID: 41, ChatID: 9, MessageID: 77, Error: domain.AppError{Kind: domain.ErrorMedia, Op: "open message media", Message: "Could not open video", Cause: errors.New(private)}})
+	commands = updateState(&started2, MessageMediaOpenFailed{RequestID: 41, ChatID: 9, MessageID: 77, Error: domain.AppError{Kind: domain.ErrorMedia, Op: "open message media", Message: "Could not open video", Cause: errors.New(private)}})
+	failed := started2
 	if len(commands) != 0 || failed.Toast == nil || failed.Toast.Message != "Could not open video" || strings.Contains(failed.Toast.Error(), private) {
 		t.Fatalf("matched failure = toast:%#v commands:%#v", failed.Toast, commands)
 	}
-	retryMenu, _ := updateState(failed, ActionReceived{Action: OpenMessageActionMenu})
+	updateState(&failed, ActionReceived{Action: OpenMessageActionMenu})
+	retryMenu := failed
 	if retryMenu.MessageMenu == nil || !reflect.DeepEqual(retryMenu.MessageMenu.MediaFile, file) {
 		t.Fatalf("failure did not restore manual retry action: %#v", retryMenu.MessageMenu)
 	}
-	retried, retryCommands := updateState(retryMenu, ActionReceived{Action: ViewMessageMedia})
+	retryCommands := updateState(&retryMenu, ActionReceived{Action: ViewMessageMedia})
+	retried := retryMenu
 	if len(retryCommands) != 1 || retried.Toast == nil || retried.Toast.Message != "Opening video…" {
 		t.Fatalf("manual retry = state:%#v commands:%#v", retried, retryCommands)
 	}

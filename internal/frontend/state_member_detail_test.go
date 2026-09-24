@@ -11,8 +11,8 @@ import (
 func openDetailForTest(t *testing.T, userID domain.UserID) State {
 	t.Helper()
 	state := membersBaseState(domain.ChatSupergroup)
-	opened, _ := updateState(state, ActionReceived{Action: OpenMembers})
-	loaded, _ := updateState(opened, MembersLoaded{RequestID: opened.Members.RequestID, ChatID: 9, Page: telegram.MemberPage{
+	updateState(&state, ActionReceived{Action: OpenMembers})
+	updateState(&state, MembersLoaded{RequestID: state.Members.RequestID, ChatID: 9, Page: telegram.MemberPage{
 		Members: []domain.ChatMember{
 			{User: domain.User{ID: 1, Name: "Ada Lovelace", Username: "ada"}, Role: domain.ChatMemberRoleOwner},
 			{User: domain.User{ID: 2, Name: "Bob"}},
@@ -21,66 +21,70 @@ func openDetailForTest(t *testing.T, userID domain.UserID) State {
 		NextOffset: 2,
 		Done:       true,
 	}})
-	detailed, commands := updateState(loaded, ActionReceived{Action: OpenMemberDetail, ChatID: 9, UserID: userID})
-	if detailed.Members == nil || detailed.Members.Detail == nil {
+	commands := updateState(&state, ActionReceived{Action: OpenMemberDetail, ChatID: 9, UserID: userID})
+	if state.Members == nil || state.Members.Detail == nil {
 		t.Fatalf("detail not opened for user %d", userID)
 	}
 	if len(commands) != 0 {
 		t.Fatalf("open detail commands = %#v", commands)
 	}
-	return detailed
+	return state
 }
 
 func TestMemberDetailOpensViaActivateAndBacksOutWithClose(t *testing.T) {
 	state := membersBaseState(domain.ChatSupergroup)
-	opened, _ := updateState(state, ActionReceived{Action: OpenMembers})
-	loaded, _ := updateState(opened, MembersLoaded{RequestID: opened.Members.RequestID, ChatID: 9, Page: telegram.MemberPage{
+	updateState(&state, ActionReceived{Action: OpenMembers})
+	updateState(&state, MembersLoaded{RequestID: state.Members.RequestID, ChatID: 9, Page: telegram.MemberPage{
 		Members:    []domain.ChatMember{{User: domain.User{ID: 1, Name: "Ada", Username: "ada"}}},
 		TotalCount: 1,
 		NextOffset: 1,
 		Done:       true,
 	}})
-	menuOpened, _ := updateState(loaded, ActionReceived{Action: Activate})
-	detail := menuOpened.Members.Detail
+	updateState(&state, ActionReceived{Action: Activate})
+	detail := state.Members.Detail
 	if detail == nil || detail.UserID != 1 || detail.Name != "Ada" || detail.Username != "ada" || detail.Role != 0 {
 		t.Fatalf("detail = %#v", detail)
 	}
-	if menuOpened.Focus != FocusMembers {
-		t.Fatalf("focus = %v, want FocusMembers (single modal)", menuOpened.Focus)
+	if state.Focus != FocusMembers {
+		t.Fatalf("focus = %v, want FocusMembers (single modal)", state.Focus)
 	}
 	// Close backs out to the list, keeping the modal open.
-	backed, _ := updateState(menuOpened, ActionReceived{Action: Close})
-	if backed.Members == nil || backed.Members.Detail != nil {
-		t.Fatalf("after close = %#v", backed.Members)
+	updateState(&state, ActionReceived{Action: Close})
+	if state.Members == nil || state.Members.Detail != nil {
+		t.Fatalf("after close = %#v", state.Members)
 	}
-	if backed.Focus != FocusMembers {
-		t.Fatalf("focus after back = %v", backed.Focus)
+	if state.Focus != FocusMembers {
+		t.Fatalf("focus after back = %v", state.Focus)
 	}
 	// Close from the list closes the modal.
-	closed, _ := updateState(backed, ActionReceived{Action: Close})
-	if closed.Members != nil || closed.Focus != FocusDetails {
-		t.Fatalf("closed = members=%#v focus=%v", closed.Members, closed.Focus)
+	updateState(&state, ActionReceived{Action: Close})
+	if state.Members != nil || state.Focus != FocusDetails {
+		t.Fatalf("closed = members=%#v focus=%v", state.Members, state.Focus)
 	}
 }
 
 func TestMemberDetailNavigationWrapsBackAndActions(t *testing.T) {
-	state := openDetailForTest(t, 1)
+	// updateState mutates in place, so each scenario starts from its own
+	// freshly opened detail.
+	moved := openDetailForTest(t, 1)
 	// Detail rows: Back + 5 actions.
-	moved, _ := updateState(state, ActionReceived{Action: SelectPrevious})
+	updateState(&moved, ActionReceived{Action: SelectPrevious})
 	if moved.Members.Detail.Selected != 5 {
 		t.Fatalf("wrap previous = %d, want 5", moved.Members.Detail.Selected)
 	}
-	moved, _ = updateState(moved, ActionReceived{Action: SelectNext})
+	updateState(&moved, ActionReceived{Action: SelectNext})
 	if moved.Members.Detail.Selected != 0 {
 		t.Fatalf("wrap next = %d, want 0", moved.Members.Detail.Selected)
 	}
 	// Activate on Back returns to the list.
-	backed, _ := updateState(state, ActionReceived{Action: Activate})
+	backed := openDetailForTest(t, 1)
+	updateState(&backed, ActionReceived{Action: Activate})
 	if backed.Members.Detail != nil {
 		t.Fatalf("back activate = %#v", backed.Members.Detail)
 	}
 	// Explicit back action with wrong chat is ignored.
-	ignored, _ := updateState(state, ActionReceived{Action: CloseMemberDetail, ChatID: 8})
+	ignored := openDetailForTest(t, 1)
+	updateState(&ignored, ActionReceived{Action: CloseMemberDetail, ChatID: 8})
 	if ignored.Members.Detail == nil {
 		t.Fatal("wrong-chat back cleared the detail")
 	}
@@ -110,22 +114,22 @@ func TestMemberDetailActionsOrder(t *testing.T) {
 func TestMemberDetailViewAvatarOpensModalOverMembers(t *testing.T) {
 	ref := domain.AvatarRef{FileID: 11, UniqueID: "avatar-1"}
 	state := membersBaseState(domain.ChatSupergroup)
-	opened, _ := updateState(state, ActionReceived{Action: OpenMembers})
-	loaded, _ := updateState(opened, MembersLoaded{RequestID: opened.Members.RequestID, ChatID: 9, Page: telegram.MemberPage{
+	updateState(&state, ActionReceived{Action: OpenMembers})
+	updateState(&state, MembersLoaded{RequestID: state.Members.RequestID, ChatID: 9, Page: telegram.MemberPage{
 		Members:    []domain.ChatMember{{User: domain.User{ID: 1, Name: "Ada", Avatar: ref}}},
 		TotalCount: 1,
 		NextOffset: 1,
 		Done:       true,
 	}})
-	detailed, _ := updateState(loaded, ActionReceived{Action: OpenMemberDetail, ChatID: 9, UserID: 1})
-	viewed, commands := updateState(detailed, ActionReceived{Action: ViewMemberAvatar})
-	if viewed.Modal == nil || viewed.Focus != FocusModal {
-		t.Fatalf("modal = %#v focus = %v", viewed.Modal, viewed.Focus)
+	updateState(&state, ActionReceived{Action: OpenMemberDetail, ChatID: 9, UserID: 1})
+	commands := updateState(&state, ActionReceived{Action: ViewMemberAvatar})
+	if state.Modal == nil || state.Focus != FocusModal {
+		t.Fatalf("modal = %#v focus = %v", state.Modal, state.Focus)
 	}
-	if viewed.Modal.PreviousFocus != FocusMembers || viewed.Modal.Title != "Ada" || viewed.Modal.Ref != ref {
-		t.Fatalf("modal = %#v", viewed.Modal)
+	if state.Modal.PreviousFocus != FocusMembers || state.Modal.Title != "Ada" || state.Modal.Ref != ref {
+		t.Fatalf("modal = %#v", state.Modal)
 	}
-	if viewed.Members == nil || viewed.Members.Detail == nil {
+	if state.Members == nil || state.Members.Detail == nil {
 		t.Fatal("members detail should survive under the avatar modal")
 	}
 	if len(commands) != 1 {
@@ -135,12 +139,13 @@ func TestMemberDetailViewAvatarOpensModalOverMembers(t *testing.T) {
 		t.Fatalf("command = %#v, want OpenAvatar", commands[0])
 	}
 	// Closing the avatar modal returns to the member detail.
-	closed, _ := updateState(viewed, ActionReceived{Action: Close})
-	if closed.Modal != nil || closed.Focus != FocusMembers || closed.Members.Detail == nil {
-		t.Fatalf("closed = modal=%#v focus=%v detail=%#v", closed.Modal, closed.Focus, closed.Members.Detail)
+	updateState(&state, ActionReceived{Action: Close})
+	if state.Modal != nil || state.Focus != FocusMembers || state.Members.Detail == nil {
+		t.Fatalf("closed = modal=%#v focus=%v detail=%#v", state.Modal, state.Focus, state.Members.Detail)
 	}
 	// Avatarless members expose no view action.
-	plain, _ := updateState(openDetailForTest(t, 2), ActionReceived{Action: ViewMemberAvatar})
+	plain := openDetailForTest(t, 2)
+	updateState(&plain, ActionReceived{Action: ViewMemberAvatar})
 	if plain.Modal != nil {
 		t.Fatalf("avatarless view opened modal: %#v", plain.Modal)
 	}
@@ -149,78 +154,84 @@ func TestMemberDetailViewAvatarOpensModalOverMembers(t *testing.T) {
 func TestMemberDetailCopyContactBlockFlow(t *testing.T) {
 	state := openDetailForTest(t, 1)
 	// Activate on the Copy row (index 1) issues the copy command.
-	withCopy, _ := updateState(state, ActionReceived{Action: SelectNext})
-	copied, commands := updateState(withCopy, ActionReceived{Action: Activate})
-	if len(commands) != 1 || !copied.Members.Detail.Working {
-		t.Fatalf("copy = working=%v commands=%#v", copied.Members.Detail.Working, commands)
+	updateState(&state, ActionReceived{Action: SelectNext})
+	commands := updateState(&state, ActionReceived{Action: Activate})
+	if len(commands) != 1 || !state.Members.Detail.Working {
+		t.Fatalf("copy = working=%v commands=%#v", state.Members.Detail.Working, commands)
 	}
 	copyCommand, ok := commands[0].(CopyMemberUsernameCommand)
 	if !ok || copyCommand.Text != "@ada" || copyCommand.UserID != 1 {
 		t.Fatalf("copy command = %#v", commands[0])
 	}
 	// Navigation blocked while working.
-	navigated, navCommands := updateState(copied, ActionReceived{Action: SelectNext})
-	if len(navCommands) != 0 || navigated.Members.Detail.Selected != 1 {
-		t.Fatalf("nav while working = %d %#v", navigated.Members.Detail.Selected, navCommands)
+	navCommands := updateState(&state, ActionReceived{Action: SelectNext})
+	if len(navCommands) != 0 || state.Members.Detail.Selected != 1 {
+		t.Fatalf("nav while working = %d %#v", state.Members.Detail.Selected, navCommands)
 	}
-	done, _ := updateState(copied, MemberUsernameCopied{RequestID: copyCommand.RequestID, ChatID: 9, UserID: 1})
-	if done.Members.Detail == nil || done.Members.Detail.Working || done.Toast == nil || done.Toast.Message != "Username copied" {
-		t.Fatalf("copied = detail=%#v toast=%#v", done.Members.Detail, done.Toast)
+	updateState(&state, MemberUsernameCopied{RequestID: copyCommand.RequestID, ChatID: 9, UserID: 1})
+	if state.Members.Detail == nil || state.Members.Detail.Working || state.Toast == nil || state.Toast.Message != "Username copied" {
+		t.Fatalf("copied = detail=%#v toast=%#v", state.Members.Detail, state.Toast)
 	}
-	stale, staleCommands := updateState(done, MemberUsernameCopied{RequestID: 999, ChatID: 9, UserID: 1})
-	if len(staleCommands) != 0 || !reflect.DeepEqual(stale, done) {
-		t.Fatal("stale copy result mutated state")
+	// A stale result must not alter the completed operation.
+	detail := *state.Members.Detail
+	toast := *state.Toast
+	staleCommands := updateState(&state, MemberUsernameCopied{RequestID: 999, ChatID: 9, UserID: 1})
+	if len(staleCommands) != 0 || !reflect.DeepEqual(state.Members.Detail, &detail) || !reflect.DeepEqual(state.Toast, &toast) {
+		t.Fatalf("stale copy result replaced completed operation: detail=%#v toast=%#v effects=%#v", state.Members.Detail, state.Toast, staleCommands)
 	}
 
-	adding, commands := updateState(openDetailForTest(t, 1), ActionReceived{Action: AddMemberContact})
+	adding := openDetailForTest(t, 1)
+	commands = updateState(&adding, ActionReceived{Action: AddMemberContact})
 	add, ok := commands[0].(AddMemberContactCommand)
 	if !ok || add.FirstName != "Ada" || add.LastName != "Lovelace" {
 		t.Fatalf("add command = %#v", commands[0])
 	}
-	_ = adding
-	added, _ := updateState(adding, MemberContactChanged{RequestID: add.RequestID, ChatID: 9, UserID: 1, Added: true})
-	if added.Members.Detail == nil || added.Toast == nil || added.Toast.Message != "Added to contacts" {
-		t.Fatalf("added = detail=%#v toast=%#v", added.Members.Detail, added.Toast)
+	updateState(&adding, MemberContactChanged{RequestID: add.RequestID, ChatID: 9, UserID: 1, Added: true})
+	if adding.Members.Detail == nil || adding.Toast == nil || adding.Toast.Message != "Added to contacts" {
+		t.Fatalf("added = detail=%#v toast=%#v", adding.Members.Detail, adding.Toast)
 	}
 
-	blocking, commands := updateState(openDetailForTest(t, 2), ActionReceived{Action: BlockMember})
+	blocking := openDetailForTest(t, 2)
+	commands = updateState(&blocking, ActionReceived{Action: BlockMember})
 	block := commands[0].(SetMemberBlockedCommand)
 	if !block.Blocked || block.UserID != 2 {
 		t.Fatalf("block command = %#v", commands[0])
 	}
-	blocked, _ := updateState(blocking, MemberBlockChanged{RequestID: block.RequestID, ChatID: 9, UserID: 2, Blocked: true})
-	if blocked.Members.Detail == nil || blocked.Toast.Message != "User blocked" {
-		t.Fatalf("blocked = detail=%#v toast=%#v", blocked.Members.Detail, blocked.Toast)
+	updateState(&blocking, MemberBlockChanged{RequestID: block.RequestID, ChatID: 9, UserID: 2, Blocked: true})
+	if blocking.Members.Detail == nil || blocking.Toast.Message != "User blocked" {
+		t.Fatalf("blocked = detail=%#v toast=%#v", blocking.Members.Detail, blocking.Toast)
 	}
 
-	unblocking, commands := updateState(openDetailForTest(t, 2), ActionReceived{Action: UnblockMember})
+	unblocking := openDetailForTest(t, 2)
+	commands = updateState(&unblocking, ActionReceived{Action: UnblockMember})
 	unblock := commands[0].(SetMemberBlockedCommand)
-	failed, _ := updateState(unblocking, MemberBlockFailed{RequestID: unblock.RequestID, ChatID: 9, UserID: 2, Blocked: false, Error: domain.AppError{Message: "raw"}})
-	if failed.Members.Detail == nil || failed.Toast == nil || failed.Toast.Message != "Could not unblock user" {
-		t.Fatalf("unblock failure = detail=%#v toast=%#v", failed.Members.Detail, failed.Toast)
+	updateState(&unblocking, MemberBlockFailed{RequestID: unblock.RequestID, ChatID: 9, UserID: 2, Blocked: false, Error: domain.AppError{Message: "raw"}})
+	if unblocking.Members.Detail == nil || unblocking.Toast == nil || unblocking.Toast.Message != "Could not unblock user" {
+		t.Fatalf("unblock failure = detail=%#v toast=%#v", unblocking.Members.Detail, unblocking.Toast)
 	}
 
-	removing, commands := updateState(openDetailForTest(t, 2), ActionReceived{Action: RemoveMemberContact})
+	removing := openDetailForTest(t, 2)
+	commands = updateState(&removing, ActionReceived{Action: RemoveMemberContact})
 	remove := commands[0].(RemoveMemberContactCommand)
-	removeFailed, _ := updateState(removing, MemberContactFailed{RequestID: remove.RequestID, ChatID: 9, UserID: 2, Added: false, Error: domain.AppError{Message: "x"}})
-	if removeFailed.Members.Detail == nil || removeFailed.Toast.Message != "Could not remove contact" {
-		t.Fatalf("remove failure = detail=%#v toast=%#v", removeFailed.Members.Detail, removeFailed.Toast)
+	updateState(&removing, MemberContactFailed{RequestID: remove.RequestID, ChatID: 9, UserID: 2, Added: false, Error: domain.AppError{Message: "x"}})
+	if removing.Members.Detail == nil || removing.Toast.Message != "Could not remove contact" {
+		t.Fatalf("remove failure = detail=%#v toast=%#v", removing.Members.Detail, removing.Toast)
 	}
 }
 
 func TestMemberDetailAvatarRequestedOnceAndCached(t *testing.T) {
 	ref := domain.AvatarRef{FileID: 11, UniqueID: "avatar-1"}
 	state := membersBaseState(domain.ChatSupergroup)
-	opened, _ := updateState(state, ActionReceived{Action: OpenMembers})
-	loaded, _ := updateState(opened, MembersLoaded{RequestID: opened.Members.RequestID, ChatID: 9, Page: telegram.MemberPage{
+	updateState(&state, ActionReceived{Action: OpenMembers})
+	updateState(&state, MembersLoaded{RequestID: state.Members.RequestID, ChatID: 9, Page: telegram.MemberPage{
 		Members:    []domain.ChatMember{{User: domain.User{ID: 1, Name: "Ada", Avatar: ref}}},
 		TotalCount: 1,
 		NextOffset: 1,
 		Done:       true,
 	}})
-	detailed, commands := updateState(loaded, ActionReceived{Action: OpenMemberDetail, ChatID: 9, UserID: 1})
-	if detailed.Members.Detail.AvatarKey != "avatar-1:chat-list" {
-		t.Fatalf("avatar key = %q", detailed.Members.Detail.AvatarKey)
+	commands := updateState(&state, ActionReceived{Action: OpenMemberDetail, ChatID: 9, UserID: 1})
+	if state.Members.Detail.AvatarKey != "avatar-1:chat-list" {
+		t.Fatalf("avatar key = %q", state.Members.Detail.AvatarKey)
 	}
 	if len(commands) != 1 {
 		t.Fatalf("open commands = %#v", commands)
@@ -230,23 +241,26 @@ func TestMemberDetailAvatarRequestedOnceAndCached(t *testing.T) {
 		t.Fatalf("render command = %#v", commands[0])
 	}
 	// Reopening while cached issues no duplicate request.
-	again, commands := updateState(detailed, ActionReceived{Action: CloseMemberDetail, ChatID: 9})
-	reopened, commands := updateState(again, ActionReceived{Action: OpenMemberDetail, ChatID: 9, UserID: 1})
+	updateState(&state, ActionReceived{Action: CloseMemberDetail, ChatID: 9})
+	commands = updateState(&state, ActionReceived{Action: OpenMemberDetail, ChatID: 9, UserID: 1})
 	if len(commands) != 0 {
 		t.Fatalf("cached reopen commands = %#v", commands)
 	}
-	_ = reopened
+	if state.Members.Detail == nil || state.Members.Detail.AvatarKey != "avatar-1:chat-list" {
+		t.Fatalf("reopened detail = %#v", state.Members.Detail)
+	}
 	// Member without an avatar requests nothing.
-	plain, _ := updateState(membersBaseState(domain.ChatSupergroup), ActionReceived{Action: OpenMembers})
-	plainLoaded, _ := updateState(plain, MembersLoaded{RequestID: plain.Members.RequestID, ChatID: 9, Page: telegram.MemberPage{
+	plain := membersBaseState(domain.ChatSupergroup)
+	updateState(&plain, ActionReceived{Action: OpenMembers})
+	updateState(&plain, MembersLoaded{RequestID: plain.Members.RequestID, ChatID: 9, Page: telegram.MemberPage{
 		Members:    []domain.ChatMember{{User: domain.User{ID: 2, Name: "Bob"}}},
 		TotalCount: 1,
 		NextOffset: 1,
 		Done:       true,
 	}})
-	noAvatar, commands := updateState(plainLoaded, ActionReceived{Action: OpenMemberDetail, ChatID: 9, UserID: 2})
-	if noAvatar.Members.Detail.AvatarKey != "" || len(commands) != 0 {
-		t.Fatalf("avatarless detail = key=%q commands=%#v", noAvatar.Members.Detail.AvatarKey, commands)
+	commands = updateState(&plain, ActionReceived{Action: OpenMemberDetail, ChatID: 9, UserID: 2})
+	if plain.Members.Detail.AvatarKey != "" || len(commands) != 0 {
+		t.Fatalf("avatarless detail = key=%q commands=%#v", plain.Members.Detail.AvatarKey, commands)
 	}
 }
 
@@ -258,23 +272,24 @@ func TestSingleDetailEnterOnBackClosesModal(t *testing.T) {
 		{ID: 2, ChatID: 9, Kind: domain.MessageText, Sender: domain.SenderRef{Kind: domain.SenderUser, ID: 7}},
 	}
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, UserID: 7, PreviousFocus: FocusConversation}
-	opened, commands := updateState(state, ActionReceived{Action: ViewUserInfo})
+	commands := updateState(&state, ActionReceived{Action: ViewUserInfo})
 	load := commands[0].(LoadUserInfo)
-	loaded, _ := updateState(opened, UserInfoLoaded{RequestID: load.RequestID, ChatID: 9, UserID: 7, User: domain.User{ID: 7, Name: "Ada"}})
+	updateState(&state, UserInfoLoaded{RequestID: load.RequestID, ChatID: 9, UserID: 7, User: domain.User{ID: 7, Name: "Ada"}})
+	detail := state.Members.Detail
+	if detail == nil || detail.Selected != 0 {
+		t.Fatalf("detail = %+v, want selection 0", detail)
+	}
 	// Keyboard Enter with the ‹ Back row selected must close the modal,
 	// not fall back to an empty list shell.
-	if loaded.Members.Detail.Selected != 0 {
-		t.Fatalf("detail selection = %d, want 0", loaded.Members.Detail.Selected)
-	}
-	closed, _ := updateState(loaded, ActionReceived{Action: Activate})
-	if closed.Members != nil || closed.Focus != FocusConversation {
-		t.Fatalf("back-enter = members=%#v focus=%v", closed.Members, closed.Focus)
+	updateState(&state, ActionReceived{Action: Activate})
+	if state.Members != nil || state.Focus != FocusConversation {
+		t.Fatalf("back-enter = members=%#v focus=%v", state.Members, state.Focus)
 	}
 	// List mode keeps the old behavior: back returns to the member list.
 	listed := openDetailForTest(t, 1)
-	backed, _ := updateState(listed, ActionReceived{Action: Activate})
-	if backed.Members == nil || backed.Members.Detail != nil {
-		t.Fatalf("list back-enter = %#v", backed.Members)
+	updateState(&listed, ActionReceived{Action: Activate})
+	if listed.Members == nil || listed.Members.Detail != nil {
+		t.Fatalf("list back-enter = %#v", listed.Members)
 	}
 }
 
@@ -290,16 +305,6 @@ func TestSplitMemberNameFallbacks(t *testing.T) {
 	first, last = splitMemberName("", "")
 	if first != "Telegram" || last != "" {
 		t.Fatalf("generic fallback = %q %q", first, last)
-	}
-}
-
-func TestMemberDetailCloneDoesNotAlias(t *testing.T) {
-	state := openDetailForTest(t, 1)
-	cloned := cloneReducerState(state)
-	cloned.Members.Detail.Selected = 4
-	cloned.Members.Detail.Name = "mutated"
-	if state.Members.Detail.Selected != 0 || state.Members.Detail.Name != "Ada Lovelace" {
-		t.Fatal("detail clone aliases state")
 	}
 }
 
@@ -327,22 +332,28 @@ func TestMessageMenuOffersUserInfoAfterCopyForUserSenders(t *testing.T) {
 }
 
 func TestOpenMessageActionMenuCapturesUserSender(t *testing.T) {
-	state := InitialState()
-	state.Focus = FocusConversation
-	state.Chats = []domain.Chat{{ID: 9, Title: "Group"}}
-	state.Messages[9] = []domain.Message{
-		{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "hi", Sender: domain.SenderRef{Kind: domain.SenderUser, ID: 7}, SenderName: "Ada"},
-		{ID: 3, ChatID: 9, Kind: domain.MessageText, Text: "ch", Sender: domain.SenderRef{Kind: domain.SenderChat, ID: 9}},
+	fixture := func() State {
+		state := InitialState()
+		state.Focus = FocusConversation
+		state.Chats = []domain.Chat{{ID: 9, Title: "Group"}}
+		state.Messages[9] = []domain.Message{
+			{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "hi", Sender: domain.SenderRef{Kind: domain.SenderUser, ID: 7}, SenderName: "Ada"},
+			{ID: 3, ChatID: 9, Kind: domain.MessageText, Text: "ch", Sender: domain.SenderRef{Kind: domain.SenderChat, ID: 9}},
+		}
+		return state
 	}
+	// Each menu open starts from a fresh conversation without a menu.
+	state := fixture()
 	state.SelectedMessageChat, state.SelectedMessage = 9, 2
-	opened, _ := updateState(state, ActionReceived{Action: OpenMessageActionMenu})
-	if opened.MessageMenu == nil || opened.MessageMenu.UserID != 7 {
-		t.Fatalf("menu user = %#v", opened.MessageMenu)
+	updateState(&state, ActionReceived{Action: OpenMessageActionMenu})
+	if state.MessageMenu == nil || state.MessageMenu.UserID != 7 {
+		t.Fatalf("menu user = %#v", state.MessageMenu)
 	}
+	state = fixture()
 	state.SelectedMessageChat, state.SelectedMessage = 9, 3
-	opened, _ = updateState(state, ActionReceived{Action: OpenMessageActionMenu})
-	if opened.MessageMenu == nil || opened.MessageMenu.UserID != 0 {
-		t.Fatalf("chat sender menu user = %#v", opened.MessageMenu)
+	updateState(&state, ActionReceived{Action: OpenMessageActionMenu})
+	if state.MessageMenu == nil || state.MessageMenu.UserID != 0 {
+		t.Fatalf("chat sender menu user = %#v", state.MessageMenu)
 	}
 }
 
@@ -354,9 +365,9 @@ func TestViewUserInfoOpensSingleModalAndLoadsUser(t *testing.T) {
 		{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "hi", Sender: domain.SenderRef{Kind: domain.SenderUser, ID: 7}, SenderName: "Ada"},
 	}
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, UserID: 7, Capabilities: domain.MessageCapabilities{Copy: true}, PreviousFocus: FocusConversation}
-	opened, commands := updateState(state, ActionReceived{Action: ViewUserInfo})
-	if opened.MessageMenu != nil || opened.Members == nil || !opened.Members.Single || opened.Focus != FocusMembers {
-		t.Fatalf("opened = menu=%#v members=%#v focus=%v", opened.MessageMenu, opened.Members, opened.Focus)
+	commands := updateState(&state, ActionReceived{Action: ViewUserInfo})
+	if state.MessageMenu != nil || state.Members == nil || !state.Members.Single || state.Focus != FocusMembers {
+		t.Fatalf("opened = menu=%#v members=%#v focus=%v", state.MessageMenu, state.Members, state.Focus)
 	}
 	if len(commands) != 1 {
 		t.Fatalf("commands = %#v", commands)
@@ -365,11 +376,11 @@ func TestViewUserInfoOpensSingleModalAndLoadsUser(t *testing.T) {
 	if !ok || load.ChatID != 9 || load.UserID != 7 {
 		t.Fatalf("command = %#v", commands[0])
 	}
-	loaded, commands := updateState(opened, UserInfoLoaded{
+	commands = updateState(&state, UserInfoLoaded{
 		RequestID: load.RequestID, ChatID: 9, UserID: 7,
 		User: domain.User{ID: 7, Name: "Ada", Username: "ada", Avatar: domain.AvatarRef{UniqueID: "u7"}},
 	})
-	detail := loaded.Members.Detail
+	detail := state.Members.Detail
 	if detail == nil || detail.Name != "Ada" || detail.Username != "ada" || detail.AvatarKey != "u7:chat-list" {
 		t.Fatalf("detail = %#v", detail)
 	}
@@ -379,15 +390,16 @@ func TestViewUserInfoOpensSingleModalAndLoadsUser(t *testing.T) {
 	if _, ok := commands[0].(RenderAvatar); !ok {
 		t.Fatalf("command = %#v, want RenderAvatar", commands[0])
 	}
-	// Stale load ignored.
-	stale, staleCommands := updateState(loaded, UserInfoLoaded{RequestID: 999, ChatID: 9, UserID: 7, User: domain.User{ID: 7}})
-	if len(staleCommands) != 0 || !reflect.DeepEqual(stale, loaded) {
-		t.Fatal("stale user info mutated state")
+	// Stale load ignored: the current detail content survives.
+	before := *detail
+	staleCommands := updateState(&state, UserInfoLoaded{RequestID: 999, ChatID: 9, UserID: 7, User: domain.User{ID: 7}})
+	if len(staleCommands) != 0 || !reflect.DeepEqual(state.Members.Detail, &before) {
+		t.Fatalf("stale user info replaced current detail: %#v effects=%#v", state.Members.Detail, staleCommands)
 	}
 	// Esc in single mode closes the whole modal.
-	closed, _ := updateState(loaded, ActionReceived{Action: Close})
-	if closed.Members != nil || closed.Focus != FocusConversation {
-		t.Fatalf("closed = members=%#v focus=%v", closed.Members, closed.Focus)
+	updateState(&state, ActionReceived{Action: Close})
+	if state.Members != nil || state.Focus != FocusConversation {
+		t.Fatalf("closed = members=%#v focus=%v", state.Members, state.Focus)
 	}
 }
 
@@ -399,10 +411,10 @@ func TestUserInfoLoadFailedShowsErrorRow(t *testing.T) {
 		{ID: 2, ChatID: 9, Kind: domain.MessageText, Sender: domain.SenderRef{Kind: domain.SenderUser, ID: 7}},
 	}
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, UserID: 7, PreviousFocus: FocusConversation}
-	opened, commands := updateState(state, ActionReceived{Action: ViewUserInfo})
+	commands := updateState(&state, ActionReceived{Action: ViewUserInfo})
 	load := commands[0].(LoadUserInfo)
-	failed, _ := updateState(opened, UserInfoLoadFailed{RequestID: load.RequestID, ChatID: 9, UserID: 7, Error: domain.AppError{Message: "raw"}})
-	if failed.Members.Error == nil || failed.Members.Error.Message != "Could not load user info" || failed.Members.Detail != nil {
-		t.Fatalf("failed = %#v", failed.Members)
+	updateState(&state, UserInfoLoadFailed{RequestID: load.RequestID, ChatID: 9, UserID: 7, Error: domain.AppError{Message: "raw"}})
+	if state.Members.Error == nil || state.Members.Error.Message != "Could not load user info" || state.Members.Detail != nil {
+		t.Fatalf("failed = %#v", state.Members)
 	}
 }

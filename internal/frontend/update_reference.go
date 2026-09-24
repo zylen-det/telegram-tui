@@ -8,20 +8,20 @@ import (
 
 // A reference jump belongs to the open message menu. Closing the menu cancels
 // the jump: late context results can no longer change the conversation.
-func beginReferencedMessageJump(state State) (State, []Effect) {
+func beginReferencedMessageJump(state *State) []Effect {
 	menu := state.MessageMenu
 	if menu == nil || menu.JumpRequestID != 0 || menu.ReferencedMessageID <= 0 {
-		return state, nil
+		return nil
 	}
-	chatID, active := activeChatID(state)
-	message, found := messageByIdentity(state, menu.ChatID, menu.MessageID)
+	chatID, active := activeChatID(*state)
+	message, found := messageByIdentity(*state, menu.ChatID, menu.MessageID)
 	if !active || chatID != menu.ChatID || !found || !message.HasReply || message.ReplyToMessageID != menu.ReferencedMessageID {
-		return state, nil
+		return nil
 	}
-	requestID := allocateRequestID(&state)
+	requestID := allocateRequestID(state)
 	menu.JumpRequestID = requestID
 	// Load against the chat so references across forum topics can be found too.
-	return state, []Effect{LoadSearchMessageContext{RequestID: requestID, ChatID: chatID, MessageID: menu.ReferencedMessageID}}
+	return []Effect{LoadSearchMessageContext{RequestID: requestID, ChatID: chatID, MessageID: menu.ReferencedMessageID}}
 }
 
 func referenceJumpMatches(state State, requestID uint64, chatID domain.ChatID, messageID domain.MessageID) bool {
@@ -31,9 +31,9 @@ func referenceJumpMatches(state State, requestID uint64, chatID domain.ChatID, m
 		menu.ChatID == chatID && menu.ReferencedMessageID == messageID && active && activeID == chatID
 }
 
-func reduceReferencedMessageLoaded(state State, event SearchMessageContextLoaded) (State, []Effect) {
-	if !referenceJumpMatches(state, event.RequestID, event.ChatID, event.MessageID) || event.TopicID != 0 {
-		return state, nil
+func reduceReferencedMessageLoaded(state *State, event SearchMessageContextLoaded) []Effect {
+	if !referenceJumpMatches(*state, event.RequestID, event.ChatID, event.MessageID) || event.TopicID != 0 {
+		return nil
 	}
 	var target domain.Message
 	for _, message := range event.Page.Messages {
@@ -57,11 +57,11 @@ func reduceReferencedMessageLoaded(state State, event SearchMessageContextLoaded
 		state.EditTarget = nil
 		state.CommandMenu = nil
 	}
-	visible := visibleConversationMessages(state, event.ChatID)
+	visible := visibleConversationMessages(*state, event.ChatID)
 	index := messageIndex(visible, event.MessageID)
 	state.SelectedMessageChat, state.SelectedMessage = event.ChatID, event.MessageID
-	key, topicActive := activeTopicKey(state)
-	_, topicKnown := visibleConversationTopic(state, event.ChatID)
+	key, topicActive := activeTopicKey(*state)
+	_, topicKnown := visibleConversationTopic(*state, event.ChatID)
 	if topicActive && topicKnown {
 		history := state.TopicHistory[key]
 		history.Loading = false
@@ -81,16 +81,16 @@ func reduceReferencedMessageLoaded(state State, event SearchMessageContextLoaded
 	}
 	state.MessageMenu = nil
 	state.Focus = FocusConversation
-	commands := requestMissingMessageAvatars(&state, event.Page.Messages)
-	commands = append(commands, requestMissingThumbnails(&state, event.Page.Messages)...)
-	return state, commands
+	commands := requestMissingMessageAvatars(state, event.Page.Messages)
+	commands = append(commands, requestMissingThumbnails(state, event.Page.Messages)...)
+	return commands
 }
 
-func reduceReferencedMessageFailed(state State, event SearchMessageContextFailed) (State, []Effect) {
-	if !referenceJumpMatches(state, event.RequestID, event.ChatID, event.MessageID) || event.TopicID != 0 {
-		return state, nil
+func reduceReferencedMessageFailed(state *State, event SearchMessageContextFailed) []Effect {
+	if !referenceJumpMatches(*state, event.RequestID, event.ChatID, event.MessageID) || event.TopicID != 0 {
+		return nil
 	}
 	state.MessageMenu.JumpRequestID = 0
-	setToast(&state, domain.AppError{Kind: domain.ErrorNetwork, Op: "load referenced message", Message: "Could not open referenced message"}, 4*time.Second)
-	return state, nil
+	setToast(state, domain.AppError{Kind: domain.ErrorNetwork, Op: "load referenced message", Message: "Could not open referenced message"}, 4*time.Second)
+	return nil
 }

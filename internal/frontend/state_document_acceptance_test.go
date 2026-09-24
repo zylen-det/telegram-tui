@@ -38,7 +38,7 @@ func TestDocumentChooserClassificationAndOptimisticSubmit(t *testing.T) {
 
 	state := documentSendState("/tmp/archive.tar.gz")
 	now := time.Unix(100, 0)
-	got, commands := updateState(state, ActionReceived{Action: PhotoSendSubmit, At: now})
+	commands := updateState(&state, ActionReceived{Action: PhotoSendSubmit, At: now})
 	want := []Effect{
 		SendDocument{RequestID: 30, LocalID: -7, ChatID: 9, LocalPath: "/tmp/archive.tar.gz", Caption: "document caption", ReplyToMessageID: 51},
 		SaveDraft{RequestID: 31, ChatID: 9},
@@ -46,33 +46,39 @@ func TestDocumentChooserClassificationAndOptimisticSubmit(t *testing.T) {
 	if !reflect.DeepEqual(commands, want) {
 		t.Fatalf("commands = %#v, want %#v", commands, want)
 	}
-	message := got.Messages[9][0]
+	message := state.Messages[9][0]
 	if message.ID != -7 || message.Kind != domain.MessageDocument || message.Text != "document caption" || message.FileName != "archive.tar.gz" || !message.Outgoing || message.SendState != domain.SendPending || message.Media.File.LocalPath != "/tmp/archive.tar.gz" || !message.Media.File.Downloaded || !message.HasReply || message.ReplyToMessageID != 51 {
 		t.Fatalf("optimistic message = %#v", message)
 	}
-	if got.SelectedMessage != -7 || got.SelectedMessageChat != 9 || got.PhotoSend != nil || got.Drafts[9] != "" || got.ReplyTarget != nil || got.Focus != FocusConversation || got.DocumentSendRequests[-7] != 30 {
-		t.Fatalf("post-submit state = %#v", got)
+	if state.SelectedMessage != -7 || state.SelectedMessageChat != 9 || state.PhotoSend != nil || state.Drafts[9] != "" || state.ReplyTarget != nil || state.Focus != FocusConversation || state.DocumentSendRequests[-7] != 30 {
+		t.Fatalf("post-submit state = %#v", state)
 	}
 
 	photo := documentSendState("/tmp/pic.JPG")
-	_, photoCommands := updateState(photo, ActionReceived{Action: PhotoSendSubmit, At: now})
+	photoCommands := updateState(&photo, ActionReceived{Action: PhotoSendSubmit, At: now})
 	if _, ok := photoCommands[0].(SendPhoto); !ok {
 		t.Fatalf("photo command = %T", photoCommands[0])
 	}
 	video := documentSendState("/tmp/clip.mp4")
-	_, videoCommands := updateState(video, ActionReceived{Action: PhotoSendSubmit, At: now})
+	videoCommands := updateState(&video, ActionReceived{Action: PhotoSendSubmit, At: now})
 	if _, ok := videoCommands[0].(SendVideo); !ok {
 		t.Fatalf("video command = %T", videoCommands[0])
 	}
 	audio := documentSendState("/tmp/song.mp3")
-	_, audioCommands := updateState(audio, ActionReceived{Action: PhotoSendSubmit, At: now})
+	audioCommands := updateState(&audio, ActionReceived{Action: PhotoSendSubmit, At: now})
 	if _, ok := audioCommands[0].(SendAudio); !ok {
 		t.Fatalf("audio command = %T", audioCommands[0])
 	}
 }
 
 func TestDocumentQueueCorrelationFailureRetryAndTerminalReconciliation(t *testing.T) {
-	pending, _ := updateState(documentSendState("/tmp/archive.tar.gz"), ActionReceived{Action: PhotoSendSubmit, At: time.Unix(100, 0)})
+	// updateState mutates in place, so each independent scenario below starts
+	// from its own freshly submitted fixture.
+	submit := func() State {
+		state := documentSendState("/tmp/archive.tar.gz")
+		updateState(&state, ActionReceived{Action: PhotoSendSubmit, At: time.Unix(100, 0)})
+		return state
+	}
 
 	staleEvents := []DocumentQueued{
 		{RequestID: 29, LocalID: -7, ChatID: 9, Message: domain.Message{ID: -20, ChatID: 9, Kind: domain.MessageDocument}},
@@ -81,21 +87,27 @@ func TestDocumentQueueCorrelationFailureRetryAndTerminalReconciliation(t *testin
 		{RequestID: 30, LocalID: -7, ChatID: 9, Message: domain.Message{ID: -20, ChatID: 9, Kind: domain.MessagePhoto}},
 	}
 	for _, event := range staleEvents {
-		stale, staleCommands := updateState(pending, event)
-		if len(staleCommands) != 0 || !reflect.DeepEqual(stale, pending) {
+		stale := submit()
+		staleCommands := updateState(&stale, event)
+		if len(staleCommands) != 0 || !reflect.DeepEqual(stale, submit()) {
 			t.Fatalf("stale queue result mutated state for %#v: %#v %#v", event, stale, staleCommands)
 		}
 	}
 
-	collision := cloneReducerState(pending)
-	collision.Messages[9] = append(collision.Messages[9], domain.Message{ID: -20, ChatID: 9, Kind: domain.MessageText, Text: "existing"})
-	collisionResult, collisionCommands := updateState(collision, DocumentQueued{RequestID: 30, LocalID: -7, ChatID: 9, Message: domain.Message{ID: -20, ChatID: 9, Kind: domain.MessageDocument}})
-	if len(collisionCommands) != 0 || !reflect.DeepEqual(collisionResult, collision) {
-		t.Fatalf("queued ID collision mutated state: %#v %#v", collisionResult, collisionCommands)
+	collisionFixture := func() State {
+		state := submit()
+		state.Messages[9] = append(state.Messages[9], domain.Message{ID: -20, ChatID: 9, Kind: domain.MessageText, Text: "existing"})
+		return state
+	}
+	collision := collisionFixture()
+	collisionCommands := updateState(&collision, DocumentQueued{RequestID: 30, LocalID: -7, ChatID: 9, Message: domain.Message{ID: -20, ChatID: 9, Kind: domain.MessageDocument}})
+	if len(collisionCommands) != 0 || !reflect.DeepEqual(collision, collisionFixture()) {
+		t.Fatalf("queued ID collision mutated state: %#v %#v", collision, collisionCommands)
 	}
 
 	queuedMessage := domain.Message{ID: -20, ChatID: 9, Kind: domain.MessageDocument, Outgoing: true, SendState: domain.SendPending}
-	queued, _ := updateState(pending, DocumentQueued{RequestID: 30, LocalID: -7, ChatID: 9, Message: queuedMessage})
+	queued := submit()
+	updateState(&queued, DocumentQueued{RequestID: 30, LocalID: -7, ChatID: 9, Message: queuedMessage})
 	if len(queued.Messages[9]) != 1 || queued.Messages[9][0].ID != -20 || queued.Messages[9][0].Text != "document caption" || queued.Messages[9][0].FileName != "archive.tar.gz" || queued.Messages[9][0].Media.File.LocalPath != "/tmp/archive.tar.gz" || queued.SelectedMessage != -20 {
 		t.Fatalf("queued replacement = %#v", queued.Messages[9])
 	}
@@ -109,31 +121,37 @@ func TestDocumentQueueCorrelationFailureRetryAndTerminalReconciliation(t *testin
 		{RequestID: 30, LocalID: -8, ChatID: 9, Error: failure, FailedAt: time.Unix(101, 0)},
 		{RequestID: 30, LocalID: -7, ChatID: 8, Error: failure, FailedAt: time.Unix(101, 0)},
 	} {
-		staleFailure, staleFailureCommands := updateState(pending, event)
-		if len(staleFailureCommands) != 0 || !reflect.DeepEqual(staleFailure, pending) {
+		staleFailure := submit()
+		staleFailureCommands := updateState(&staleFailure, event)
+		if len(staleFailureCommands) != 0 || !reflect.DeepEqual(staleFailure, submit()) {
 			t.Fatalf("stale failure mutated state for %#v: %#v %#v", event, staleFailure, staleFailureCommands)
 		}
 	}
-	failed, _ := updateState(pending, DocumentQueueFailed{RequestID: 30, LocalID: -7, ChatID: 9, Error: failure, FailedAt: time.Unix(101, 0)})
+	failed := submit()
+	updateState(&failed, DocumentQueueFailed{RequestID: 30, LocalID: -7, ChatID: 9, Error: failure, FailedAt: time.Unix(101, 0)})
 	if failed.Messages[9][0].SendState != domain.SendFailed || failed.Messages[9][0].Failure == nil || failed.DocumentSendRequests[-7] != 0 {
 		t.Fatalf("queue failure = %#v", failed)
 	}
 	beforeTooEarly := cloneState(failed)
-	tooEarly, commands := updateState(failed, ActionReceived{Action: Retry, MessageID: -7, At: time.Unix(101, 0)})
-	if len(commands) != 0 || !reflect.DeepEqual(tooEarly, beforeTooEarly) {
-		t.Fatal("retry before RetryAt mutated state")
+	commands := updateState(&failed, ActionReceived{Action: Retry, MessageID: -7, At: time.Unix(101, 0)})
+	if len(commands) != 0 || !reflect.DeepEqual(failed, beforeTooEarly) || len(failed.DocumentSendRequests) != 0 {
+		t.Fatalf("retry before RetryAt changed message or ledger: state=%#v effects=%#v", failed, commands)
 	}
-	retried, commands := updateState(failed, ActionReceived{Action: Retry, MessageID: -7, At: time.Unix(102, 0)})
+	// The too-early retry is asserted to be a full no-op, so the valid retry
+	// continues on the same state.
+	commands = updateState(&failed, ActionReceived{Action: Retry, MessageID: -7, At: time.Unix(102, 0)})
 	wantRetry := []Effect{SendDocument{RequestID: 32, LocalID: -7, ChatID: 9, LocalPath: "/tmp/archive.tar.gz", Caption: "document caption", ReplyToMessageID: 51}}
-	if !reflect.DeepEqual(commands, wantRetry) || retried.Messages[9][0].SendState != domain.SendPending || retried.DocumentSendRequests[-7] != 32 {
-		t.Fatalf("retry = %#v commands=%#v", retried.Messages[9][0], commands)
+	if !reflect.DeepEqual(commands, wantRetry) || failed.Messages[9][0].SendState != domain.SendPending || failed.DocumentSendRequests[-7] != 32 {
+		t.Fatalf("retry = %#v commands=%#v", failed.Messages[9][0], commands)
 	}
 
-	succeeded, _ := updateState(pending, TelegramEvent{ReceivedAt: time.Unix(103, 0), Value: telegram.MessageSendSucceeded{OldID: -7, Message: domain.Message{ID: 80, ChatID: 9, Kind: domain.MessageDocument, Text: "document caption", Outgoing: true, SendState: domain.SendSucceeded}}})
+	succeeded := submit()
+	updateState(&succeeded, TelegramEvent{ReceivedAt: time.Unix(103, 0), Value: telegram.MessageSendSucceeded{OldID: -7, Message: domain.Message{ID: 80, ChatID: 9, Kind: domain.MessageDocument, Text: "document caption", Outgoing: true, SendState: domain.SendSucceeded}}})
 	if succeeded.Messages[9][0].ID != 80 || succeeded.Messages[9][0].SendState != domain.SendSucceeded || succeeded.Messages[9][0].Media.File.LocalPath != "/tmp/archive.tar.gz" || succeeded.SelectedMessage != 80 {
 		t.Fatalf("terminal success = %#v", succeeded.Messages[9])
 	}
-	terminalFailed, _ := updateState(pending, TelegramEvent{ReceivedAt: time.Unix(104, 0), Value: telegram.MessageSendFailed{OldID: -7, Message: domain.Message{ID: -2, ChatID: 9, Kind: domain.MessageDocument}, Error: failure}})
+	terminalFailed := submit()
+	updateState(&terminalFailed, TelegramEvent{ReceivedAt: time.Unix(104, 0), Value: telegram.MessageSendFailed{OldID: -7, Message: domain.Message{ID: -2, ChatID: 9, Kind: domain.MessageDocument}, Error: failure}})
 	if terminalFailed.Messages[9][0].ID != -2 || terminalFailed.Messages[9][0].SendState != domain.SendFailed || terminalFailed.Messages[9][0].Media.File.LocalPath != "/tmp/archive.tar.gz" || terminalFailed.SelectedMessage != -2 {
 		t.Fatalf("terminal failure = %#v", terminalFailed.Messages[9])
 	}
@@ -160,12 +178,12 @@ func TestDocumentRetryValidatesPathBeforeMutation(t *testing.T) {
 		Media:   domain.MessageMedia{File: domain.MediaFileRef{LocalPath: "/tmp/report.pdf"}},
 		RetryAt: time.Unix(1, 0),
 	}}
-	got, cmds := updateState(state, ActionReceived{Action: Retry, MessageID: -8, At: time.Unix(10, 0)})
+	cmds := updateState(&state, ActionReceived{Action: Retry, MessageID: -8, At: time.Unix(10, 0)})
 	want := []Effect{SendDocument{RequestID: 15, LocalID: -8, ChatID: 9, LocalPath: "/tmp/report.pdf", Caption: "caption"}}
 	if !reflect.DeepEqual(cmds, want) {
 		t.Fatalf("commands = %#v, want %#v", cmds, want)
 	}
-	if got.Messages[9][0].SendState != domain.SendPending || got.DocumentSendRequests[-8] != 15 {
-		t.Fatalf("state = %#v", got)
+	if state.Messages[9][0].SendState != domain.SendPending || state.DocumentSendRequests[-8] != 15 {
+		t.Fatalf("state = %#v", state)
 	}
 }

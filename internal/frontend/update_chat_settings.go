@@ -85,18 +85,18 @@ func ChatSettingsMenuItems(s *ChatSettingsState) []ChatSettingsMenuItem {
 	}
 }
 
-func openChatSettings(state State) (State, []Effect) {
-	chat, ok := detailsChat(state)
+func openChatSettings(state *State) []Effect {
+	chat, ok := detailsChat(*state)
 	if state.Focus != FocusDetails || !ok {
-		return state, nil
+		return nil
 	}
 	if chat.Kind != domain.ChatBasicGroup && chat.Kind != domain.ChatSupergroup && chat.Kind != domain.ChatChannel {
-		return state, nil
+		return nil
 	}
 	if !chat.CanChangeInfo && !(chat.Kind == domain.ChatSupergroup && chat.CanRestrictMembers) {
-		return state, nil
+		return nil
 	}
-	id := allocateRequestID(&state)
+	id := allocateRequestID(state)
 	state.ChatSettings = &ChatSettingsState{RequestID: id, ChatID: chat.ID, PreviousFocus: FocusDetails, Loading: true}
 	state.Focus = FocusChatSettings
 	items := DetailsActionItems(chat)
@@ -105,19 +105,19 @@ func openChatSettings(state State) (State, []Effect) {
 			state.DetailsSelected = i
 		}
 	}
-	return state, []Effect{LoadChatSettingsCommand{RequestID: id, ChatID: chat.ID}}
+	return []Effect{LoadChatSettingsCommand{RequestID: id, ChatID: chat.ID}}
 }
 
-func beginChatSettingEditor(state State, field ChatSettingField) (State, []Effect) {
+func beginChatSettingEditor(state *State, field ChatSettingField) []Effect {
 	s := state.ChatSettings
 	if s == nil || s.Snapshot == nil {
-		return state, nil
+		return nil
 	}
 	if field != ChatSettingTitle && field != ChatSettingDescription && field != ChatSettingSlowMode {
-		return state, nil
+		return nil
 	}
 	if field == ChatSettingTitle && !s.Snapshot.CanChangeInfo || field == ChatSettingDescription && !s.Snapshot.CanChangeInfo || field == ChatSettingSlowMode && !(s.Snapshot.Kind == domain.ChatSupergroup && s.Snapshot.CanRestrictMembers) {
-		return state, nil
+		return nil
 	}
 	s.PendingField = field
 	s.Notice = ""
@@ -125,7 +125,7 @@ func beginChatSettingEditor(state State, field ChatSettingField) (State, []Effec
 	s.Selected = 0
 	if field == ChatSettingSlowMode {
 		s.Mode = ChatSettingsSlowModeMenu
-		return state, nil
+		return nil
 	}
 	s.Mode = ChatSettingsTitleEditor
 	if field == ChatSettingDescription {
@@ -140,12 +140,12 @@ func beginChatSettingEditor(state State, field ChatSettingField) (State, []Effec
 		s.DescriptionEditorID = state.NextEditorID
 	}
 	state.Focus = FocusChatSettingsInput
-	return state, nil
+	return nil
 }
-func chatSettingSave(state State) (State, []Effect) {
+func chatSettingSave(state *State) []Effect {
 	s := state.ChatSettings
 	if s == nil || s.Snapshot == nil || s.Working {
-		return state, nil
+		return nil
 	}
 	value := string(s.TitleInput)
 	if s.Mode == ChatSettingsDescriptionEditor {
@@ -154,67 +154,67 @@ func chatSettingSave(state State) (State, []Effect) {
 	if s.Mode == ChatSettingsTitleEditor {
 		if len([]rune(value)) < 1 || len([]rune(value)) > 128 {
 			s.Notice = "Title must be 1–128 characters"
-			return state, nil
+			return nil
 		}
 		if value == s.Snapshot.Title {
 			s.Mode = ChatSettingsMenu
 			state.Focus = FocusChatSettings
-			return state, nil
+			return nil
 		}
 	}
 	if s.Mode == ChatSettingsDescriptionEditor {
 		if len([]rune(value)) > 255 {
 			s.Notice = "Description must be at most 255 characters"
-			return state, nil
+			return nil
 		}
 		if value == s.Snapshot.Description {
 			s.Mode = ChatSettingsMenu
 			state.Focus = FocusChatSettings
-			return state, nil
+			return nil
 		}
 	}
-	id := allocateRequestID(&state)
+	id := allocateRequestID(state)
 	s.RequestID = id
 	s.Working = true
 	s.PendingValue = value
 	s.Notice = ""
-	return state, []Effect{SaveChatSettingCommand{RequestID: id, ChatID: s.ChatID, Field: s.PendingField, Value: value}}
+	return []Effect{SaveChatSettingCommand{RequestID: id, ChatID: s.ChatID, Field: s.PendingField, Value: value}}
 }
-func reduceChatSettingsAction(state State, e ActionReceived) (State, []Effect) {
+func reduceChatSettingsAction(state *State, e ActionReceived) []Effect {
 	s := state.ChatSettings
 	if s == nil || state.Focus != FocusChatSettings && state.Focus != FocusChatSettingsInput {
-		return state, nil
+		return nil
 	}
 	if e.ChatID != 0 && e.ChatID != s.ChatID {
-		return state, nil
+		return nil
 	}
 	if e.Action == Close {
 		if s.Working {
 			state.ChatSettings = nil
 			state.Focus = s.PreviousFocus
-			return state, nil
+			return nil
 		}
 		if s.Mode != ChatSettingsMenu {
 			s.Mode = ChatSettingsMenu
 			state.Focus = FocusChatSettings
-			return state, nil
+			return nil
 		}
 		state.ChatSettings = nil
 		state.Focus = s.PreviousFocus
-		return state, nil
+		return nil
 	}
 	if s.Loading || s.Working {
-		return state, nil
+		return nil
 	}
 	if s.Error != nil {
 		if e.Action == Retry || e.Action == Activate {
-			id := allocateRequestID(&state)
+			id := allocateRequestID(state)
 			s.RequestID = id
 			s.Loading = true
 			s.Error = nil
-			return state, []Effect{LoadChatSettingsCommand{RequestID: id, ChatID: s.ChatID}}
+			return []Effect{LoadChatSettingsCommand{RequestID: id, ChatID: s.ChatID}}
 		}
-		return state, nil
+		return nil
 	}
 	if state.Focus == FocusChatSettingsInput && e.Action == NoAction && e.Rune != 0 {
 		if s.Mode == ChatSettingsTitleEditor {
@@ -222,7 +222,7 @@ func reduceChatSettingsAction(state State, e ActionReceived) (State, []Effect) {
 		} else if s.Mode == ChatSettingsDescriptionEditor {
 			s.DescriptionInput = append(s.DescriptionInput, e.Rune)
 		}
-		return state, nil
+		return nil
 	}
 	items := ChatSettingsMenuItems(s)
 	switch e.Action {
@@ -242,25 +242,25 @@ func reduceChatSettingsAction(state State, e ActionReceived) (State, []Effect) {
 		return beginChatSettingEditor(state, e.SettingField)
 	case SelectChatSlowMode:
 		if s.Mode != ChatSettingsSlowModeMenu || s.Snapshot.Kind != domain.ChatSupergroup || !s.Snapshot.CanRestrictMembers || !validChatSlowMode(e.SlowModeDelay) {
-			return state, nil
+			return nil
 		}
 		if e.SlowModeDelay == s.Snapshot.SlowModeDelay {
 			s.Mode = ChatSettingsMenu
-			return state, nil
+			return nil
 		}
-		id := allocateRequestID(&state)
+		id := allocateRequestID(state)
 		s.RequestID = id
 		s.PendingField = ChatSettingSlowMode
 		s.PendingDelay = e.SlowModeDelay
 		s.Working = true
-		return state, []Effect{SaveChatSettingCommand{RequestID: id, ChatID: s.ChatID, Field: ChatSettingSlowMode, Delay: e.SlowModeDelay}}
+		return []Effect{SaveChatSettingCommand{RequestID: id, ChatID: s.ChatID, Field: ChatSettingSlowMode, Delay: e.SlowModeDelay}}
 	case SaveChatSetting:
 		if s.Mode != ChatSettingsTitleEditor && s.Mode != ChatSettingsDescriptionEditor {
-			return state, nil
+			return nil
 		}
 		return chatSettingSave(state)
 	}
-	return state, nil
+	return nil
 }
 func validChatSlowMode(v int) bool {
 	switch v {
@@ -273,29 +273,29 @@ func validChatSlowMode(v int) bool {
 func chatSettingsActive(state State, id domain.ChatID) bool {
 	return id != 0 && chatIndex(state.Chats, id) >= 0
 }
-func reduceChatSettingsLoaded(state State, e ChatSettingsLoaded) (State, []Effect) {
+func reduceChatSettingsLoaded(state *State, e ChatSettingsLoaded) []Effect {
 	s := state.ChatSettings
-	if s != nil && chatSettingsActive(state, e.ChatID) && s.RequestID == e.RequestID && s.ChatID == e.ChatID && s.Loading && state.Focus == FocusChatSettings {
+	if s != nil && chatSettingsActive(*state, e.ChatID) && s.RequestID == e.RequestID && s.ChatID == e.ChatID && s.Loading && state.Focus == FocusChatSettings {
 		s.Loading = false
 		v := e.Snapshot
 		s.Snapshot = &v
 		s.Mode = ChatSettingsMenu
 		s.Selected = 0
 	}
-	return state, nil
+	return nil
 }
-func reduceChatSettingsLoadFailed(state State, e ChatSettingsLoadFailed) (State, []Effect) {
+func reduceChatSettingsLoadFailed(state *State, e ChatSettingsLoadFailed) []Effect {
 	s := state.ChatSettings
-	if s != nil && chatSettingsActive(state, e.ChatID) && s.RequestID == e.RequestID && s.ChatID == e.ChatID && s.Loading {
+	if s != nil && chatSettingsActive(*state, e.ChatID) && s.RequestID == e.RequestID && s.ChatID == e.ChatID && s.Loading {
 		s.Loading = false
 		s.Error = &domain.AppError{Kind: domain.ErrorNetwork, Op: "load chat settings", Message: "Could not load chat settings"}
 	}
-	return state, nil
+	return nil
 }
-func reduceChatSettingSaved(state State, e ChatSettingSaved) (State, []Effect) {
+func reduceChatSettingSaved(state *State, e ChatSettingSaved) []Effect {
 	s := state.ChatSettings
-	if s == nil || !chatSettingsActive(state, e.ChatID) || s.RequestID != e.RequestID || s.ChatID != e.ChatID || s.PendingField != e.Field || !s.Working {
-		return state, nil
+	if s == nil || !chatSettingsActive(*state, e.ChatID) || s.RequestID != e.RequestID || s.ChatID != e.ChatID || s.PendingField != e.Field || !s.Working {
+		return nil
 	}
 	s.Working = false
 	if e.Field == ChatSettingTitle {
@@ -313,11 +313,11 @@ func reduceChatSettingSaved(state State, e ChatSettingSaved) (State, []Effect) {
 	}
 	s.Mode = ChatSettingsMenu
 	state.Focus = FocusChatSettings
-	return state, nil
+	return nil
 }
-func reduceChatSettingSaveFailed(state State, e ChatSettingSaveFailed) (State, []Effect) {
+func reduceChatSettingSaveFailed(state *State, e ChatSettingSaveFailed) []Effect {
 	s := state.ChatSettings
-	if s != nil && chatSettingsActive(state, e.ChatID) && s.RequestID == e.RequestID && s.ChatID == e.ChatID && s.PendingField == e.Field && s.Working {
+	if s != nil && chatSettingsActive(*state, e.ChatID) && s.RequestID == e.RequestID && s.ChatID == e.ChatID && s.PendingField == e.Field && s.Working {
 		s.Working = false
 		switch e.Field {
 		case ChatSettingTitle:
@@ -328,23 +328,20 @@ func reduceChatSettingSaveFailed(state State, e ChatSettingSaveFailed) (State, [
 			s.Notice = "Could not save slow mode"
 		}
 	}
-	return state, nil
+	return nil
 }
-func reduceChatSettingsValueChanged(state State, e ChatSettingsValueChanged) (State, []Effect) {
+func reduceChatSettingsValueChanged(state *State, e ChatSettingsValueChanged) []Effect {
 	active := state.ChatSettings
 	if active == nil || active.Working || state.Focus != FocusChatSettingsInput || active.ChatID != e.ChatID {
-		return state, nil
+		return nil
 	}
-	// Copy-on-write: clone the owned ChatSettingsState before replacing either
-	// editor buffer so the caller's State stays untouched.
-	s := *active
+	s := active
 	if e.Field == ChatSettingTitle && s.Mode == ChatSettingsTitleEditor && s.TitleEditorID == e.EditorID {
 		s.TitleInput = []rune(e.Value)
 	} else if e.Field == ChatSettingDescription && s.Mode == ChatSettingsDescriptionEditor && s.DescriptionEditorID == e.EditorID {
 		s.DescriptionInput = []rune(e.Value)
 	} else {
-		return state, nil
+		return nil
 	}
-	state.ChatSettings = &s
-	return state, nil
+	return nil
 }

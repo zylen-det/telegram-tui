@@ -10,8 +10,8 @@ import (
 )
 
 func TestVideoExternalOpenAcceptance_ActionMenuLabelsAndSemanticParity(t *testing.T) {
-	videoState := videoExternalOpenFrontendState(domain.MessageVideo)
-	opened, _ := updateState(videoState, ActionReceived{Action: OpenMessageActionMenu})
+	opened := videoExternalOpenFrontendState(domain.MessageVideo)
+	updateState(&opened, ActionReceived{Action: OpenMessageActionMenu})
 	if opened.MessageMenu == nil {
 		t.Fatal("received Video did not open a message action menu")
 	}
@@ -48,8 +48,8 @@ func TestVideoExternalOpenAcceptance_ActionMenuLabelsAndSemanticParity(t *testin
 }
 
 func TestVideoExternalOpenAcceptance_PhotoActionLabelUnchanged(t *testing.T) {
-	photoState := videoExternalOpenFrontendState(domain.MessagePhoto)
-	opened, _ := updateState(photoState, ActionReceived{Action: OpenMessageActionMenu})
+	opened := videoExternalOpenFrontendState(domain.MessagePhoto)
+	updateState(&opened, ActionReceived{Action: OpenMessageActionMenu})
 	options := selectorOptionsFromRows(messageActionRows(opened.MessageMenu))
 	if len(options) == 0 || options[0].ID != "action:view-image" || options[0].Label != "View image" {
 		t.Fatalf("Photo selector options = %#v, want existing View image first", options)

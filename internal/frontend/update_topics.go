@@ -7,15 +7,15 @@ import (
 
 // openTopics opens the forum-topic list for the active chat. It only runs
 // from the chat list or conversation focus and only for forum chats.
-func openTopics(state State) (State, []Effect) {
-	chatID, ok := activeChatID(state)
+func openTopics(state *State) []Effect {
+	chatID, ok := activeChatID(*state)
 	if !ok || !state.Chats[state.SelectedChat].IsForum {
-		return state, nil
+		return nil
 	}
 	if state.Focus != FocusChats && state.Focus != FocusConversation {
-		return state, nil
+		return nil
 	}
-	requestID := allocateRequestID(&state)
+	requestID := allocateRequestID(state)
 	state.Topics = &TopicListState{
 		RequestID:     requestID,
 		ChatID:        chatID,
@@ -23,7 +23,7 @@ func openTopics(state State) (State, []Effect) {
 		Loading:       true,
 	}
 	state.Focus = FocusTopics
-	return state, []Effect{LoadTopics{
+	return []Effect{LoadTopics{
 		RequestID: requestID,
 		ChatID:    chatID,
 		Cursor:    telegram.TopicCursor{Limit: pageSize},
@@ -33,10 +33,10 @@ func openTopics(state State) (State, []Effect) {
 // reduceTopicsAction owns every key while the topic list is open. It mirrors
 // the members modal key ownership: the list never closes on its own, the
 // user selects a row to leave.
-func reduceTopicsAction(state State, event ActionReceived) (State, []Effect) {
+func reduceTopicsAction(state *State, event ActionReceived) []Effect {
 	topics := state.Topics
 	if topics == nil {
-		return state, nil
+		return nil
 	}
 	switch event.Action {
 	case Close:
@@ -55,22 +55,22 @@ func reduceTopicsAction(state State, event ActionReceived) (State, []Effect) {
 	case Activate:
 		index := max(0, min(topics.Selected, len(topics.Results)))
 		if index == 0 {
-			chatID, _ := activeChatID(state)
+			chatID, _ := activeChatID(*state)
 			return activateAllTopics(state, chatID)
 		}
 		if index > len(topics.Results) {
-			return state, nil
+			return nil
 		}
 		return activateTopic(state, topics.Results[index-1])
 	case SelectAllMessages:
 		chatID := topics.ChatID
 		if state.SelectedChat < 0 || state.SelectedChat >= len(state.Chats) || state.Chats[state.SelectedChat].ID != chatID || !state.Chats[state.SelectedChat].IsForum {
-			return state, nil
+			return nil
 		}
 		return activateAllTopics(state, chatID)
 	case SelectTopic:
 		if event.ChatID != topics.ChatID {
-			return state, nil
+			return nil
 		}
 		if event.TopicID == 0 {
 			return activateAllTopics(state, topics.ChatID)
@@ -82,7 +82,7 @@ func reduceTopicsAction(state State, event ActionReceived) (State, []Effect) {
 			}
 		}
 	}
-	return state, nil
+	return nil
 }
 
 // generalTopicID resolves the forum's General topic ID: the tracked topic
@@ -113,7 +113,7 @@ func showAllActive(state State) (topicKey, bool) {
 // activateAllTopics closes the topic list and switches the forum chat into
 // ALL-messages mode. The ALL draft at TopicID 0 persists; nothing is seeded
 // or deleted here. History reuses the shared chat history path.
-func activateAllTopics(state State, chatID domain.ChatID) (State, []Effect) {
+func activateAllTopics(state *State, chatID domain.ChatID) []Effect {
 	if state.ShowAll == nil {
 		state.ShowAll = make(map[domain.ChatID]bool)
 	}
@@ -136,23 +136,23 @@ func activateAllTopics(state State, chatID domain.ChatID) (State, []Effect) {
 		state.SelectedMessage = 0
 	}
 	if _, exists := state.History[chatID]; !exists {
-		requestID := allocateRequestID(&state)
+		requestID := allocateRequestID(state)
 		state.History[chatID] = HistoryState{Loading: true, RequestID: requestID}
-		return state, []Effect{LoadMessages{RequestID: requestID, ChatID: chatID, Cursor: telegram.MessageCursor{Limit: pageSize}}}
+		return []Effect{LoadMessages{RequestID: requestID, ChatID: chatID, Cursor: telegram.MessageCursor{Limit: pageSize}}}
 	}
-	return state, nil
+	return nil
 }
 
-func requestNextTopicsPage(state State) (State, []Effect) {
+func requestNextTopicsPage(state *State) []Effect {
 	topics := state.Topics
 	if topics == nil || topics.Loading || topics.Done {
-		return state, nil
+		return nil
 	}
-	requestID := allocateRequestID(&state)
+	requestID := allocateRequestID(state)
 	topics.RequestID = requestID
 	topics.Loading = true
 	topics.Error = nil
-	return state, []Effect{LoadTopics{
+	return []Effect{LoadTopics{
 		RequestID: requestID,
 		ChatID:    topics.ChatID,
 		Cursor:    topics.NextCursor,
@@ -161,7 +161,7 @@ func requestNextTopicsPage(state State) (State, []Effect) {
 
 // activateTopic closes the topic list and makes the given topic the selected
 // topic of its forum chat.
-func activateTopic(state State, topic domain.ForumTopic) (State, []Effect) {
+func activateTopic(state *State, topic domain.ForumTopic) []Effect {
 	if state.ForumTopics == nil {
 		state.ForumTopics = make(map[domain.ChatID]map[domain.TopicID]domain.ForumTopic)
 	}
@@ -177,7 +177,7 @@ func activateTopic(state State, topic domain.ForumTopic) (State, []Effect) {
 		state.SelectedTopics = make(map[domain.ChatID]domain.TopicID)
 	}
 	state.SelectedTopics[topic.ChatID] = topic.ID
-	seedTopicDraft(&state, topicKey{ChatID: topic.ChatID, TopicID: topic.ID}, topic.Draft)
+	seedTopicDraft(state, topicKey{ChatID: topic.ChatID, TopicID: topic.ID}, topic.Draft)
 	state.ReplyTarget = nil
 	state.EditTarget = nil
 	state.MessageMenu = nil
@@ -195,16 +195,16 @@ func activateTopic(state State, topic domain.ForumTopic) (State, []Effect) {
 
 	key := topicKey{ChatID: topic.ChatID, TopicID: topic.ID}
 	if _, exists := state.TopicHistory[key]; !exists {
-		requestID := allocateRequestID(&state)
+		requestID := allocateRequestID(state)
 		state.TopicHistory[key] = HistoryState{Loading: true, RequestID: requestID}
-		return state, []Effect{LoadMessages{
+		return []Effect{LoadMessages{
 			RequestID: requestID,
 			ChatID:    topic.ChatID,
 			TopicID:   topic.ID,
 			Cursor:    telegram.MessageCursor{Limit: pageSize},
 		}}
 	}
-	return state, nil
+	return nil
 }
 
 func seedTopicDraft(state *State, key topicKey, draft domain.Draft) {
@@ -239,10 +239,10 @@ func newestTopicMessageID(messages []domain.Message, topicID domain.TopicID) dom
 	return 0
 }
 
-func reduceTopicsLoaded(state State, event TopicsLoaded) (State, []Effect) {
+func reduceTopicsLoaded(state *State, event TopicsLoaded) []Effect {
 	topics := state.Topics
 	if topics == nil || topics.RequestID != event.RequestID || topics.ChatID != event.ChatID {
-		return state, nil
+		return nil
 	}
 	seen := make(map[domain.TopicID]int, len(topics.Results)+len(event.Page.Topics))
 	for index, topic := range topics.Results {
@@ -274,35 +274,35 @@ func reduceTopicsLoaded(state State, event TopicsLoaded) (State, []Effect) {
 	topics.Error = nil
 	topics.Selected = max(0, min(len(topics.Results)-1, topics.Selected))
 	state.Focus = FocusTopics
-	return state, nil
+	return nil
 }
 
-func reduceTopicsLoadFailed(state State, event TopicsLoadFailed) (State, []Effect) {
+func reduceTopicsLoadFailed(state *State, event TopicsLoadFailed) []Effect {
 	topics := state.Topics
 	if topics == nil || topics.RequestID != event.RequestID || topics.ChatID != event.ChatID {
-		return state, nil
+		return nil
 	}
 	failure := event.Error
 	topics.Error = &failure
 	topics.Loading = false
 	state.Focus = FocusTopics
-	return state, nil
+	return nil
 }
 
 // reduceTopicMessagesLoaded mirrors reduceMessagesLoaded for topic-scoped
 // loads. Messages merge into the shared chat slice; only TopicHistory tracks
 // the topic request.
-func reduceTopicMessagesLoaded(state State, event MessagesLoaded) (State, []Effect) {
+func reduceTopicMessagesLoaded(state *State, event MessagesLoaded) []Effect {
 	key := topicKey{ChatID: event.ChatID, TopicID: event.TopicID}
 	history, exists := state.TopicHistory[key]
 	if !exists {
-		activeID, active := activeChatID(state)
+		activeID, active := activeChatID(*state)
 		if !active || activeID != event.ChatID || state.SelectedTopics[event.ChatID] != event.TopicID {
-			return state, nil
+			return nil
 		}
 		history = HistoryState{RequestID: event.RequestID}
 	} else if history.RequestID != event.RequestID {
-		return state, nil
+		return nil
 	}
 	history.Loading = false
 	history.Error = nil
@@ -315,15 +315,15 @@ func reduceTopicMessagesLoaded(state State, event MessagesLoaded) (State, []Effe
 		state.TopicHistory = make(map[topicKey]HistoryState)
 	}
 	state.TopicHistory[key] = history
-	if activeID, active := activeChatID(state); active && activeID == event.ChatID && state.SelectedMessage == 0 {
+	if activeID, active := activeChatID(*state); active && activeID == event.ChatID && state.SelectedMessage == 0 {
 		if id := newestTopicMessageID(state.Messages[event.ChatID], event.TopicID); id != 0 {
 			state.SelectedMessage = id
 			state.SelectedMessageChat = event.ChatID
 		}
 	}
-	commands := requestMissingMessageAvatars(&state, event.Page.Messages)
-	commands = append(commands, requestMissingThumbnails(&state, event.Page.Messages)...)
-	return state, commands
+	commands := requestMissingMessageAvatars(state, event.Page.Messages)
+	commands = append(commands, requestMissingThumbnails(state, event.Page.Messages)...)
+	return commands
 }
 
 func topicOldestMessageID(messages []domain.Message, topicID domain.TopicID) domain.MessageID {
@@ -335,10 +335,10 @@ func topicOldestMessageID(messages []domain.Message, topicID domain.TopicID) dom
 	return 0
 }
 
-func reduceForumTopicInfoChanged(state State, update telegram.ForumTopicInfoChanged) (State, []Effect) {
+func reduceForumTopicInfoChanged(state *State, update telegram.ForumTopicInfoChanged) []Effect {
 	topic := update.Topic
 	if topic.ChatID == 0 || topic.ID == 0 {
-		return state, nil
+		return nil
 	}
 	if chatIndex(state.Chats, topic.ChatID) >= 0 || state.ForumTopics[topic.ChatID][topic.ID].ID != 0 {
 		if state.ForumTopics == nil {
@@ -373,16 +373,16 @@ func reduceForumTopicInfoChanged(state State, update telegram.ForumTopicInfoChan
 			topics.Results[index] = row
 		}
 	}
-	return state, nil
+	return nil
 }
 
-func reduceForumTopicStateChanged(state State, update telegram.ForumTopicStateChanged) (State, []Effect) {
+func reduceForumTopicStateChanged(state *State, update telegram.ForumTopicStateChanged) []Effect {
 	chatID, topicID := update.ChatID, update.TopicID
 	if chatID == 0 || topicID == 0 {
-		return state, nil
+		return nil
 	}
 	key := topicKey{ChatID: chatID, TopicID: topicID}
-	applyDraft := topicDraftMergeAllowed(state, key, update.Draft)
+	applyDraft := topicDraftMergeAllowed(*state, key, update.Draft)
 	merged := false
 	if byTopic := state.ForumTopics[chatID]; byTopic != nil {
 		if entry, tracked := byTopic[topicID]; tracked {
@@ -412,9 +412,9 @@ func reduceForumTopicStateChanged(state State, update telegram.ForumTopicStateCh
 		}
 	}
 	if merged {
-		applyTopicCloudDraft(&state, key, update.Draft)
+		applyTopicCloudDraft(state, key, update.Draft)
 	}
-	return state, nil
+	return nil
 }
 
 // topicDraftMergeAllowed mirrors the applyCloudDraft stale guard: a locally

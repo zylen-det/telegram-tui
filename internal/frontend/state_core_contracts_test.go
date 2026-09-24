@@ -26,7 +26,8 @@ func TestLayoutBreakpoints(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(layoutName(tt.width, tt.height), func(t *testing.T) {
-			state, commands := updateState(InitialState(), Resized{Width: tt.width, Height: tt.height})
+			state := InitialState()
+			commands := updateState(&state, Resized{Width: tt.width, Height: tt.height})
 
 			if state.Layout != tt.want {
 				t.Fatalf("Layout = %v, want %v", state.Layout, tt.want)
@@ -38,33 +39,28 @@ func TestLayoutBreakpoints(t *testing.T) {
 	}
 }
 
-func TestDuplicateAvatarOpenedPreservesOriginalFocus(t *testing.T) {
+func TestAvatarResultAndStaleResultPreserveModalFocus(t *testing.T) {
 	state := InitialState()
-	state.Focus = FocusConversation
+	state.Focus = FocusModal
+	state.Modal = &ModalState{RequestID: 42, Loading: true, PreviousFocus: FocusConversation}
 
-	opened, commands := updateState(state, AvatarOpened{Title: "Mina", Path: "/tmp/mina.jpg"})
-	if len(commands) != 0 {
-		t.Fatalf("open commands = %#v, want none", commands)
+	commands := updateState(&state, AvatarOpened{RequestID: 42, Title: "Mina", Path: "/tmp/mina.jpg"})
+	if len(commands) != 0 || state.Modal == nil || state.Modal.Loading || state.Modal.Title != "Mina" || state.Modal.Path != "/tmp/mina.jpg" {
+		t.Fatalf("avatar result = %#v commands=%#v", state.Modal, commands)
 	}
-	assertModalFocusInvariant(t, opened)
+	assertModalFocusInvariant(t, state)
 
-	duplicate, commands := updateState(opened, AvatarOpened{Title: "Other", Path: "/tmp/other.jpg"})
-	if !reflect.DeepEqual(duplicate, opened) {
-		t.Fatalf("duplicate open changed state:\n got: %#v\nwant: %#v", duplicate, opened)
+	commands = updateState(&state, AvatarOpened{RequestID: 41, Title: "Other", Path: "/tmp/other.jpg"})
+	if len(commands) != 0 || state.Modal.Title != "Mina" || state.Modal.Path != "/tmp/mina.jpg" {
+		t.Fatalf("stale result changed modal: %#v commands=%#v", state.Modal, commands)
 	}
-	if len(commands) != 0 {
-		t.Fatalf("duplicate commands = %#v, want none", commands)
-	}
-	assertModalFocusInvariant(t, duplicate)
+	assertModalFocusInvariant(t, state)
 
-	closed, commands := updateState(duplicate, ActionReceived{Action: Close})
-	if len(commands) != 0 {
-		t.Fatalf("close commands = %#v, want none", commands)
+	commands = updateState(&state, ActionReceived{Action: Close})
+	if len(commands) != 0 || state.Modal != nil || state.Focus != FocusConversation {
+		t.Fatalf("close = modal:%#v focus:%v commands:%#v", state.Modal, state.Focus, commands)
 	}
-	if closed.Focus != FocusConversation {
-		t.Fatalf("Focus = %v, want %v", closed.Focus, FocusConversation)
-	}
-	assertModalFocusInvariant(t, closed)
+	assertModalFocusInvariant(t, state)
 }
 
 func TestPromptSubmitClearsSensitiveInputAndRestoresFocus(t *testing.T) {
@@ -81,21 +77,15 @@ func TestPromptSubmitClearsSensitiveInputAndRestoresFocus(t *testing.T) {
 		PreviousFocus: FocusConversation,
 	}
 	state.Prompt = promptState
-	before := cloneState(state)
 
-	got, commands := updateState(state, ActionReceived{Action: ComposerSubmit})
+	commands := updateState(&state, ActionReceived{Action: ComposerSubmit})
+	got := state
 
-	if !reflect.DeepEqual(state, before) {
-		t.Fatalf("input state changed:\n got: %#v\nwant: %#v", state, before)
-	}
-	if got.Prompt != nil {
-		t.Fatalf("Prompt = %#v, want nil", got.Prompt)
+	if got.Prompt != nil || promptState.Input != nil {
+		t.Fatalf("sensitive prompt retained: state=%#v input=%q", got.Prompt, string(promptState.Input))
 	}
 	if got.Focus != FocusConversation {
 		t.Fatalf("Focus = %v, want %v", got.Focus, FocusConversation)
-	}
-	if value := string(promptState.Input); value != "秘密" {
-		t.Fatalf("input prompt after submit = %q, want %q", value, "秘密")
 	}
 	assertCommands(t, commands, []Effect{SubmitPrompt{Response: auth.Response{
 		PromptID: 44,
@@ -125,7 +115,8 @@ func TestTypedNilPointerEventsAreNoOps(t *testing.T) {
 			state := populatedModalState()
 			before := cloneState(state)
 
-			got, commands := updateState(state, tt.event)
+			commands := updateState(&state, tt.event)
+			got := state
 
 			if !reflect.DeepEqual(got, before) {
 				t.Fatalf("state changed:\n got: %#v\nwant: %#v", got, before)

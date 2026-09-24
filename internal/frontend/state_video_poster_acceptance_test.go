@@ -24,7 +24,7 @@ func TestVideoPosterAcceptance_AllMessageIngressRequestsThumbnail(t *testing.T) 
 		state := videoPosterAcceptanceState(40)
 		state.History[9] = HistoryState{Loading: true, RequestID: 12}
 
-		_, commands := updateState(state, MessagesLoaded{
+		commands := updateState(&state, MessagesLoaded{
 			RequestID: 12,
 			ChatID:    9,
 			Page:      telegram.MessagePage{Messages: []domain.Message{video}, Done: true},
@@ -37,7 +37,7 @@ func TestVideoPosterAcceptance_AllMessageIngressRequestsThumbnail(t *testing.T) 
 
 	t.Run("live upsert", func(t *testing.T) {
 		state := videoPosterAcceptanceState(50)
-		_, commands := updateState(state, TelegramEvent{Value: telegram.MessageUpserted{Message: video}})
+		commands := updateState(&state, TelegramEvent{Value: telegram.MessageUpserted{Message: video}})
 		want := []Effect{DownloadThumbnail{RequestID: 50, ChatID: 9, MessageID: 77, File: video.Media.Thumbnail}}
 		if !reflect.DeepEqual(commands, want) {
 			t.Fatalf("live Video poster commands = %#v, want %#v", commands, want)
@@ -47,7 +47,7 @@ func TestVideoPosterAcceptance_AllMessageIngressRequestsThumbnail(t *testing.T) 
 	t.Run("content update", func(t *testing.T) {
 		state := videoPosterAcceptanceState(60)
 		state.Messages[9] = []domain.Message{{ID: 77, ChatID: 9, Kind: domain.MessageVideo}}
-		_, commands := updateState(state, TelegramEvent{Value: telegram.MessageContentUpdated{
+		commands := updateState(&state, TelegramEvent{Value: telegram.MessageContentUpdated{
 			ChatID: 9, MessageID: 77, Kind: domain.MessageVideo, Media: video.Media,
 		}})
 		want := []Effect{DownloadThumbnail{RequestID: 60, ChatID: 9, MessageID: 77, File: video.Media.Thumbnail}}

@@ -24,25 +24,14 @@ func topicMediaBaseState(t *testing.T) State {
 	return state
 }
 
-func forumPhotoSendPath(t *testing.T, state State, path string) (State, []Effect) {
-	t.Helper()
-	state, _ = updateState(state, ActionReceived{Action: OpenPhotoSend})
-	if state.PhotoSend == nil {
-		t.Fatalf("photo send not opened")
-	}
-	state.PhotoSend.Input = []rune(path)
-	state, _ = updateState(state, ActionReceived{Action: PhotoSendSubmit, At: time.Unix(100, 0)})
-	return state, nil
-}
-
 func TestPhotoSendOpenCapturesActiveTopic(t *testing.T) {
 	state := topicMediaBaseState(t)
-	opened, _ := updateState(state, ActionReceived{Action: OpenPhotoSend})
-	if opened.PhotoSend == nil {
+	updateState(&state, ActionReceived{Action: OpenPhotoSend})
+	if state.PhotoSend == nil {
 		t.Fatal("photo send not opened")
 	}
-	if opened.PhotoSend.ChatID != 7 || opened.PhotoSend.TopicID != 101 {
-		t.Fatalf("photo send = %#v, want chat 7 topic 101", opened.PhotoSend)
+	if state.PhotoSend.ChatID != 7 || state.PhotoSend.TopicID != 101 {
+		t.Fatalf("photo send = %#v, want chat 7 topic 101", state.PhotoSend)
 	}
 
 	// Ordinary chat keeps TopicID 0.
@@ -50,7 +39,7 @@ func TestPhotoSendOpenCapturesActiveTopic(t *testing.T) {
 	plain.Connection = domain.ConnectionOnline
 	plain.Chats = []domain.Chat{{ID: 9, CanSend: true}}
 	plain.SelectedChat = 0
-	plain, _ = updateState(plain, ActionReceived{Action: OpenPhotoSend})
+	updateState(&plain, ActionReceived{Action: OpenPhotoSend})
 	if plain.PhotoSend == nil || plain.PhotoSend.TopicID != 0 {
 		t.Fatalf("ordinary chat photo send = %#v, want TopicID 0", plain.PhotoSend)
 	}
@@ -59,9 +48,9 @@ func TestPhotoSendOpenCapturesActiveTopic(t *testing.T) {
 func TestPhotoSendSubmitCarriesTopicID(t *testing.T) {
 	now := time.Unix(100, 0).UTC()
 	state := topicMediaBaseState(t)
-	state, _ = updateState(state, ActionReceived{Action: OpenPhotoSend})
+	updateState(&state, ActionReceived{Action: OpenPhotoSend})
 	state.PhotoSend.Input = []rune("/p.jpg")
-	submitted, cmds := updateState(state, ActionReceived{Action: PhotoSendSubmit, At: now})
+	cmds := updateState(&state, ActionReceived{Action: PhotoSendSubmit, At: now})
 	if len(cmds) != 2 {
 		t.Fatalf("cmds = %#v", cmds)
 	}
@@ -69,11 +58,11 @@ func TestPhotoSendSubmitCarriesTopicID(t *testing.T) {
 	if !ok || cmd.TopicID != 101 || cmd.ChatID != 7 {
 		t.Fatalf("send photo = %#v", cmds[0])
 	}
-	if submitted.PhotoSend != nil {
+	if state.PhotoSend != nil {
 		t.Fatal("photo send not closed")
 	}
 	var msg domain.Message
-	for _, m := range submitted.Messages[7] {
+	for _, m := range state.Messages[7] {
 		if m.Outgoing && m.SendState == domain.SendPending {
 			msg = m
 		}
@@ -81,7 +70,6 @@ func TestPhotoSendSubmitCarriesTopicID(t *testing.T) {
 	if msg.TopicID != 101 {
 		t.Fatalf("optimistic message topic = %d, want 101", msg.TopicID)
 	}
-	_ = now
 }
 
 func TestMediaSendSubmitCarriesTopicIDForVideoAudioDocument(t *testing.T) {
@@ -97,9 +85,9 @@ func TestMediaSendSubmitCarriesTopicIDForVideoAudioDocument(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			state := topicMediaBaseState(t)
-			state, _ = updateState(state, ActionReceived{Action: OpenPhotoSend})
+			updateState(&state, ActionReceived{Action: OpenPhotoSend})
 			state.PhotoSend.Input = []rune(tc.path)
-			submitted, cmds := updateState(state, ActionReceived{Action: PhotoSendSubmit, At: time.Unix(100, 0)})
+			cmds := updateState(&state, ActionReceived{Action: PhotoSendSubmit, At: time.Unix(100, 0)})
 			if len(cmds) == 0 || !tc.want(cmds[0]) {
 				t.Fatalf("cmds = %#v", cmds)
 			}
@@ -115,7 +103,7 @@ func TestMediaSendSubmitCarriesTopicIDForVideoAudioDocument(t *testing.T) {
 			if topic != 101 {
 				t.Fatalf("topic = %d, want 101", topic)
 			}
-			if submitted.PhotoSend != nil {
+			if state.PhotoSend != nil {
 				t.Fatal("photo send not closed")
 			}
 		})
@@ -123,15 +111,14 @@ func TestMediaSendSubmitCarriesTopicIDForVideoAudioDocument(t *testing.T) {
 }
 
 func TestStickerPickerOpenCapturesTopicAndLoadCarriesTopic(t *testing.T) {
-
 	state := topicMediaBaseState(t)
 	state.Focus = FocusComposer
-	opened, cmds := updateState(state, ActionReceived{Action: OpenStickerPicker})
-	if opened.StickerPicker == nil {
+	cmds := updateState(&state, ActionReceived{Action: OpenStickerPicker})
+	if state.StickerPicker == nil {
 		t.Fatal("sticker picker not opened")
 	}
-	if opened.StickerPicker.ChatID != 7 || opened.StickerPicker.TopicID != 101 {
-		t.Fatalf("picker = %#v", opened.StickerPicker)
+	if state.StickerPicker.ChatID != 7 || state.StickerPicker.TopicID != 101 {
+		t.Fatalf("picker = %#v", state.StickerPicker)
 	}
 	if len(cmds) != 1 {
 		t.Fatalf("cmds = %#v", cmds)
@@ -145,10 +132,9 @@ func TestStickerPickerOpenCapturesTopicAndLoadCarriesTopic(t *testing.T) {
 func TestStickerSubmitCarriesTopicID(t *testing.T) {
 	state := topicMediaBaseState(t)
 	state.Focus = FocusComposer
-	opened, _ := updateState(state, ActionReceived{Action: OpenStickerPicker})
-	state = opened
-	state, _ = updateState(state, StickersLoaded{RequestID: state.StickerPicker.RequestID, ChatID: 7, Stickers: []domain.StickerRef{{File: domain.MediaFileRef{ID: 3}}}})
-	submitted, cmds := updateState(state, ActionReceived{Action: StickerActivate, At: time.Unix(100, 0), StickerFileID: 3, RequestID: state.StickerPicker.RequestID})
+	updateState(&state, ActionReceived{Action: OpenStickerPicker})
+	updateState(&state, StickersLoaded{RequestID: state.StickerPicker.RequestID, ChatID: 7, Stickers: []domain.StickerRef{{File: domain.MediaFileRef{ID: 3}}}})
+	cmds := updateState(&state, ActionReceived{Action: StickerActivate, At: time.Unix(100, 0), StickerFileID: 3, RequestID: state.StickerPicker.RequestID})
 	if len(cmds) != 1 {
 		t.Fatalf("cmds = %#v", cmds)
 	}
@@ -157,7 +143,7 @@ func TestStickerSubmitCarriesTopicID(t *testing.T) {
 		t.Fatalf("send sticker = %#v", cmds[0])
 	}
 	var msg domain.Message
-	for _, m := range submitted.Messages[7] {
+	for _, m := range state.Messages[7] {
 		if m.Kind == domain.MessageSticker {
 			msg = m
 		}
@@ -285,14 +271,14 @@ func TestFailQueuedMessagePreservesTopicIdentity(t *testing.T) {
 func topicSearchState(t *testing.T) State {
 	t.Helper()
 	state := topicMediaBaseState(t)
-	opened, commands := updateState(state, ActionReceived{Action: OpenMessageSearch})
-	if opened.MessageSearch == nil || opened.Focus != FocusSearchInput {
-		t.Fatalf("open = %#v %#v", opened.MessageSearch, opened.Focus)
+	commands := updateState(&state, ActionReceived{Action: OpenMessageSearch})
+	if state.MessageSearch == nil || state.Focus != FocusSearchInput {
+		t.Fatalf("open = %#v %#v", state.MessageSearch, state.Focus)
 	}
 	if len(commands) != 0 {
 		t.Fatalf("commands = %#v", commands)
 	}
-	return opened
+	return state
 }
 
 func TestMessageSearchTopicScopeOpenSubmitPaginate(t *testing.T) {
@@ -304,13 +290,13 @@ func TestMessageSearchTopicScopeOpenSubmitPaginate(t *testing.T) {
 	// Forum without a selected topic: no-op.
 	noTopic := topicMediaBaseState(t)
 	delete(noTopic.SelectedTopics, 7)
-	unchanged, commands := updateState(noTopic, ActionReceived{Action: OpenMessageSearch})
-	if unchanged.MessageSearch != nil || len(commands) != 0 {
-		t.Fatalf("no-topic open = %#v %#v", unchanged.MessageSearch, commands)
+	commands := updateState(&noTopic, ActionReceived{Action: OpenMessageSearch})
+	if noTopic.MessageSearch != nil || len(commands) != 0 {
+		t.Fatalf("no-topic open = %#v %#v", noTopic.MessageSearch, commands)
 	}
 
-	submitted, commands := updateState(opened, MessageSearchValueChanged{ChatID: 7, Value: "needle"})
-	_, commands = updateState(submitted, ActionReceived{Action: SubmitMessageSearch})
+	updateState(&opened, MessageSearchValueChanged{ChatID: 7, Value: "needle"})
+	commands = updateState(&opened, ActionReceived{Action: SubmitMessageSearch})
 	if len(commands) != 1 {
 		t.Fatalf("cmds = %#v", commands)
 	}
@@ -320,13 +306,12 @@ func TestMessageSearchTopicScopeOpenSubmitPaginate(t *testing.T) {
 	}
 
 	// Paginate carries TopicID.
-	s := submitted
-	s.MessageSearch.NextFromMessageID = 40
-	s.MessageSearch.Results = []domain.Message{{ID: 40, ChatID: 7, TopicID: 101}}
-	s.MessageSearch.Selected = 0
-	s.MessageSearch.Loading = false
-	s.MessageSearch.Done = false
-	_, cmds := maybePaginateMessageSearch(s)
+	opened.MessageSearch.NextFromMessageID = 40
+	opened.MessageSearch.Results = []domain.Message{{ID: 40, ChatID: 7, TopicID: 101}}
+	opened.MessageSearch.Selected = 0
+	opened.MessageSearch.Loading = false
+	opened.MessageSearch.Done = false
+	cmds := maybePaginateMessageSearch(&opened)
 	if len(cmds) != 1 {
 		t.Fatalf("paginate cmds = %#v", cmds)
 	}
@@ -338,36 +323,35 @@ func TestMessageSearchTopicScopeOpenSubmitPaginate(t *testing.T) {
 
 func TestMessageSearchRejectsMismatchedTopicID(t *testing.T) {
 	opened := topicSearchState(t)
-	submitted, commands := updateState(opened, MessageSearchValueChanged{ChatID: 7, Value: "needle"})
-	submitted, _ = updateState(submitted, ActionReceived{Action: SubmitMessageSearch})
-	requestID := submitted.MessageSearch.RequestID
-	_ = commands
+	updateState(&opened, MessageSearchValueChanged{ChatID: 7, Value: "needle"})
+	updateState(&opened, ActionReceived{Action: SubmitMessageSearch})
+	requestID := opened.MessageSearch.RequestID
 
-	rejected, commands := updateState(submitted, ChatMessagesSearched{
+	commands := updateState(&opened, ChatMessagesSearched{
 		RequestID: requestID, ChatID: 7, TopicID: 202,
 		Page: telegram.MessageSearchPage{Messages: []domain.Message{{ID: 80, ChatID: 7, TopicID: 202}}},
 	})
-	if len(rejected.MessageSearch.Results) != 0 {
-		t.Fatalf("mismatched topic results merged: %#v", rejected.MessageSearch.Results)
+	if len(opened.MessageSearch.Results) != 0 {
+		t.Fatalf("mismatched topic results merged: %#v", opened.MessageSearch.Results)
 	}
 	if len(commands) != 0 {
 		t.Fatalf("commands = %#v", commands)
 	}
 
-	failed, commands := updateState(submitted, ChatMessagesSearchFailed{RequestID: requestID, ChatID: 7, TopicID: 202})
-	if failed.MessageSearch.Error != nil {
-		t.Fatalf("mismatched topic failure applied: %#v", failed.MessageSearch.Error)
+	commands = updateState(&opened, ChatMessagesSearchFailed{RequestID: requestID, ChatID: 7, TopicID: 202})
+	if opened.MessageSearch.Error != nil {
+		t.Fatalf("mismatched topic failure applied: %#v", opened.MessageSearch.Error)
 	}
 	if len(commands) != 0 {
 		t.Fatalf("commands = %#v", commands)
 	}
 
 	// Activate emits LoadSearchMessageContext with TopicID.
-	loaded, _ := updateState(submitted, ChatMessagesSearched{
+	updateState(&opened, ChatMessagesSearched{
 		RequestID: requestID, ChatID: 7, TopicID: 101,
 		Page: telegram.MessageSearchPage{Messages: []domain.Message{{ID: 80, ChatID: 7, TopicID: 101}}},
 	})
-	activated, cmds := updateState(loaded, ActionReceived{Action: Activate})
+	cmds := updateState(&opened, ActionReceived{Action: Activate})
 	if len(cmds) != 1 {
 		t.Fatalf("activate cmds = %#v", cmds)
 	}
@@ -377,35 +361,35 @@ func TestMessageSearchRejectsMismatchedTopicID(t *testing.T) {
 	}
 
 	// Context loaded with mismatched TopicID is rejected.
-	rejectedCtx, commands := updateState(activated, SearchMessageContextLoaded{
+	commands = updateState(&opened, SearchMessageContextLoaded{
 		RequestID: jump.RequestID, ChatID: 7, TopicID: 202, MessageID: 80,
 		Page: telegram.MessagePage{Messages: []domain.Message{{ID: 80, ChatID: 7, TopicID: 202}}},
 	})
-	if rejectedCtx.MessageSearch == nil || rejectedCtx.MessageSearch.JumpMessageID != 80 {
-		t.Fatalf("mismatched context applied: %#v", rejectedCtx.MessageSearch)
+	if opened.MessageSearch == nil || opened.MessageSearch.JumpMessageID != 80 {
+		t.Fatalf("mismatched context applied: %#v", opened.MessageSearch)
 	}
 	if len(commands) != 0 {
 		t.Fatalf("commands = %#v", commands)
 	}
 
 	// Matching TopicID loads fine.
-	matched, _ := updateState(activated, SearchMessageContextLoaded{
+	updateState(&opened, SearchMessageContextLoaded{
 		RequestID: jump.RequestID, ChatID: 7, TopicID: 101, MessageID: 80,
 		Page: telegram.MessagePage{Messages: []domain.Message{{ID: 80, ChatID: 7, TopicID: 101}}},
 	})
-	if matched.MessageSearch != nil {
-		t.Fatalf("matching context not applied: %#v", matched.MessageSearch)
+	if opened.MessageSearch != nil {
+		t.Fatalf("matching context not applied: %#v", opened.MessageSearch)
 	}
 }
 
 func TestPinnedMessagesTopicScope(t *testing.T) {
 	state := topicMediaBaseState(t)
-	opened, cmds := updateState(state, ActionReceived{Action: OpenPinnedMessages})
-	if opened.PinnedMessages == nil {
+	cmds := updateState(&state, ActionReceived{Action: OpenPinnedMessages})
+	if state.PinnedMessages == nil {
 		t.Fatal("pinned not opened")
 	}
-	if opened.PinnedMessages.TopicID != 101 {
-		t.Fatalf("topic = %d, want 101", opened.PinnedMessages.TopicID)
+	if state.PinnedMessages.TopicID != 101 {
+		t.Fatalf("topic = %d, want 101", state.PinnedMessages.TopicID)
 	}
 	if len(cmds) != 1 {
 		t.Fatalf("cmds = %#v", cmds)
@@ -414,44 +398,44 @@ func TestPinnedMessagesTopicScope(t *testing.T) {
 	if !ok || load.ChatID != 7 || load.TopicID != 101 {
 		t.Fatalf("load = %#v", cmds[0])
 	}
-	requestID := opened.PinnedMessages.RequestID
+	requestID := state.PinnedMessages.RequestID
 
 	// Forum without topic: no-op.
 	noTopic := topicMediaBaseState(t)
 	delete(noTopic.SelectedTopics, 7)
-	unchanged, commands := updateState(noTopic, ActionReceived{Action: OpenPinnedMessages})
-	if unchanged.PinnedMessages != nil || len(commands) != 0 {
-		t.Fatalf("no-topic pinned = %#v %#v", unchanged.PinnedMessages, commands)
+	commands := updateState(&noTopic, ActionReceived{Action: OpenPinnedMessages})
+	if noTopic.PinnedMessages != nil || len(commands) != 0 {
+		t.Fatalf("no-topic pinned = %#v %#v", noTopic.PinnedMessages, commands)
 	}
 
 	// Mismatched topic page rejected.
-	rejected, commands := updateState(opened, PinnedMessagesLoaded{
+	commands = updateState(&state, PinnedMessagesLoaded{
 		RequestID: requestID, ChatID: 7, TopicID: 202,
 		Page: telegram.MessageSearchPage{Messages: []domain.Message{{ID: 80, ChatID: 7, TopicID: 202}}},
 	})
-	if len(rejected.PinnedMessages.Results) != 0 {
-		t.Fatalf("mismatched pinned results = %#v", rejected.PinnedMessages.Results)
+	if len(state.PinnedMessages.Results) != 0 {
+		t.Fatalf("mismatched pinned results = %#v", state.PinnedMessages.Results)
 	}
 	if len(commands) != 0 {
 		t.Fatalf("commands = %#v", commands)
 	}
-	rejectedFailed, commands := updateState(opened, PinnedMessagesLoadFailed{RequestID: requestID, ChatID: 7, TopicID: 202})
-	if rejectedFailed.PinnedMessages.Error != nil {
-		t.Fatalf("mismatched pinned failure applied: %#v", rejectedFailed.PinnedMessages.Error)
+	commands = updateState(&state, PinnedMessagesLoadFailed{RequestID: requestID, ChatID: 7, TopicID: 202})
+	if state.PinnedMessages.Error != nil {
+		t.Fatalf("mismatched pinned failure applied: %#v", state.PinnedMessages.Error)
 	}
 	if len(commands) != 0 {
 		t.Fatalf("commands = %#v", commands)
 	}
 
 	// Matching page accepted; activate carries TopicID.
-	accepted, _ := updateState(opened, PinnedMessagesLoaded{
+	updateState(&state, PinnedMessagesLoaded{
 		RequestID: requestID, ChatID: 7, TopicID: 101,
 		Page: telegram.MessageSearchPage{Messages: []domain.Message{{ID: 80, ChatID: 7, TopicID: 101}}},
 	})
-	if len(accepted.PinnedMessages.Results) != 1 {
-		t.Fatalf("results = %#v", accepted.PinnedMessages.Results)
+	if len(state.PinnedMessages.Results) != 1 {
+		t.Fatalf("results = %#v", state.PinnedMessages.Results)
 	}
-	activated, cmds := updateState(accepted, ActionReceived{Action: Activate})
+	cmds = updateState(&state, ActionReceived{Action: Activate})
 	if len(cmds) != 1 {
 		t.Fatalf("activate cmds = %#v", cmds)
 	}
@@ -461,12 +445,12 @@ func TestPinnedMessagesTopicScope(t *testing.T) {
 	}
 
 	// Context loaded with mismatched TopicID is rejected.
-	rejectedCtx, commands := updateState(activated, PinnedMessageContextLoaded{
+	commands = updateState(&state, PinnedMessageContextLoaded{
 		RequestID: jump.RequestID, ChatID: 7, TopicID: 202, MessageID: 80,
 		Page: telegram.MessagePage{Messages: []domain.Message{{ID: 80, ChatID: 7, TopicID: 202}}},
 	})
-	if rejectedCtx.PinnedMessages == nil || rejectedCtx.PinnedMessages.JumpMessageID != 80 {
-		t.Fatalf("mismatched pinned context applied: %#v", rejectedCtx.PinnedMessages)
+	if state.PinnedMessages == nil || state.PinnedMessages.JumpMessageID != 80 {
+		t.Fatalf("mismatched pinned context applied: %#v", state.PinnedMessages)
 	}
 	if len(commands) != 0 {
 		t.Fatalf("commands = %#v", commands)
@@ -486,21 +470,21 @@ func TestReconcilePinnedMessagesIgnoresCrossTopicPinEvents(t *testing.T) {
 	}
 
 	// Pin in another topic must not leak into this topic's view.
-	got, _ := updateState(state, TelegramEvent{Value: telegram.MessagePinnedUpdated{ChatID: 7, MessageID: 300, Pinned: true}})
-	if len(got.PinnedMessages.Results) != 1 {
-		t.Fatalf("results = %#v, want only topic 101 message", got.PinnedMessages.Results)
+	updateState(&state, TelegramEvent{Value: telegram.MessagePinnedUpdated{ChatID: 7, MessageID: 300, Pinned: true}})
+	if len(state.PinnedMessages.Results) != 1 {
+		t.Fatalf("results = %#v, want only topic 101 message", state.PinnedMessages.Results)
 	}
-	if got.PinnedMessages.TotalCount != 1 {
-		t.Fatalf("count = %d, want 1", got.PinnedMessages.TotalCount)
+	if state.PinnedMessages.TotalCount != 1 {
+		t.Fatalf("count = %d, want 1", state.PinnedMessages.TotalCount)
 	}
 
 	// Unpin within the same topic still reconciles.
-	unpinned, _ := updateState(state, TelegramEvent{Value: telegram.MessagePinnedUpdated{ChatID: 7, MessageID: 200, Pinned: false}})
-	if len(unpinned.PinnedMessages.Results) != 0 {
-		t.Fatalf("results = %#v, want empty", unpinned.PinnedMessages.Results)
+	updateState(&state, TelegramEvent{Value: telegram.MessagePinnedUpdated{ChatID: 7, MessageID: 200, Pinned: false}})
+	if len(state.PinnedMessages.Results) != 0 {
+		t.Fatalf("results = %#v, want empty", state.PinnedMessages.Results)
 	}
-	if unpinned.PinnedMessages.TotalCount != 0 {
-		t.Fatalf("count = %d, want 0", unpinned.PinnedMessages.TotalCount)
+	if state.PinnedMessages.TotalCount != 0 {
+		t.Fatalf("count = %d, want 0", state.PinnedMessages.TotalCount)
 	}
 }
 
@@ -514,7 +498,7 @@ func TestGlobalSearchJumpToTopicMessageSelectsTopicAndLoadsTopicContext(t *testi
 	state.SelectedChat = 0
 	state.NextRequestID = 10
 	msg := domain.Message{ID: 80, ChatID: 7, TopicID: 101, Kind: domain.MessageText, Text: "hit"}
-	opened, commands := openChatFromMessageResult(state, msg)
+	commands := openChatFromMessageResult(&state, msg)
 	var cmd Effect
 	for _, c := range commands {
 		if jump, ok := c.(LoadSearchMessageContext); ok {
@@ -528,24 +512,24 @@ func TestGlobalSearchJumpToTopicMessageSelectsTopicAndLoadsTopicContext(t *testi
 	if cmd.(LoadSearchMessageContext).ChatID != 7 || cmd.(LoadSearchMessageContext).TopicID != 101 || cmd.(LoadSearchMessageContext).MessageID != 80 {
 		t.Fatalf("cmd = %#v", cmd)
 	}
-	if opened.SelectedChat != 0 || opened.Chats[opened.SelectedChat].ID != 7 {
-		t.Fatalf("selected chat = %d", opened.SelectedChat)
+	if state.SelectedChat != 0 || state.Chats[state.SelectedChat].ID != 7 {
+		t.Fatalf("selected chat = %d", state.SelectedChat)
 	}
-	if opened.SelectedTopics[7] != 101 {
-		t.Fatalf("selected topic = %d, want 101", opened.SelectedTopics[7])
+	if state.SelectedTopics[7] != 101 {
+		t.Fatalf("selected topic = %d, want 101", state.SelectedTopics[7])
 	}
-	tracked := opened.ForumTopics[7][101]
+	tracked := state.ForumTopics[7][101]
 	if tracked.ID != 101 || tracked.ChatID != 7 || tracked.Name != "Topic" {
 		t.Fatalf("forum topic = %#v, want minimal fallback", tracked)
 	}
-	if opened.ChatSearch != nil {
+	if state.ChatSearch != nil {
 		t.Fatal("chat search not closed")
 	}
-	if opened.Focus != FocusConversation {
-		t.Fatalf("focus = %v", opened.Focus)
+	if state.Focus != FocusConversation {
+		t.Fatalf("focus = %v", state.Focus)
 	}
-	if opened.MessageSearch == nil || opened.MessageSearch.TopicID != 101 || opened.MessageSearch.JumpMessageID != 80 {
-		t.Fatalf("message search = %#v", opened.MessageSearch)
+	if state.MessageSearch == nil || state.MessageSearch.TopicID != 101 || state.MessageSearch.JumpMessageID != 80 {
+		t.Fatalf("message search = %#v", state.MessageSearch)
 	}
 }
 
@@ -557,8 +541,7 @@ func TestGlobalSearchJumpToTopicMessageIgnoresNonForumChat(t *testing.T) {
 	state.SelectedChat = 0
 	state.NextRequestID = 10
 	msg := domain.Message{ID: 80, ChatID: 7, TopicID: 101, Kind: domain.MessageText, Text: "hit"}
-	before := state
-	_, commands := openChatFromMessageResult(before, msg)
+	commands := openChatFromMessageResult(&state, msg)
 	if len(commands) != 0 {
 		t.Fatalf("commands = %#v, want none for non-forum topic jump", commands)
 	}
@@ -572,7 +555,7 @@ func TestGlobalSearchJumpToOrdinaryMessageUnchanged(t *testing.T) {
 	state.SelectedChat = 0
 	state.NextRequestID = 10
 	msg := domain.Message{ID: 80, ChatID: 7, Kind: domain.MessageText, Text: "hit"}
-	opened, commands := openChatFromMessageResult(state, msg)
+	commands := openChatFromMessageResult(&state, msg)
 	var cmd Effect
 	for _, c := range commands {
 		if jump, ok := c.(LoadSearchMessageContext); ok {
@@ -586,8 +569,8 @@ func TestGlobalSearchJumpToOrdinaryMessageUnchanged(t *testing.T) {
 	if j := cmd.(LoadSearchMessageContext); j.ChatID != 7 || j.TopicID != 0 || j.MessageID != 80 {
 		t.Fatalf("cmd = %#v", j)
 	}
-	if opened.MessageSearch == nil || opened.MessageSearch.TopicID != 0 || opened.MessageSearch.JumpMessageID != 80 {
-		t.Fatalf("message search = %#v", opened.MessageSearch)
+	if state.MessageSearch == nil || state.MessageSearch.TopicID != 0 || state.MessageSearch.JumpMessageID != 80 {
+		t.Fatalf("message search = %#v", state.MessageSearch)
 	}
 }
 
@@ -599,20 +582,20 @@ func TestChatSearchForumActivationEntersAllDirectly(t *testing.T) {
 	state.SelectedChat = 0
 	state.NextRequestID = 10
 	chat := state.Chats[0]
-	opened, commands := openChatFromSearchResult(state, chat)
-	if chatIndex(opened.Chats, 7) < 0 {
+	commands := openChatFromSearchResult(&state, chat)
+	if chatIndex(state.Chats, 7) < 0 {
 		t.Fatal("chat not selected")
 	}
-	if opened.Topics != nil {
-		t.Fatalf("topics modal opened = %#v, want direct ALL entry", opened.Topics)
+	if state.Topics != nil {
+		t.Fatalf("topics modal opened = %#v, want direct ALL entry", state.Topics)
 	}
-	if !opened.ShowAll[7] {
-		t.Fatalf("ShowAll = %#v, want ALL mode", opened.ShowAll)
+	if !state.ShowAll[7] {
+		t.Fatalf("ShowAll = %#v, want ALL mode", state.ShowAll)
 	}
-	if opened.Focus != FocusConversation {
-		t.Fatalf("focus = %v, want FocusConversation", opened.Focus)
+	if state.Focus != FocusConversation {
+		t.Fatalf("focus = %v, want FocusConversation", state.Focus)
 	}
-	history, exists := opened.History[7]
+	history, exists := state.History[7]
 	if !exists || !history.Loading {
 		t.Fatal("ALL history must be requested for forum activation")
 	}
@@ -638,11 +621,11 @@ func TestActivateTopicClearsCommandMenu(t *testing.T) {
 	state.CommandMenu = &CommandMenuState{ChatID: 7, Query: "/h"}
 	state.Focus = FocusTopics
 	state.Topics = &TopicListState{RequestID: 10, ChatID: 7, PreviousFocus: FocusChats, Results: []domain.ForumTopic{{ID: 101, ChatID: 7, Name: "General"}}}
-	opened, _ := activateTopic(state, domain.ForumTopic{ID: 101, ChatID: 7, Name: "General"})
-	if opened.CommandMenu != nil {
-		t.Fatalf("command menu = %#v, want cleared", opened.CommandMenu)
+	activateTopic(&state, domain.ForumTopic{ID: 101, ChatID: 7, Name: "General"})
+	if state.CommandMenu != nil {
+		t.Fatalf("command menu = %#v, want cleared", state.CommandMenu)
 	}
-	if opened.SelectedTopics[7] != 101 {
-		t.Fatalf("selected topic = %d, want 101", opened.SelectedTopics[7])
+	if state.SelectedTopics[7] != 101 {
+		t.Fatalf("selected topic = %d, want 101", state.SelectedTopics[7])
 	}
 }

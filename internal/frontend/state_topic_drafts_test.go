@@ -29,7 +29,8 @@ func TestTopicComposerTypingRoutesToTopicDrafts(t *testing.T) {
 	state := topicDraftState(t)
 	key := topicKey{ChatID: 7, TopicID: 101}
 
-	got, commands := updateState(state, ComposerValueChanged{ChatID: 7, Value: "topic draft"})
+	commands := updateState(&state, ComposerValueChanged{ChatID: 7, Value: "topic draft"})
+	got := state
 
 	if got.TopicDrafts[key] != "topic draft" {
 		t.Fatalf("topic draft = %q", got.TopicDrafts[key])
@@ -53,17 +54,23 @@ func TestTopicComposerTypingRoutesToTopicDrafts(t *testing.T) {
 }
 
 func TestForumWithoutSelectedTopicComposerNoOp(t *testing.T) {
-	state := topicDraftState(t)
-	delete(state.SelectedTopics, 7)
-
-	typing, commands := updateState(state, ComposerValueChanged{ChatID: 7, Value: "orphan"})
-	if len(commands) != 0 || !reflect.DeepEqual(typing, state) {
-		t.Fatalf("orphan typing changed state: commands=%#v drafts=%#v", commands, typing.Drafts)
-	}
-
-	submitted, commands := updateState(state, ActionReceived{Action: ComposerSubmit, At: time.Unix(100, 0)})
-	if len(commands) != 0 || !reflect.DeepEqual(submitted, state) {
-		t.Fatalf("orphan submit changed state: commands=%#v", commands)
+	for _, tc := range []struct {
+		name  string
+		event Event
+	}{
+		{"typing", ComposerValueChanged{ChatID: 7, Value: "orphan"}},
+		{"submit", ActionReceived{Action: ComposerSubmit, At: time.Unix(100, 0)}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			state := topicDraftState(t)
+			delete(state.SelectedTopics, 7)
+			want := topicDraftState(t)
+			delete(want.SelectedTopics, 7)
+			commands := updateState(&state, tc.event)
+			if len(commands) != 0 || !reflect.DeepEqual(state, want) {
+				t.Fatalf("orphan %s changed state: state=%#v effects=%#v", tc.name, state, commands)
+			}
+		})
 	}
 }
 
@@ -73,7 +80,8 @@ func TestTopicSubmitCarriesTopicIDClearsTopicDraftPreservesChatDrafts(t *testing
 	state.TopicDrafts[key] = "topic text"
 	state.Drafts[7] = "chat level"
 
-	got, commands := updateState(state, ActionReceived{Action: ComposerSubmit, At: time.Unix(100, 0)})
+	commands := updateState(&state, ActionReceived{Action: ComposerSubmit, At: time.Unix(100, 0)})
+	got := state
 
 	if len(commands) != 2 {
 		t.Fatalf("commands = %#v", commands)
@@ -104,10 +112,11 @@ func TestTopicSubmitCarriesTopicIDClearsTopicDraftPreservesChatDrafts(t *testing
 func TestTopicDraftSavedAckUpdatesDatesAndSnapshotIgnoresStale(t *testing.T) {
 	state := topicDraftState(t)
 	key := topicKey{ChatID: 7, TopicID: 101}
-	state, commands := updateState(state, ComposerValueChanged{ChatID: 7, Value: "topic draft"})
+	commands := updateState(&state, ComposerValueChanged{ChatID: 7, Value: "topic draft"})
 	save := commands[0].(SaveDraft)
 
-	ack, _ := updateState(state, DraftSaved{RequestID: save.RequestID, ChatID: 7, TopicID: 101, Date: 123})
+	updateState(&state, DraftSaved{RequestID: save.RequestID, ChatID: 7, TopicID: 101, Date: 123})
+	ack := state
 	if ack.TopicDraftDates[key] != 123 {
 		t.Fatalf("ack dates = %#v", ack.TopicDraftDates)
 	}
@@ -121,7 +130,8 @@ func TestTopicDraftSavedAckUpdatesDatesAndSnapshotIgnoresStale(t *testing.T) {
 		t.Fatalf("chat-level draft date touched: %#v", ack.DraftDates)
 	}
 
-	stale, _ := updateState(ack, DraftSaved{RequestID: save.RequestID + 1, ChatID: 7, TopicID: 101, Date: 999})
+	updateState(&ack, DraftSaved{RequestID: save.RequestID + 1, ChatID: 7, TopicID: 101, Date: 999})
+	stale := ack
 	if stale.TopicDraftDates[key] != 123 || stale.ForumTopics[7][101].Draft.Date != 123 {
 		t.Fatalf("stale ack applied: dates=%#v snapshot=%#v", stale.TopicDraftDates, stale.ForumTopics[7][101].Draft)
 	}
@@ -130,10 +140,11 @@ func TestTopicDraftSavedAckUpdatesDatesAndSnapshotIgnoresStale(t *testing.T) {
 func TestTopicDraftSaveFailedSanitizedToast(t *testing.T) {
 	state := topicDraftState(t)
 	key := topicKey{ChatID: 7, TopicID: 101}
-	state, commands := updateState(state, ComposerValueChanged{ChatID: 7, Value: "topic draft"})
+	commands := updateState(&state, ComposerValueChanged{ChatID: 7, Value: "topic draft"})
 	save := commands[0].(SaveDraft)
 
-	failed, _ := updateState(state, DraftSaveFailed{RequestID: save.RequestID, ChatID: 7, TopicID: 101, Error: domain.AppError{Message: "private raw failure"}})
+	updateState(&state, DraftSaveFailed{RequestID: save.RequestID, ChatID: 7, TopicID: 101, Error: domain.AppError{Message: "private raw failure"}})
+	failed := state
 	if failed.Toast == nil || failed.Toast.Message != "Could not sync draft" || strings.Contains(failed.Toast.Error(), "private") {
 		t.Fatalf("failure toast = %#v", failed.Toast)
 	}
@@ -152,7 +163,8 @@ func TestTopicReplyBeginAndRestoreCarryTopicID(t *testing.T) {
 	state.Messages[7] = []domain.Message{{ID: 55, ChatID: 7, TopicID: 101, Kind: domain.MessageText, SenderName: "Sender", Text: "body"}}
 	state.SelectedMessageChat, state.SelectedMessage = 7, 55
 
-	replying, commands := updateState(state, ActionReceived{Action: ReplyMessage})
+	commands := updateState(&state, ActionReceived{Action: ReplyMessage})
+	replying := state
 	if len(commands) != 1 {
 		t.Fatalf("reply commands = %#v", commands)
 	}
@@ -167,7 +179,8 @@ func TestTopicReplyBeginAndRestoreCarryTopicID(t *testing.T) {
 		t.Fatalf("reply draft maps = %#v / %#v", replying.TopicDraftReplies, replying.DraftReplies)
 	}
 
-	cancelled, commands := updateState(replying, ActionReceived{Action: CancelReply})
+	commands = updateState(&replying, ActionReceived{Action: CancelReply})
+	cancelled := replying
 	if len(commands) != 1 {
 		t.Fatalf("cancel commands = %#v", commands)
 	}
@@ -199,12 +212,12 @@ func TestTopicDraftsAreIsolatedAcrossTopics(t *testing.T) {
 	keyA := topicKey{ChatID: 7, TopicID: 101}
 	keyB := topicKey{ChatID: 7, TopicID: 102}
 
-	state, commands := updateState(state, ComposerValueChanged{ChatID: 7, Value: "draft A"})
+	commands := updateState(&state, ComposerValueChanged{ChatID: 7, Value: "draft A"})
 	if save := commands[0].(SaveDraft); save.TopicID != 101 || save.Text != "draft A" {
 		t.Fatalf("topic A save = %#v", save)
 	}
 	state.SelectedTopics[7] = 102
-	state, commands = updateState(state, ComposerValueChanged{ChatID: 7, Value: "draft B"})
+	commands = updateState(&state, ComposerValueChanged{ChatID: 7, Value: "draft B"})
 	if save := commands[0].(SaveDraft); save.TopicID != 102 || save.Text != "draft B" {
 		t.Fatalf("topic B save = %#v", save)
 	}
@@ -220,7 +233,7 @@ func TestOrdinaryChatDraftBehaviorUnchanged(t *testing.T) {
 	state := topicDraftState(t)
 	state.Chats = []domain.Chat{{ID: 7, Title: "Team", CanSend: true}}
 
-	state, commands := updateState(state, ComposerValueChanged{ChatID: 7, Value: "chat draft"})
+	commands := updateState(&state, ComposerValueChanged{ChatID: 7, Value: "chat draft"})
 	if state.Drafts[7] != "chat draft" {
 		t.Fatalf("chat draft = %q", state.Drafts[7])
 	}
@@ -231,7 +244,8 @@ func TestOrdinaryChatDraftBehaviorUnchanged(t *testing.T) {
 		t.Fatalf("save command = %#v", save)
 	}
 
-	got, commands := updateState(state, ActionReceived{Action: ComposerSubmit, At: time.Unix(100, 0)})
+	commands = updateState(&state, ActionReceived{Action: ComposerSubmit, At: time.Unix(100, 0)})
+	got := state
 	if len(commands) != 2 {
 		t.Fatalf("submit commands = %#v", commands)
 	}

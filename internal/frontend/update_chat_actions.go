@@ -103,26 +103,26 @@ func confirmationLabel(action Action) string {
 	}
 }
 
-func openChatActionMenu(state State) (State, []Effect) {
-	chatID, ok := focusedChatID(state)
+func openChatActionMenu(state *State) []Effect {
+	chatID, ok := focusedChatID(*state)
 	if !ok || state.Focus != FocusChats {
-		return state, nil
+		return nil
 	}
 	state.ChatActions = &ChatActionMenuState{ChatID: chatID, PreviousFocus: state.Focus}
 	state.Focus = FocusChatActions
-	return state, nil
+	return nil
 }
 
-func reduceChatActionMenu(state State, event ActionReceived) (State, []Effect) {
+func reduceChatActionMenu(state *State, event ActionReceived) []Effect {
 	menu := state.ChatActions
 	if menu == nil || (event.ChatID != 0 && event.ChatID != menu.ChatID) {
-		return state, nil
+		return nil
 	}
 	chatIndex := chatIndex(state.Chats, menu.ChatID)
 	if chatIndex < 0 {
 		state.Focus = menu.PreviousFocus
 		state.ChatActions = nil
-		return state, nil
+		return nil
 	}
 	items := ChatActionMenuItems(state.Chats[chatIndex], menu)
 	if menu.Working {
@@ -130,31 +130,31 @@ func reduceChatActionMenu(state State, event ActionReceived) (State, []Effect) {
 			state.Focus = menu.PreviousFocus
 			state.ChatActions = nil
 		}
-		return state, nil
+		return nil
 	}
 	switch event.Action {
 	case Close:
 		if menu.Confirming != NoAction {
 			menu.Confirming = NoAction
 			menu.Selected = 0
-			return state, nil
+			return nil
 		}
 		state.Focus = menu.PreviousFocus
 		state.ChatActions = nil
-		return state, nil
+		return nil
 	case SelectNext, SelectPrevious:
 		if len(items) == 0 {
-			return state, nil
+			return nil
 		}
 		delta := 1
 		if event.Action == SelectPrevious {
 			delta = -1
 		}
 		menu.Selected = (menu.Selected + delta + len(items)) % len(items)
-		return state, nil
+		return nil
 	case Activate:
 		if len(items) == 0 {
-			return state, nil
+			return nil
 		}
 		menu.Selected = max(0, min(menu.Selected, len(items)-1))
 		event.Action = items[menu.Selected].Action
@@ -162,10 +162,10 @@ func reduceChatActionMenu(state State, event ActionReceived) (State, []Effect) {
 	case CancelChatAction:
 		menu.Confirming = NoAction
 		menu.Selected = 0
-		return state, nil
+		return nil
 	case ConfirmChatAction:
 		if menu.Confirming == NoAction {
-			return state, nil
+			return nil
 		}
 		action := menu.Confirming
 		menu.Confirming = NoAction
@@ -182,8 +182,8 @@ func reduceChatActionMenu(state State, event ActionReceived) (State, []Effect) {
 		state.DetailsChatID = menu.ChatID
 		state.DetailsSelected = 0
 		state.Focus = FocusDetails
-		clampDetailsSelection(&state)
-		return state, nil
+		clampDetailsSelection(state)
+		return nil
 	}
 	for _, item := range items {
 		if item.Action != event.Action {
@@ -192,68 +192,67 @@ func reduceChatActionMenu(state State, event ActionReceived) (State, []Effect) {
 		if item.Destructive {
 			menu.Confirming = item.Action
 			menu.Selected = 0
-			return state, nil
+			return nil
 		}
 		return executeChatAction(state, item.Action)
 	}
-	return state, nil
+	return nil
 }
 
-func openActiveChatFromList(state State) (State, []Effect) {
-	chatID, ok := focusedChatID(state)
+func openActiveChatFromList(state *State) []Effect {
+	chatID, ok := focusedChatID(*state)
 	if !ok {
-		return state, nil
+		return nil
 	}
 	return openChatFromList(state, chatID)
 }
 
-func openChatFromList(state State, chatID domain.ChatID) (State, []Effect) {
-	state, commands := selectChatForOpen(state, chatID)
-	activeID, ok := activeChatID(state)
+func openChatFromList(state *State, chatID domain.ChatID) []Effect {
+	commands := selectChatForOpen(state, chatID)
+	activeID, ok := activeChatID(*state)
 	if !ok || activeID != chatID {
-		return state, commands
+		return commands
 	}
 	if state.Chats[state.SelectedChat].IsForum {
-		opened, openCommands := activateAllTopics(state, chatID)
-		return opened, append(commands, openCommands...)
+		return append(commands, activateAllTopics(state, chatID)...)
 	}
 	state.Focus = FocusConversation
-	commands = append(commands, requestHistoryIfAbsent(&state, chatID)...)
-	commands = append(commands, requestMissingMessageAvatars(&state, state.Messages[chatID])...)
-	return state, commands
+	commands = append(commands, requestHistoryIfAbsent(state, chatID)...)
+	commands = append(commands, requestMissingMessageAvatars(state, state.Messages[chatID])...)
+	return commands
 }
 
 // selectChatForOpen commits the focused chat as the selected conversation.
 // Reopening the already-selected chat does not churn TDLib's open-chat state.
-func selectChatForOpen(state State, chatID domain.ChatID) (State, []Effect) {
+func selectChatForOpen(state *State, chatID domain.ChatID) []Effect {
 	index := chatIndex(state.Chats, chatID)
 	if index < 0 {
-		return state, nil
+		return nil
 	}
 	state.FocusedChat = index
-	if activeID, ok := activeChatID(state); ok && activeID == chatID {
+	if activeID, ok := activeChatID(*state); ok && activeID == chatID {
 		if state.DetailsOpen {
 			state.DetailsChatID = chatID
-			clampDetailsSelection(&state)
+			clampDetailsSelection(state)
 		}
-		return state, nil
+		return nil
 	}
 	return reduceAction(state, ActionReceived{Action: SelectChat, ChatID: chatID})
 }
 
-func executeChatAction(state State, action Action) (State, []Effect) {
+func executeChatAction(state *State, action Action) []Effect {
 	menu := state.ChatActions
 	if menu == nil {
-		return state, nil
+		return nil
 	}
 	telegramAction, ok := telegramChatAction(action)
 	if !ok {
-		return state, nil
+		return nil
 	}
-	requestID := allocateRequestID(&state)
+	requestID := allocateRequestID(state)
 	menu.RequestID = requestID
 	menu.Working = true
-	return state, []Effect{ApplyChatActionCommand{RequestID: requestID, ChatID: menu.ChatID, Action: telegramAction}}
+	return []Effect{ApplyChatActionCommand{RequestID: requestID, ChatID: menu.ChatID, Action: telegramAction}}
 }
 
 func telegramChatAction(action Action) (telegram.ChatAction, bool) {
@@ -289,16 +288,16 @@ func telegramChatAction(action Action) (telegram.ChatAction, bool) {
 	}
 }
 
-func reduceChatActionApplied(state State, event ChatActionApplied) (State, []Effect) {
+func reduceChatActionApplied(state *State, event ChatActionApplied) []Effect {
 	menu := state.ChatActions
 	if menu == nil || !menu.Working || menu.RequestID != event.RequestID || menu.ChatID != event.ChatID {
-		return state, nil
+		return nil
 	}
 	index := chatIndex(state.Chats, event.ChatID)
 	if index < 0 {
 		state.Focus = menu.PreviousFocus
 		state.ChatActions = nil
-		return state, nil
+		return nil
 	}
 	chat := &state.Chats[index]
 	label := "Chat updated"
@@ -358,12 +357,12 @@ func reduceChatActionApplied(state State, event ChatActionApplied) (State, []Eff
 		label = "Joined chat"
 	}
 	if removeFromList {
-		removeChatFromMainList(&state, event.ChatID, deleteData)
+		removeChatFromMainList(state, event.ChatID, deleteData)
 	}
 	state.Focus = menu.PreviousFocus
 	state.ChatActions = nil
-	setToast(&state, domain.AppError{Message: label}, 2*time.Second)
-	return state, commands
+	setToast(state, domain.AppError{Message: label}, 2*time.Second)
+	return commands
 }
 
 func removeChatFromMainList(state *State, chatID domain.ChatID, deleteData bool) {
@@ -412,14 +411,14 @@ func removeChatFromMainList(state *State, chatID domain.ChatID, deleteData bool)
 	}
 }
 
-func reduceChatActionFailed(state State, event ChatActionFailed) (State, []Effect) {
+func reduceChatActionFailed(state *State, event ChatActionFailed) []Effect {
 	menu := state.ChatActions
 	if menu == nil || !menu.Working || menu.RequestID != event.RequestID || menu.ChatID != event.ChatID {
-		return state, nil
+		return nil
 	}
 	menu.Working = false
-	setToast(&state, event.Error, 3*time.Second)
-	return state, nil
+	setToast(state, event.Error, 3*time.Second)
+	return nil
 }
 
 func chatActionError(action telegram.ChatAction) domain.AppError {

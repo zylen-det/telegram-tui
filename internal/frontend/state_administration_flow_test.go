@@ -22,11 +22,11 @@ func TestAdministrationRightsAndRestrictionsRespectLiveLimits(t *testing.T) {
 			t.Fatal("forum-only right appeared in non-forum group")
 		}
 	}
-	state, _ = updateState(state, ActionReceived{Action: ToggleAdministrationItem, ChatID: 9, UserID: 2, AdminIndex: 5})
+	updateState(&state, ActionReceived{Action: ToggleAdministrationItem, ChatID: 9, UserID: 2, AdminIndex: 5})
 	if !state.Administration.EditedRights.CanInviteUsers {
 		t.Fatal("own invite right could not be enabled")
 	}
-	state, _ = updateState(state, ActionReceived{Action: ToggleAdministrationItem, ChatID: 9, UserID: 2, AdminIndex: 6})
+	updateState(&state, ActionReceived{Action: ToggleAdministrationItem, ChatID: 9, UserID: 2, AdminIndex: 6})
 	if state.Administration.EditedRights.CanRestrictMembers {
 		t.Fatal("right beyond current admin rights was enabled")
 	}
@@ -40,74 +40,83 @@ func TestAdministrationRightsAndRestrictionsRespectLiveLimits(t *testing.T) {
 	}
 	state.Administration.Mode = AdministrationMemberMenu
 	state.Administration.MemberStatus = &telegram.MemberAdministrationStatus{Role: domain.ChatMemberRoleRestricted, Permissions: telegram.ChatPermissions{CanSendPhotos: true}}
-	state, _ = updateState(state, ActionReceived{Action: SelectAdministrationAction, ChatID: 9, UserID: 2, AdminIndex: 4})
+	updateState(&state, ActionReceived{Action: SelectAdministrationAction, ChatID: 9, UserID: 2, AdminIndex: 4})
 	if state.Administration.Mode != AdministrationRestrictionsEditor || !state.Administration.EditedPermissions.CanSendPhotos {
 		t.Fatalf("restriction editor did not load current restrictions: %#v", state.Administration)
 	}
-	state, _ = updateState(state, ActionReceived{Action: ToggleAdministrationItem, ChatID: 9, UserID: 2, AdminIndex: 3})
+	updateState(&state, ActionReceived{Action: ToggleAdministrationItem, ChatID: 9, UserID: 2, AdminIndex: 3})
 	if state.Administration.EditedPermissions.CanSendPhotos {
 		t.Fatal("existing extra photo permission could not be removed")
 	}
-	state, _ = updateState(state, ActionReceived{Action: ToggleAdministrationItem, ChatID: 9, UserID: 2, AdminIndex: 3})
+	updateState(&state, ActionReceived{Action: ToggleAdministrationItem, ChatID: 9, UserID: 2, AdminIndex: 3})
 	if state.Administration.EditedPermissions.CanSendPhotos {
 		t.Fatal("restriction editor enabled permission forbidden by group")
 	}
 }
 
 func TestMemberAdministrationRestoresModalAndRejectsStaleAction(t *testing.T) {
-	base := State{Focus: FocusMembers, SelectedChat: 0, Chats: []domain.Chat{{ID: 9, Kind: domain.ChatSupergroup, CanRestrictMembers: true}},
-		Members: &MembersState{ChatID: 9, Detail: &MemberDetail{UserID: 2, Name: "Ada", CanManageInChat: true}}}
-	opened, commands := updateState(base, ActionReceived{Action: OpenMemberAdministration, ChatID: 9, UserID: 2})
-	if opened.Members != nil || opened.Administration == nil || len(commands) != 2 {
-		t.Fatalf("member admin did not replace modal: members=%#v admin=%#v commands=%#v", opened.Members, opened.Administration, commands)
+	memberFixture := func() State {
+		return State{Focus: FocusMembers, SelectedChat: 0, Chats: []domain.Chat{{ID: 9, Kind: domain.ChatSupergroup, CanRestrictMembers: true}},
+			Members: &MembersState{ChatID: 9, Detail: &MemberDetail{UserID: 2, Name: "Ada", CanManageInChat: true}}}
 	}
-	backed, _ := updateState(opened, ActionReceived{Action: Close})
-	if backed.Administration != nil || backed.Members == nil || backed.Members.Detail == nil || backed.Focus != FocusMembers {
-		t.Fatalf("closing did not restore detail: %#v", backed)
+	state := memberFixture()
+	commands := updateState(&state, ActionReceived{Action: OpenMemberAdministration, ChatID: 9, UserID: 2})
+	if state.Members != nil || state.Administration == nil || len(commands) != 2 {
+		t.Fatalf("member admin did not replace modal: members=%#v admin=%#v commands=%#v", state.Members, state.Administration, commands)
 	}
-	request := opened.Administration.RequestID
-	opened, _ = updateState(opened, AdministrationLoaded{RequestID: request, ChatID: 9, Snapshot: telegram.AdministrationSnapshot{Kind: domain.ChatSupergroup, CanRestrictMembers: true}})
-	opened, _ = updateState(opened, MemberAdministrationLoaded{RequestID: request, ChatID: 9, UserID: 2, Status: telegram.MemberAdministrationStatus{Role: domain.ChatMemberRoleMember}})
-	opened, _ = updateState(opened, ActionReceived{Action: SelectAdministrationAction, ChatID: 9, UserID: 2, AdminIndex: 7})
-	if opened.Administration.Mode != AdministrationConfirmation {
+	request := state.Administration.RequestID
+
+	// Closing restores the member detail. updateState mutates in place, so
+	// this branch opens its own independent copy of the modal.
+	closing := memberFixture()
+	updateState(&closing, ActionReceived{Action: OpenMemberAdministration, ChatID: 9, UserID: 2})
+	updateState(&closing, ActionReceived{Action: Close})
+	if closing.Administration != nil || closing.Members == nil || closing.Members.Detail == nil || closing.Members.Detail.UserID != 2 || closing.Focus != FocusMembers {
+		t.Fatalf("closing did not restore detail: %#v", closing)
+	}
+
+	updateState(&state, AdministrationLoaded{RequestID: request, ChatID: 9, Snapshot: telegram.AdministrationSnapshot{Kind: domain.ChatSupergroup, CanRestrictMembers: true}})
+	updateState(&state, MemberAdministrationLoaded{RequestID: request, ChatID: 9, UserID: 2, Status: telegram.MemberAdministrationStatus{Role: domain.ChatMemberRoleMember}})
+	updateState(&state, ActionReceived{Action: SelectAdministrationAction, ChatID: 9, UserID: 2, AdminIndex: 7})
+	if state.Administration.Mode != AdministrationConfirmation {
 		t.Fatal("ban did not enter confirmation")
 	}
-	working, commands := updateState(opened, ActionReceived{Action: ConfirmAdministrationAction, ChatID: 9, UserID: 2})
-	if len(commands) != 1 || !working.Administration.Working {
-		t.Fatalf("ban did not start: %#v %#v", working.Administration, commands)
+	commands = updateState(&state, ActionReceived{Action: ConfirmAdministrationAction, ChatID: 9, UserID: 2})
+	if len(commands) != 1 || !state.Administration.Working {
+		t.Fatalf("ban did not start: %#v %#v", state.Administration, commands)
 	}
-	actionRequest := working.Administration.RequestID
-	stale, _ := updateState(working, MemberAdministrationApplied{RequestID: actionRequest, ChatID: 9, UserID: 3, Action: telegram.MemberAdministrationBan})
-	if stale.Administration == nil || !stale.Administration.Working {
+	actionRequest := state.Administration.RequestID
+	updateState(&state, MemberAdministrationApplied{RequestID: actionRequest, ChatID: 9, UserID: 3, Action: telegram.MemberAdministrationBan})
+	if state.Administration == nil || !state.Administration.Working {
 		t.Fatal("wrong user action completed modal")
 	}
-	stale, _ = updateState(working, MemberAdministrationApplied{RequestID: actionRequest, ChatID: 9, UserID: 2, Action: telegram.MemberAdministrationRemove})
-	if stale.Administration == nil || !stale.Administration.Working {
+	updateState(&state, MemberAdministrationApplied{RequestID: actionRequest, ChatID: 9, UserID: 2, Action: telegram.MemberAdministrationRemove})
+	if state.Administration == nil || !state.Administration.Working {
 		t.Fatal("wrong action completed modal")
 	}
-	refreshed, commands := updateState(working, MemberAdministrationApplied{RequestID: actionRequest, ChatID: 9, UserID: 2, Action: telegram.MemberAdministrationBan})
-	if refreshed.Administration != nil || refreshed.Members == nil || refreshed.Members.Detail != nil || refreshed.Members.Notice != "Member updated" || refreshed.Focus != FocusMembers || len(commands) != 1 {
-		t.Fatalf("success did not refresh member list: members=%#v admin=%#v commands=%#v", refreshed.Members, refreshed.Administration, commands)
+	commands = updateState(&state, MemberAdministrationApplied{RequestID: actionRequest, ChatID: 9, UserID: 2, Action: telegram.MemberAdministrationBan})
+	if state.Administration != nil || state.Members == nil || state.Members.Detail != nil || state.Members.Notice != "Member updated" || state.Focus != FocusMembers || len(commands) != 1 {
+		t.Fatalf("success did not refresh member list: members=%#v admin=%#v commands=%#v", state.Members, state.Administration, commands)
 	}
 }
 
 func TestAdministrationLoadFailureRetriesWithoutLeakingOldResults(t *testing.T) {
-	base := State{Focus: FocusDetails, SelectedChat: 0, Chats: []domain.Chat{{ID: 9, Kind: domain.ChatSupergroup, CanRestrictMembers: true}}}
-	opened, _ := updateState(base, ActionReceived{Action: OpenGroupPermissions})
-	first := opened.Administration.RequestID
-	failed, _ := updateState(opened, AdministrationLoadFailed{RequestID: first, ChatID: 9})
-	if failed.Administration.Error == nil || failed.Administration.Error.Message != "Could not load administration" {
-		t.Fatalf("failure message = %#v", failed.Administration.Error)
+	state := State{Focus: FocusDetails, SelectedChat: 0, Chats: []domain.Chat{{ID: 9, Kind: domain.ChatSupergroup, CanRestrictMembers: true}}}
+	updateState(&state, ActionReceived{Action: OpenGroupPermissions})
+	first := state.Administration.RequestID
+	updateState(&state, AdministrationLoadFailed{RequestID: first, ChatID: 9})
+	if state.Administration.Error == nil || state.Administration.Error.Message != "Could not load administration" {
+		t.Fatalf("failure message = %#v", state.Administration.Error)
 	}
-	if items := AdministrationMenuItems(failed.Administration); len(items) != 1 || items[0].Action.Action != Retry {
+	if items := AdministrationMenuItems(state.Administration); len(items) != 1 || items[0].Action.Action != Retry {
 		t.Fatalf("failed editor offered editable rows: %#v", items)
 	}
-	retrying, commands := updateState(failed, ActionReceived{Action: Retry, ChatID: 9})
-	if retrying.Administration.RequestID == first || !retrying.Administration.Loading || len(commands) != 1 {
-		t.Fatalf("retry did not reload: %#v %#v", retrying.Administration, commands)
+	commands := updateState(&state, ActionReceived{Action: Retry, ChatID: 9})
+	if state.Administration.RequestID == first || !state.Administration.Loading || len(commands) != 1 {
+		t.Fatalf("retry did not reload: %#v %#v", state.Administration, commands)
 	}
-	stale, _ := updateState(retrying, AdministrationLoaded{RequestID: first, ChatID: 9, Snapshot: telegram.AdministrationSnapshot{Kind: domain.ChatSupergroup, CanRestrictMembers: true}})
-	if stale.Administration.Snapshot != nil || !stale.Administration.Loading {
+	updateState(&state, AdministrationLoaded{RequestID: first, ChatID: 9, Snapshot: telegram.AdministrationSnapshot{Kind: domain.ChatSupergroup, CanRestrictMembers: true}})
+	if state.Administration.Snapshot != nil || !state.Administration.Loading {
 		t.Fatal("old result replaced retry state")
 	}
 }

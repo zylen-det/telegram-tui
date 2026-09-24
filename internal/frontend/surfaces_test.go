@@ -498,12 +498,12 @@ func TestLiveReactionUpdateRendersChipEndToEnd(t *testing.T) {
 	state := InitialState()
 	state.Chats = []domain.Chat{{ID: 9, Kind: domain.ChatPrivate}}
 	state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "opaque-body"}}
-	live, _ := updateState(state, TelegramEvent{Value: got})
-	if len(live.Messages[9][0].Reactions) != 1 || live.Messages[9][0].Reactions[0].Emoji != "👍" {
-		t.Fatalf("reducer did not apply live reactions: %#v", live.Messages[9][0].Reactions)
+	updateState(&state, TelegramEvent{Value: got})
+	if len(state.Messages[9][0].Reactions) != 1 || state.Messages[9][0].Reactions[0].Emoji != "👍" {
+		t.Fatalf("reducer did not apply live reactions: %#v", state.Messages[9][0].Reactions)
 	}
 
-	groups := GroupMessages(domain.ChatPrivate, live.Messages[9], time.UTC)
+	groups := GroupMessages(domain.ChatPrivate, state.Messages[9], time.UTC)
 	styles := newRenderStyles(false)
 	result := buildMessageGroupLayer(RenderedMessageGroup{MessageGroup: groups[0]}, 40, time.UTC, messageSelection{}, nil, styles)
 	var chipsLine messageRowSpec
@@ -772,7 +772,7 @@ func mainSurfaceModel(t *testing.T, width, height int) AppModel {
 		ID: 7, ChatID: 2, SenderName: "Iris", SentAt: time.Date(2026, time.July, 20, 14, 30, 0, 0, time.Local), Kind: domain.MessageText, Text: "Hello from the group",
 	}}
 	state.Drafts[2] = "draft reply"
-	state, _ = updateState(state, Resized{Width: width, Height: height})
+	updateState(&state, Resized{Width: width, Height: height})
 	model := newAppModelForTest(t, state, newTestSession(t))
 	_ = model.syncComposerTextHost()
 	return model

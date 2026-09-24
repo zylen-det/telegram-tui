@@ -29,29 +29,29 @@ func searchBaseState() State {
 
 func openSearch(t *testing.T, state State) State {
 	t.Helper()
-	opened, commands := updateState(state, ActionReceived{Action: OpenMessageSearch})
-	if opened.MessageSearch == nil || opened.MessageSearch.ChatID != 9 || opened.Focus != FocusSearchInput {
-		t.Fatalf("open = %#v %#v", opened.MessageSearch, opened.Focus)
+	commands := updateState(&state, ActionReceived{Action: OpenMessageSearch})
+	if state.MessageSearch == nil || state.MessageSearch.ChatID != 9 || state.Focus != FocusSearchInput {
+		t.Fatalf("open = %#v %#v", state.MessageSearch, state.Focus)
 	}
 	if len(commands) != 0 {
 		t.Fatalf("open commands = %#v", commands)
 	}
-	return opened
+	return state
 }
 
-func submitSearch(t *testing.T, opened State, input string) (State, []Effect) {
+func submitSearch(t *testing.T, state State, input string) (State, []Effect) {
 	t.Helper()
-	withInput, _ := updateState(opened, MessageSearchValueChanged{ChatID: 9, Value: input})
-	submitted, commands := updateState(withInput, ActionReceived{Action: SubmitMessageSearch})
-	return submitted, commands
+	updateState(&state, MessageSearchValueChanged{ChatID: 9, Value: input})
+	commands := updateState(&state, ActionReceived{Action: SubmitMessageSearch})
+	return state, commands
 }
 
 func TestMessageSearchOpenRequiresConversationFocus(t *testing.T) {
 	state := searchBaseState()
 	state.Focus = FocusChats
-	unchanged, commands := updateState(state, ActionReceived{Action: OpenMessageSearch})
-	if unchanged.MessageSearch != nil || len(commands) != 0 {
-		t.Fatalf("open from chats = %#v %#v", unchanged.MessageSearch, commands)
+	commands := updateState(&state, ActionReceived{Action: OpenMessageSearch})
+	if state.MessageSearch != nil || len(commands) != 0 {
+		t.Fatalf("open from chats = %#v %#v", state.MessageSearch, commands)
 	}
 	opened := openSearch(t, searchBaseState())
 	if opened.MessageSearch.PreviousFocus != FocusConversation {
@@ -60,12 +60,13 @@ func TestMessageSearchOpenRequiresConversationFocus(t *testing.T) {
 }
 
 func TestMessageSearchValueChangedScopesToActiveChat(t *testing.T) {
-	opened := openSearch(t, searchBaseState())
-	changed, _ := updateState(opened, MessageSearchValueChanged{ChatID: 9, Value: "needle"})
+	changed := openSearch(t, searchBaseState())
+	updateState(&changed, MessageSearchValueChanged{ChatID: 9, Value: "needle"})
 	if string(changed.MessageSearch.Input) != "needle" {
 		t.Fatalf("input = %q", string(changed.MessageSearch.Input))
 	}
-	wrongChat, _ := updateState(opened, MessageSearchValueChanged{ChatID: 8, Value: "other"})
+	wrongChat := openSearch(t, searchBaseState())
+	updateState(&wrongChat, MessageSearchValueChanged{ChatID: 8, Value: "other"})
 	if string(wrongChat.MessageSearch.Input) != "" {
 		t.Fatalf("wrong chat mutated input: %q", string(wrongChat.MessageSearch.Input))
 	}
@@ -87,11 +88,10 @@ func TestMessageSearchSubmitTrimsAndEmitsExactCommand(t *testing.T) {
 	if submitted.Drafts[9] != "keep draft" {
 		t.Fatalf("draft lost: %q", submitted.Drafts[9])
 	}
-	blank, blankCommands := submitSearch(t, opened, "   ")
+	blank, blankCommands := submitSearch(t, openSearch(t, searchBaseState()), "   ")
 	if len(blankCommands) != 0 || blank.MessageSearch != nil && blank.MessageSearch.Submitted {
 		t.Fatalf("blank submit = %#v %#v", blank.MessageSearch, blankCommands)
 	}
-	_ = reflect.DeepEqual
 }
 
 func TestMessageSearchResultsAppendDedupAndStaleGuards(t *testing.T) {
@@ -105,9 +105,9 @@ func TestMessageSearchResultsAppendDedupAndStaleGuards(t *testing.T) {
 		NextFromMessageID: 10,
 		TotalCount:        3,
 	}
-	got, _ := updateState(submitted, ChatMessagesSearched{RequestID: 10, ChatID: 9, Page: first})
-	if len(got.MessageSearch.Results) != 2 || got.MessageSearch.Done || got.MessageSearch.Loading || got.Focus != FocusSearchResults {
-		t.Fatalf("first page = %#v", got.MessageSearch)
+	updateState(&submitted, ChatMessagesSearched{RequestID: 10, ChatID: 9, Page: first})
+	if len(submitted.MessageSearch.Results) != 2 || submitted.MessageSearch.Done || submitted.MessageSearch.Loading || submitted.Focus != FocusSearchResults {
+		t.Fatalf("first page = %#v", submitted.MessageSearch)
 	}
 	// Duplicate + wrong chat + cross-chat message are ignored/deduped.
 	second := telegram.MessageSearchPage{
@@ -120,18 +120,18 @@ func TestMessageSearchResultsAppendDedupAndStaleGuards(t *testing.T) {
 		TotalCount:        3,
 		Done:              true,
 	}
-	paged, cmds := updateState(got, ChatMessagesSearched{RequestID: 10, ChatID: 9, Page: second})
-	if len(paged.MessageSearch.Results) != 3 || paged.MessageSearch.Results[2].ID != 10 || !paged.MessageSearch.Done {
-		t.Fatalf("second page = %#v cmds=%#v", paged.MessageSearch, cmds)
+	cmds := updateState(&submitted, ChatMessagesSearched{RequestID: 10, ChatID: 9, Page: second})
+	if len(submitted.MessageSearch.Results) != 3 || submitted.MessageSearch.Results[2].ID != 10 || !submitted.MessageSearch.Done {
+		t.Fatalf("second page = %#v cmds=%#v", submitted.MessageSearch, cmds)
 	}
 	for _, stale := range []Event{
 		ChatMessagesSearched{RequestID: 11, ChatID: 9, Page: first},
 		ChatMessagesSearched{RequestID: 10, ChatID: 8, Page: first},
 	} {
-		before := cloneReducerState(paged)
-		after, afterCmds := updateState(paged, stale)
-		if len(afterCmds) != 0 || !reflect.DeepEqual(after, before) {
-			t.Fatalf("stale result mutated state: %#v", stale)
+		commands := updateState(&submitted, stale)
+		search := submitted.MessageSearch
+		if len(commands) != 0 || search.RequestID != 10 || search.Loading || !search.Done || len(search.Results) != 3 || search.Results[2].ID != 10 {
+			t.Fatalf("stale result replaced active page: search=%#v effects=%#v", search, commands)
 		}
 	}
 }
@@ -146,36 +146,41 @@ func TestMessageSearchPaginationOnlyFromLastSelection(t *testing.T) {
 		},
 		NextFromMessageID: 10,
 	}
-	loaded, _ := updateState(submitted, ChatMessagesSearched{RequestID: 10, ChatID: 9, Page: page})
+	updateState(&submitted, ChatMessagesSearched{RequestID: 10, ChatID: 9, Page: page})
 	// Moving onto the last row paginates once.
-	paged, pagedCmds := updateState(loaded, ActionReceived{Action: SelectNext})
-	if paged.MessageSearch.Selected != 1 {
-		t.Fatalf("move = %#v", paged.MessageSearch)
+	pagedCmds := updateState(&submitted, ActionReceived{Action: SelectNext})
+	if submitted.MessageSearch.Selected != 1 {
+		t.Fatalf("move = %#v", submitted.MessageSearch)
 	}
 	if len(pagedCmds) != 1 {
 		t.Fatalf("expected pagination command, got %#v", pagedCmds)
 	}
 	paginateCmd, ok := pagedCmds[0].(SearchChatMessages)
-	if !ok || paginateCmd.Cursor.FromMessageID != 10 || paginateCmd.Query != "needle" || !paged.MessageSearch.Loading {
+	if !ok || paginateCmd.Cursor.FromMessageID != 10 || paginateCmd.Query != "needle" || !submitted.MessageSearch.Loading {
 		t.Fatalf("paginate command = %#v", pagedCmds[0])
 	}
 }
 
 func TestMessageSearchFailureIsFixedAndSafe(t *testing.T) {
-	opened := openSearch(t, searchBaseState())
-	submitted, _ := submitSearch(t, opened, "needle")
-	failed, _ := updateState(submitted, ChatMessagesSearchFailed{RequestID: 10, ChatID: 9, Error: domain.AppError{Kind: domain.ErrorInternal, Op: "x", Message: "raw"}})
+	failed := searchFailureFixture(t)
 	if failed.MessageSearch.Loading || failed.MessageSearch.Error == nil || failed.MessageSearch.Error.Message != "Could not search messages" {
 		t.Fatalf("failure = %#v", failed.MessageSearch)
 	}
 	if failed.Focus != FocusSearchResults {
 		t.Fatalf("focus = %v", failed.Focus)
 	}
-	before := cloneReducerState(failed)
-	after, cmds := updateState(failed, ChatMessagesSearchFailed{RequestID: 11, ChatID: 9, Error: domain.AppError{Message: "stale"}})
-	if len(cmds) != 0 || !reflect.DeepEqual(after, before) {
+	cmds := updateState(&failed, ChatMessagesSearchFailed{RequestID: 11, ChatID: 9, Error: domain.AppError{Message: "stale"}})
+	if len(cmds) != 0 || !reflect.DeepEqual(failed, searchFailureFixture(t)) {
 		t.Fatal("stale failure mutated state")
 	}
+}
+
+func searchFailureFixture(t *testing.T) State {
+	t.Helper()
+	opened := openSearch(t, searchBaseState())
+	submitted, _ := submitSearch(t, opened, "needle")
+	updateState(&submitted, ChatMessagesSearchFailed{RequestID: 10, ChatID: 9, Error: domain.AppError{Kind: domain.ErrorInternal, Op: "x", Message: "raw"}})
+	return submitted
 }
 
 func TestMessageSearchJumpLoadsContextAndClearsOverlay(t *testing.T) {
@@ -186,10 +191,10 @@ func TestMessageSearchJumpLoadsContextAndClearsOverlay(t *testing.T) {
 		NextFromMessageID: 0,
 		Done:              true,
 	}
-	loaded, _ := updateState(submitted, ChatMessagesSearched{RequestID: 10, ChatID: 9, Page: page})
-	jumping, cmds := updateState(loaded, ActionReceived{Action: Activate})
-	if len(cmds) != 1 || jumping.MessageSearch.JumpMessageID != 20 || !jumping.MessageSearch.Loading {
-		t.Fatalf("jump = %#v %#v", jumping.MessageSearch, cmds)
+	updateState(&submitted, ChatMessagesSearched{RequestID: 10, ChatID: 9, Page: page})
+	cmds := updateState(&submitted, ActionReceived{Action: Activate})
+	if len(cmds) != 1 || submitted.MessageSearch.JumpMessageID != 20 || !submitted.MessageSearch.Loading {
+		t.Fatalf("jump = %#v %#v", submitted.MessageSearch, cmds)
 	}
 	ctxCmd, ok := cmds[0].(LoadSearchMessageContext)
 	if !ok || ctxCmd.ChatID != 9 || ctxCmd.MessageID != 20 {
@@ -200,14 +205,14 @@ func TestMessageSearchJumpLoadsContextAndClearsOverlay(t *testing.T) {
 		{ID: 20, ChatID: 9, Kind: domain.MessageText, Text: "target", SentAt: time.Unix(20, 0)},
 		{ID: 30, ChatID: 9, Kind: domain.MessageText, Text: "new", SentAt: time.Unix(30, 0)},
 	}}
-	landed, _ := updateState(jumping, SearchMessageContextLoaded{RequestID: jumping.MessageSearch.RequestID, ChatID: 9, MessageID: 20, Page: contextPage})
-	if landed.MessageSearch != nil || landed.Focus != FocusConversation || landed.SelectedMessage != 20 || landed.SelectedMessageChat != 9 {
-		t.Fatalf("landed = %#v focus=%v sel=%v", landed.MessageSearch, landed.Focus, landed.SelectedMessage)
+	updateState(&submitted, SearchMessageContextLoaded{RequestID: submitted.MessageSearch.RequestID, ChatID: 9, MessageID: 20, Page: contextPage})
+	if submitted.MessageSearch != nil || submitted.Focus != FocusConversation || submitted.SelectedMessage != 20 || submitted.SelectedMessageChat != 9 {
+		t.Fatalf("landed = %#v focus=%v sel=%v", submitted.MessageSearch, submitted.Focus, submitted.SelectedMessage)
 	}
-	if landed.History[9].ViewOffset != 1 {
-		t.Fatalf("view offset = %d", landed.History[9].ViewOffset)
+	if submitted.History[9].ViewOffset != 1 {
+		t.Fatalf("view offset = %d", submitted.History[9].ViewOffset)
 	}
-	if landed.Drafts[9] != "keep draft" {
+	if submitted.Drafts[9] != "keep draft" {
 		t.Fatalf("draft lost after jump")
 	}
 }
@@ -215,31 +220,31 @@ func TestMessageSearchJumpLoadsContextAndClearsOverlay(t *testing.T) {
 func TestMessageSearchContextFailureKeepsOverlayAndToasts(t *testing.T) {
 	opened := openSearch(t, searchBaseState())
 	submitted, _ := submitSearch(t, opened, "needle")
-	loaded, _ := updateState(submitted, ChatMessagesSearched{RequestID: 10, ChatID: 9, Page: telegram.MessageSearchPage{
+	updateState(&submitted, ChatMessagesSearched{RequestID: 10, ChatID: 9, Page: telegram.MessageSearchPage{
 		Messages: []domain.Message{{ID: 20, ChatID: 9, Kind: domain.MessageText, Text: "t"}},
 		Done:     true,
 	}})
-	jumping, _ := updateState(loaded, ActionReceived{Action: Activate})
-	failed, _ := updateState(jumping, SearchMessageContextFailed{RequestID: jumping.MessageSearch.RequestID, ChatID: 9, MessageID: 20, Error: domain.AppError{Message: "raw"}})
-	if failed.MessageSearch == nil || failed.MessageSearch.JumpMessageID != 0 || failed.MessageSearch.Loading || failed.Focus != FocusSearchResults {
-		t.Fatalf("context failure = %#v", failed.MessageSearch)
+	updateState(&submitted, ActionReceived{Action: Activate})
+	updateState(&submitted, SearchMessageContextFailed{RequestID: submitted.MessageSearch.RequestID, ChatID: 9, MessageID: 20, Error: domain.AppError{Message: "raw"}})
+	if submitted.MessageSearch == nil || submitted.MessageSearch.JumpMessageID != 0 || submitted.MessageSearch.Loading || submitted.Focus != FocusSearchResults {
+		t.Fatalf("context failure = %#v", submitted.MessageSearch)
 	}
-	if failed.MessageSearch.Error == nil || failed.MessageSearch.Error.Message != "Could not open search result" || failed.Toast == nil {
-		t.Fatalf("error/toast = %#v %#v", failed.MessageSearch.Error, failed.Toast)
+	if submitted.MessageSearch.Error == nil || submitted.MessageSearch.Error.Message != "Could not open search result" || submitted.Toast == nil {
+		t.Fatalf("error/toast = %#v %#v", submitted.MessageSearch.Error, submitted.Toast)
 	}
 }
 
 func TestMessageSearchClosePreservesDraftAndSelectChatClears(t *testing.T) {
 	opened := openSearch(t, searchBaseState())
-	closed, _ := updateState(opened, ActionReceived{Action: Close})
-	if closed.MessageSearch != nil || closed.Focus != FocusConversation || closed.Drafts[9] != "keep draft" {
-		t.Fatalf("close = %#v", closed)
+	updateState(&opened, ActionReceived{Action: Close})
+	if opened.MessageSearch != nil || opened.Focus != FocusConversation || opened.Drafts[9] != "keep draft" {
+		t.Fatalf("close = %#v", opened)
 	}
 	reopened := openSearch(t, searchBaseState())
 	reopened.Chats = append(reopened.Chats, domain.Chat{ID: 8, Title: "other"})
-	switched, cmds := updateState(reopened, ActionReceived{Action: SelectChat, ChatID: 8})
-	if switched.MessageSearch != nil {
-		t.Fatalf("select chat must clear search: %#v", switched.MessageSearch)
+	cmds := updateState(&reopened, ActionReceived{Action: SelectChat, ChatID: 8})
+	if reopened.MessageSearch != nil {
+		t.Fatalf("select chat must clear search: %#v", reopened.MessageSearch)
 	}
 	found := false
 	for _, cmd := range cmds {
@@ -249,16 +254,5 @@ func TestMessageSearchClosePreservesDraftAndSelectChatClears(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("select chat commands = %#v", cmds)
-	}
-}
-
-func TestMessageSearchCloneDoesNotAlias(t *testing.T) {
-	opened := openSearch(t, searchBaseState())
-	withInput, _ := updateState(opened, MessageSearchValueChanged{ChatID: 9, Value: "ab"})
-	cloned := cloneReducerState(withInput)
-	cloned.MessageSearch.Input[0] = 'X'
-	cloned.MessageSearch.Results = append(cloned.MessageSearch.Results, domain.Message{ID: 1})
-	if string(withInput.MessageSearch.Input) != "ab" || len(withInput.MessageSearch.Results) != 0 {
-		t.Fatal("clone aliased search state")
 	}
 }

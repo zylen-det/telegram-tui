@@ -12,13 +12,11 @@ func requestBotCommandsIfAbsent(state *State, chatID domain.ChatID) []Effect {
 	if _, exists := state.BotCommandCatalogs[chatID]; exists {
 		return nil
 	}
-	catalogs := make(map[domain.ChatID]BotCommandCatalogState, len(state.BotCommandCatalogs)+1)
-	for existingChatID, catalog := range state.BotCommandCatalogs {
-		catalogs[existingChatID] = catalog
+	if state.BotCommandCatalogs == nil {
+		state.BotCommandCatalogs = make(map[domain.ChatID]BotCommandCatalogState)
 	}
 	requestID := allocateRequestID(state)
-	catalogs[chatID] = BotCommandCatalogState{RequestID: requestID, Loading: true}
-	state.BotCommandCatalogs = catalogs
+	state.BotCommandCatalogs[chatID] = BotCommandCatalogState{RequestID: requestID, Loading: true}
 	return []Effect{LoadBotCommands{RequestID: requestID, ChatID: chatID}}
 }
 
@@ -89,26 +87,26 @@ func filterBotCommands(query string, commands []domain.BotCommand) []domain.BotC
 	return matches
 }
 
-func reduceBotCommandsLoaded(state State, event BotCommandsLoaded) (State, []Effect) {
+func reduceBotCommandsLoaded(state *State, event BotCommandsLoaded) []Effect {
 	catalog, exists := state.BotCommandCatalogs[event.ChatID]
 	if !exists || catalog.RequestID != event.RequestID {
-		return state, nil
+		return nil
 	}
 	catalog.Loading = false
 	catalog.Loaded = true
 	catalog.Commands = append([]domain.BotCommand(nil), event.Commands...)
 	catalog.Error = nil
 	state.BotCommandCatalogs[event.ChatID] = catalog
-	if activeID, active := activeChatID(state); active && activeID == event.ChatID && state.EditTarget == nil {
-		return state, syncCommandMenuForValue(&state, event.ChatID, state.Drafts[event.ChatID])
+	if activeID, active := activeChatID(*state); active && activeID == event.ChatID && state.EditTarget == nil {
+		return syncCommandMenuForValue(state, event.ChatID, state.Drafts[event.ChatID])
 	}
-	return state, nil
+	return nil
 }
 
-func reduceBotCommandsLoadFailed(state State, event BotCommandsLoadFailed) (State, []Effect) {
+func reduceBotCommandsLoadFailed(state *State, event BotCommandsLoadFailed) []Effect {
 	catalog, exists := state.BotCommandCatalogs[event.ChatID]
 	if !exists || catalog.RequestID != event.RequestID {
-		return state, nil
+		return nil
 	}
 	failure := domain.AppError{Kind: domain.ErrorInternal, Op: "load bot commands", Message: "Commands unavailable"}
 	catalog.Loading = false
@@ -116,56 +114,50 @@ func reduceBotCommandsLoadFailed(state State, event BotCommandsLoadFailed) (Stat
 	catalog.Error = &failure
 	state.BotCommandCatalogs[event.ChatID] = catalog
 	if state.CommandMenu != nil && state.CommandMenu.ChatID == event.ChatID {
-		menu := *state.CommandMenu
-		menu.Loading = false
-		menu.Error = &failure
-		state.CommandMenu = &menu
+		state.CommandMenu.Loading = false
+		state.CommandMenu.Error = &failure
 	}
-	return state, nil
+	return nil
 }
 
-func reduceCommandMenuAction(state State, event ActionReceived) (State, []Effect) {
+func reduceCommandMenuAction(state *State, event ActionReceived) []Effect {
 	if state.CommandMenu == nil {
-		return state, nil
+		return nil
 	}
-	menu := *state.CommandMenu
+	menu := state.CommandMenu
 	switch event.Action {
 	case CommandMenuDismiss:
 		state.CommandMenu = nil
 	case CommandMenuNext:
 		if menu.Selected >= 0 && menu.Selected+1 < len(menu.Candidates) {
 			menu.Selected++
-			ensureCommandMenuSelectionVisible(&menu)
-			state.CommandMenu = &menu
+			ensureCommandMenuSelectionVisible(menu)
 		}
 	case CommandMenuPrevious:
 		if menu.Selected > 0 {
 			menu.Selected--
-			ensureCommandMenuSelectionVisible(&menu)
-			state.CommandMenu = &menu
+			ensureCommandMenuSelectionVisible(menu)
 		}
 	case CommandMenuActivate:
 		index := menu.Selected
 		if event.ChatID != 0 {
 			if event.ChatID != menu.ChatID {
-				return state, nil
+				return nil
 			}
 			index = event.CommandIndex
 		}
-		activeID, active := activeChatID(state)
+		activeID, active := activeChatID(*state)
 		if !active || activeID != menu.ChatID || state.EditTarget != nil || index < 0 || index >= len(menu.Candidates) {
-			return state, nil
+			return nil
 		}
-		drafts := make(map[domain.ChatID]string, len(state.Drafts)+1)
-		for chatID, draft := range state.Drafts {
-			drafts[chatID] = draft
+		if state.Drafts == nil {
+			state.Drafts = make(map[domain.ChatID]string)
 		}
-		drafts[menu.ChatID] = menu.Candidates[index].Invocation() + " "
-		state.Drafts = drafts
+		state.Drafts[menu.ChatID] = menu.Candidates[index].Invocation() + " "
 		state.CommandMenu = nil
-		return state, []Effect{queueDraftSave(&state, menu.ChatID)}
+		return []Effect{queueDraftSave(state, menu.ChatID)}
 	}
-	return state, nil
+	return nil
 }
 
 func ensureCommandMenuSelectionVisible(menu *CommandMenuState) {

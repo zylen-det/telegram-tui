@@ -206,9 +206,9 @@ func TestConversationLeftReturnsToChatsInEveryLayout(t *testing.T) {
 			state := InitialState()
 			state.Layout = layout
 			state.Focus = FocusConversation
-			got, _ := updateState(state, action)
-			if got.Focus != FocusChats {
-				t.Fatalf("layout %v key %#v focus = %v, want FocusChats", layout, key, got.Focus)
+			updateState(&state, action)
+			if state.Focus != FocusChats {
+				t.Fatalf("layout %v key %#v focus = %v, want FocusChats", layout, key, state.Focus)
 			}
 		}
 	}

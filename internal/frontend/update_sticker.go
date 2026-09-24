@@ -31,19 +31,19 @@ func resizeStickerPicker(state *State) {
 	keepStickerSelectionVisible(state.StickerPicker)
 }
 
-func openStickerPicker(state State) (State, []Effect) {
+func openStickerPicker(state *State) []Effect {
 	if state.Focus != FocusComposer || state.Connection != domain.ConnectionOnline || state.EditTarget != nil {
-		return state, nil
+		return nil
 	}
-	chatID, ok := activeChatID(state)
+	chatID, ok := activeChatID(*state)
 	if !ok {
-		return state, nil
+		return nil
 	}
 	index := chatIndex(state.Chats, chatID)
-	if index < 0 || !state.Chats[index].CanSend || forumTopicClosed(state, chatID) {
-		return state, nil
+	if index < 0 || !state.Chats[index].CanSend || forumTopicClosed(*state, chatID) {
+		return nil
 	}
-	requestID := allocateRequestID(&state)
+	requestID := allocateRequestID(state)
 	topicID := domain.TopicID(0)
 	if state.Chats[index].IsForum {
 		topicID = state.SelectedTopics[chatID]
@@ -55,13 +55,13 @@ func openStickerPicker(state State) (State, []Effect) {
 	}
 	state.StickerThumbnailRequests = make(map[int32]uint64)
 	state.Focus = FocusStickerPicker
-	return state, []Effect{LoadStickers{RequestID: requestID, ChatID: chatID, TopicID: topicID}}
+	return []Effect{LoadStickers{RequestID: requestID, ChatID: chatID, TopicID: topicID}}
 }
 
-func reduceStickersLoaded(state State, event StickersLoaded) (State, []Effect) {
+func reduceStickersLoaded(state *State, event StickersLoaded) []Effect {
 	picker := state.StickerPicker
 	if picker == nil || picker.RequestID != event.RequestID || picker.ChatID != event.ChatID {
-		return state, nil
+		return nil
 	}
 	picker.Loading = false
 	picker.Error = nil
@@ -83,20 +83,20 @@ func reduceStickersLoaded(state State, event StickersLoaded) (State, []Effect) {
 		if thumb.ID == 0 || (!thumb.CanDownload && !(thumb.Downloaded && thumb.LocalPath != "")) {
 			continue
 		}
-		requestID := allocateRequestID(&state)
+		requestID := allocateRequestID(state)
 		state.StickerThumbnailRequests[sticker.File.ID] = requestID
 		commands = append(commands, DownloadStickerThumbnail{
 			RequestID: requestID, PickerRequestID: picker.RequestID,
 			StickerFileID: sticker.File.ID, File: thumb,
 		})
 	}
-	return state, commands
+	return commands
 }
 
-func reduceStickersLoadFailed(state State, event StickersLoadFailed) (State, []Effect) {
+func reduceStickersLoadFailed(state *State, event StickersLoadFailed) []Effect {
 	picker := state.StickerPicker
 	if picker == nil || picker.RequestID != event.RequestID || picker.ChatID != event.ChatID {
-		return state, nil
+		return nil
 	}
 	failure := domain.AppError{Kind: event.Error.Kind, Op: "load stickers", Message: "Could not load stickers"}
 	picker.Loading = false
@@ -104,44 +104,44 @@ func reduceStickersLoadFailed(state State, event StickersLoadFailed) (State, []E
 	picker.Catalog = nil
 	picker.Selected = 0
 	picker.FirstRow = 0
-	return state, nil
+	return nil
 }
 
-func reduceStickerThumbnailRendered(state State, event StickerThumbnailRendered) (State, []Effect) {
+func reduceStickerThumbnailRendered(state *State, event StickerThumbnailRendered) []Effect {
 	picker := state.StickerPicker
 	requestID, requested := state.StickerThumbnailRequests[event.StickerFileID]
 	if picker == nil || event.RequestID == 0 || picker.RequestID != event.PickerRequestID || !requested || requestID != event.RequestID {
-		return state, nil
+		return nil
 	}
 	if event.Block.Width <= 0 || event.Block.Height <= 0 {
-		return state, nil
+		return nil
 	}
 	if state.StickerThumbnails == nil {
 		state.StickerThumbnails = make(map[int32]thumbnail.Block)
 	}
 	state.StickerThumbnails[event.StickerFileID] = event.Block
 	delete(state.StickerThumbnailRequests, event.StickerFileID)
-	return state, nil
+	return nil
 }
 
-func reduceStickerThumbnailFailed(state State, event StickerThumbnailFailed) (State, []Effect) {
+func reduceStickerThumbnailFailed(state *State, event StickerThumbnailFailed) []Effect {
 	picker := state.StickerPicker
 	requestID, requested := state.StickerThumbnailRequests[event.StickerFileID]
 	if picker == nil || event.RequestID == 0 || picker.RequestID != event.PickerRequestID || !requested || requestID != event.RequestID {
-		return state, nil
+		return nil
 	}
 	delete(state.StickerThumbnailRequests, event.StickerFileID)
-	return state, nil
+	return nil
 }
 
-func reduceStickerPicker(state State, event ActionReceived) (State, []Effect) {
+func reduceStickerPicker(state *State, event ActionReceived) []Effect {
 	picker := state.StickerPicker
 	switch event.Action {
 	case Close:
 		state.Focus = picker.PreviousFocus
 		state.StickerPicker = nil
 		state.StickerThumbnailRequests = make(map[int32]uint64)
-		return state, nil
+		return nil
 	case StickerMoveLeft:
 		moveStickerSelection(picker, -1)
 	case StickerMoveRight:
@@ -153,9 +153,9 @@ func reduceStickerPicker(state State, event ActionReceived) (State, []Effect) {
 	case StickerActivate:
 		return sendSelectedSticker(state, event)
 	default:
-		return state, nil
+		return nil
 	}
-	return state, nil
+	return nil
 }
 
 func moveStickerSelection(picker *StickerPickerState, delta int) {
@@ -186,18 +186,18 @@ func keepStickerSelectionVisible(picker *StickerPickerState) {
 	picker.FirstRow = max(0, min(picker.FirstRow, max(0, maxRow-rows+1)))
 }
 
-func sendSelectedSticker(state State, event ActionReceived) (State, []Effect) {
+func sendSelectedSticker(state *State, event ActionReceived) []Effect {
 	picker := state.StickerPicker
 	if picker == nil || event.RequestID != picker.RequestID || picker.Loading || picker.Error != nil {
-		return state, nil
+		return nil
 	}
-	chatID, ok := activeChatID(state)
+	chatID, ok := activeChatID(*state)
 	if !ok || chatID != picker.ChatID || state.Connection != domain.ConnectionOnline || state.EditTarget != nil {
-		return state, nil
+		return nil
 	}
 	chatIndex := chatIndex(state.Chats, chatID)
 	if chatIndex < 0 || !state.Chats[chatIndex].CanSend {
-		return state, nil
+		return nil
 	}
 	selected := picker.Selected
 	if event.StickerFileID != 0 {
@@ -210,18 +210,18 @@ func sendSelectedSticker(state State, event ActionReceived) (State, []Effect) {
 		}
 	}
 	if selected < 0 || selected >= len(picker.Catalog) {
-		return state, nil
+		return nil
 	}
 	sticker := picker.Catalog[selected]
 	if sticker.File.ID == 0 {
-		return state, nil
+		return nil
 	}
 	replyID := domain.MessageID(0)
 	if state.ReplyTarget != nil && state.ReplyTarget.ChatID == chatID {
 		replyID = state.ReplyTarget.MessageID
 	}
-	localID := allocateLocalID(&state)
-	requestID := allocateRequestID(&state)
+	localID := allocateLocalID(state)
+	requestID := allocateRequestID(state)
 	message := domain.Message{
 		ID: localID, ChatID: chatID, TopicID: picker.TopicID, SentAt: event.At, Kind: domain.MessageSticker,
 		Sticker: sticker, Outgoing: true, SendState: domain.SendPending,
@@ -256,9 +256,9 @@ func sendSelectedSticker(state State, event ActionReceived) (State, []Effect) {
 		Sticker: sticker, ReplyToMessageID: replyID,
 	}}
 	if replyID > 0 {
-		commands = append(commands, queueDraftSave(&state, chatID))
+		commands = append(commands, queueDraftSave(state, chatID))
 	}
-	return state, commands
+	return commands
 }
 
 func stickerCorrelation(state State, requestID uint64, localID domain.MessageID, chatID domain.ChatID) (int, bool) {

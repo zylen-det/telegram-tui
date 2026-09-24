@@ -22,31 +22,31 @@ func TestActivateAllTopicsSetsShowAllAndRequestsChatHistory(t *testing.T) {
 		{ID: 2, ChatID: 7, TopicID: 102, Kind: domain.MessageText, Text: "b"},
 	}
 
-	reduced, commands := updateState(state, ActionReceived{Action: Activate})
+	commands := updateState(&state, ActionReceived{Action: Activate})
 
 	// ALL mode is enabled.
-	if !reduced.ShowAll[7] {
-		t.Fatalf("ShowAll not set: %#v", reduced.ShowAll)
+	if !state.ShowAll[7] {
+		t.Fatalf("ShowAll not set: %#v", state.ShowAll)
 	}
 	// SelectedTopics is cleared.
-	if _, exists := reduced.SelectedTopics[7]; exists {
-		t.Fatalf("SelectedTopics not cleared: %#v", reduced.SelectedTopics)
+	if _, exists := state.SelectedTopics[7]; exists {
+		t.Fatalf("SelectedTopics not cleared: %#v", state.SelectedTopics)
 	}
 	// Topic list is closed.
-	if reduced.Topics != nil {
-		t.Fatalf("Topics not closed: %#v", reduced.Topics)
+	if state.Topics != nil {
+		t.Fatalf("Topics not closed: %#v", state.Topics)
 	}
 	// Focus is conversation.
-	if reduced.Focus != FocusConversation {
-		t.Fatalf("focus = %v", reduced.Focus)
+	if state.Focus != FocusConversation {
+		t.Fatalf("focus = %v", state.Focus)
 	}
 	// Reply/edit/menu cleared.
-	if reduced.ReplyTarget != nil || reduced.EditTarget != nil || reduced.MessageMenu != nil {
-		t.Fatalf("targets not cleared: %v %v %v", reduced.ReplyTarget, reduced.EditTarget, reduced.MessageMenu)
+	if state.ReplyTarget != nil || state.EditTarget != nil || state.MessageMenu != nil {
+		t.Fatalf("targets not cleared: %v %v %v", state.ReplyTarget, state.EditTarget, state.MessageMenu)
 	}
 	// Selection picks the newest message (ID 2).
-	if reduced.SelectedMessageChat != 7 || reduced.SelectedMessage != 2 {
-		t.Fatalf("selection = %d/%d", reduced.SelectedMessageChat, reduced.SelectedMessage)
+	if state.SelectedMessageChat != 7 || state.SelectedMessage != 2 {
+		t.Fatalf("selection = %d/%d", state.SelectedMessageChat, state.SelectedMessage)
 	}
 	// A LoadMessages command is emitted for the whole chat (TopicID 0).
 	if len(commands) != 1 {
@@ -60,7 +60,7 @@ func TestActivateAllTopicsSetsShowAllAndRequestsChatHistory(t *testing.T) {
 		t.Fatalf("LoadMessages = %#v", load)
 	}
 	// History is created with Loading=true.
-	if history := reduced.History[7]; !history.Loading || history.RequestID != 10 {
+	if history := state.History[7]; !history.Loading || history.RequestID != 10 {
 		t.Fatalf("history = %#v", history)
 	}
 }
@@ -77,17 +77,17 @@ func TestActivateAllTopicsIdempotentWhenHistoryExists(t *testing.T) {
 	// Pre-existing history: no new LoadMessages should be emitted.
 	state.History[7] = HistoryState{Loading: false, Done: true}
 
-	reduced, commands := updateState(state, ActionReceived{Action: Activate})
+	commands := updateState(&state, ActionReceived{Action: Activate})
 
-	if !reduced.ShowAll[7] {
-		t.Fatalf("ShowAll not set: %#v", reduced.ShowAll)
+	if !state.ShowAll[7] {
+		t.Fatalf("ShowAll not set: %#v", state.ShowAll)
 	}
 	if len(commands) != 0 {
 		t.Fatalf("unexpected commands: %#v", commands)
 	}
 	// Existing history is untouched.
-	if reduced.History[7] != (HistoryState{Loading: false, Done: true}) {
-		t.Fatalf("history = %#v", reduced.History[7])
+	if state.History[7] != (HistoryState{Loading: false, Done: true}) {
+		t.Fatalf("history = %#v", state.History[7])
 	}
 }
 
@@ -101,13 +101,13 @@ func TestSelectAllMessagesActionActivatesAllMode(t *testing.T) {
 		Selected:  1,
 	}
 
-	reduced, commands := updateState(state, ActionReceived{Action: SelectAllMessages})
+	commands := updateState(&state, ActionReceived{Action: SelectAllMessages})
 
-	if !reduced.ShowAll[7] {
-		t.Fatalf("ShowAll not set: %#v", reduced.ShowAll)
+	if !state.ShowAll[7] {
+		t.Fatalf("ShowAll not set: %#v", state.ShowAll)
 	}
-	if reduced.Topics != nil {
-		t.Fatalf("Topics not closed: %#v", reduced.Topics)
+	if state.Topics != nil {
+		t.Fatalf("Topics not closed: %#v", state.Topics)
 	}
 	if len(commands) != 1 {
 		t.Fatalf("commands = %#v", commands)
@@ -126,14 +126,14 @@ func TestActivateRowZeroActivatesAllMode(t *testing.T) {
 		Selected:  1,
 	}
 	// Move to row 0 (ALL).
-	reduced, _ := updateState(state, ActionReceived{Action: SelectPrevious})
-	if reduced.Topics.Selected != 0 {
-		t.Fatalf("selected = %d", reduced.Topics.Selected)
+	updateState(&state, ActionReceived{Action: SelectPrevious})
+	if state.Topics.Selected != 0 {
+		t.Fatalf("selected = %d", state.Topics.Selected)
 	}
 	// Activate row 0 → ALL mode.
-	reduced, _ = updateState(reduced, ActionReceived{Action: Activate})
-	if !reduced.ShowAll[7] {
-		t.Fatalf("ShowAll not set after Activate row 0: %#v", reduced.ShowAll)
+	updateState(&state, ActionReceived{Action: Activate})
+	if !state.ShowAll[7] {
+		t.Fatalf("ShowAll not set after Activate row 0: %#v", state.ShowAll)
 	}
 }
 
@@ -148,19 +148,19 @@ func TestSelectTopicClampIncludesAllRow(t *testing.T) {
 		Selected:  2,
 	}
 	// SelectNext from last topic → stays at 2.
-	reduced, _ := updateState(state, ActionReceived{Action: SelectNext})
-	if reduced.Topics.Selected != 2 {
-		t.Fatalf("next at last: selected=%d", reduced.Topics.Selected)
+	updateState(&state, ActionReceived{Action: SelectNext})
+	if state.Topics.Selected != 2 {
+		t.Fatalf("next at last: selected=%d", state.Topics.Selected)
 	}
 	// SelectPrevious to row 1.
-	reduced, _ = updateState(reduced, ActionReceived{Action: SelectPrevious})
-	if reduced.Topics.Selected != 1 {
-		t.Fatalf("previous: selected=%d", reduced.Topics.Selected)
+	updateState(&state, ActionReceived{Action: SelectPrevious})
+	if state.Topics.Selected != 1 {
+		t.Fatalf("previous: selected=%d", state.Topics.Selected)
 	}
 	// SelectPrevious to row 0 (ALL).
-	reduced, _ = updateState(reduced, ActionReceived{Action: SelectPrevious})
-	if reduced.Topics.Selected != 0 {
-		t.Fatalf("previous to all: selected=%d", reduced.Topics.Selected)
+	updateState(&state, ActionReceived{Action: SelectPrevious})
+	if state.Topics.Selected != 0 {
+		t.Fatalf("previous to all: selected=%d", state.Topics.Selected)
 	}
 }
 
@@ -213,11 +213,11 @@ func TestAllModeDraftsUseTopicKeyZero(t *testing.T) {
 	delete(state.SelectedTopics, 7)
 	state.Focus = FocusComposer
 
-	got, commands := updateState(state, ComposerValueChanged{ChatID: 7, Value: "all draft"})
+	commands := updateState(&state, ComposerValueChanged{ChatID: 7, Value: "all draft"})
 
 	key := topicKey{ChatID: 7, TopicID: 0}
-	if got.TopicDrafts[key] != "all draft" {
-		t.Fatalf("ALL draft = %q", got.TopicDrafts[key])
+	if state.TopicDrafts[key] != "all draft" {
+		t.Fatalf("ALL draft = %q", state.TopicDrafts[key])
 	}
 	if len(commands) != 1 {
 		t.Fatalf("commands = %#v", commands)
@@ -226,7 +226,7 @@ func TestAllModeDraftsUseTopicKeyZero(t *testing.T) {
 	if !ok || save.TopicID != 0 || save.ChatID != 7 || save.Text != "all draft" {
 		t.Fatalf("save command = %#v", commands[0])
 	}
-	if syncState := got.TopicDraftSync[key]; !syncState.Pending || !syncState.Dirty {
+	if syncState := state.TopicDraftSync[key]; !syncState.Pending || !syncState.Dirty {
 		t.Fatalf("sync state = %#v", syncState)
 	}
 }
@@ -242,7 +242,7 @@ func TestAllModeSubmitSendsToGeneralTopicAndClearsAllDraft(t *testing.T) {
 	// Track a General topic with ID 101.
 	trackTopic(&state, domain.ForumTopic{ID: 101, ChatID: 7, IsGeneral: true})
 
-	got, commands := updateState(state, ActionReceived{Action: ComposerSubmit, At: time.Unix(100, 0)})
+	commands := updateState(&state, ActionReceived{Action: ComposerSubmit, At: time.Unix(100, 0)})
 
 	if len(commands) != 2 {
 		t.Fatalf("commands = %#v", commands)
@@ -255,8 +255,8 @@ func TestAllModeSubmitSendsToGeneralTopicAndClearsAllDraft(t *testing.T) {
 	if !ok || clear.TopicID != 0 || clear.ChatID != 7 || clear.Text != "" {
 		t.Fatalf("clear command = %#v", commands[1])
 	}
-	if got.TopicDrafts[allKey] != "" {
-		t.Fatalf("ALL draft not cleared: %q", got.TopicDrafts[allKey])
+	if state.TopicDrafts[allKey] != "" {
+		t.Fatalf("ALL draft not cleared: %q", state.TopicDrafts[allKey])
 	}
 }
 
@@ -272,7 +272,7 @@ func TestAllModeSubmitFallsBackToGeneralTopicIDOne(t *testing.T) {
 	// Remove all tracked topics.
 	state.ForumTopics[7] = nil
 
-	_, commands := updateState(state, ActionReceived{Action: ComposerSubmit, At: time.Unix(100, 0)})
+	commands := updateState(&state, ActionReceived{Action: ComposerSubmit, At: time.Unix(100, 0)})
 
 	if len(commands) != 2 {
 		t.Fatalf("commands = %#v", commands)
@@ -289,19 +289,19 @@ func TestAllModeDraftSavedAckRoutesToAllKey(t *testing.T) {
 	delete(state.SelectedTopics, 7)
 	state.Focus = FocusComposer
 	allKey := topicKey{ChatID: 7, TopicID: 0}
-	state, commands := updateState(state, ComposerValueChanged{ChatID: 7, Value: "all draft"})
+	commands := updateState(&state, ComposerValueChanged{ChatID: 7, Value: "all draft"})
 	save := commands[0].(SaveDraft)
 
-	ack, _ := updateState(state, DraftSaved{RequestID: save.RequestID, ChatID: 7, TopicID: 0, Date: 123})
-	if ack.TopicDraftDates[allKey] != 123 {
-		t.Fatalf("ack dates = %#v", ack.TopicDraftDates)
+	updateState(&state, DraftSaved{RequestID: save.RequestID, ChatID: 7, TopicID: 0, Date: 123})
+	if state.TopicDraftDates[allKey] != 123 {
+		t.Fatalf("ack dates = %#v", state.TopicDraftDates)
 	}
-	if syncState := ack.TopicDraftSync[allKey]; syncState.Pending || syncState.Draft.Date != 123 {
+	if syncState := state.TopicDraftSync[allKey]; syncState.Pending || syncState.Draft.Date != 123 {
 		t.Fatalf("ack sync state = %#v", syncState)
 	}
 	// Chat-level draft dates untouched.
-	if ack.DraftDates[7] != 0 {
-		t.Fatalf("chat-level dates touched: %#v", ack.DraftDates)
+	if state.DraftDates[7] != 0 {
+		t.Fatalf("chat-level dates touched: %#v", state.DraftDates)
 	}
 }
 
@@ -311,18 +311,18 @@ func TestAllModeDraftSaveFailedSanitizedToast(t *testing.T) {
 	delete(state.SelectedTopics, 7)
 	state.Focus = FocusComposer
 	allKey := topicKey{ChatID: 7, TopicID: 0}
-	state, commands := updateState(state, ComposerValueChanged{ChatID: 7, Value: "all draft"})
+	commands := updateState(&state, ComposerValueChanged{ChatID: 7, Value: "all draft"})
 	save := commands[0].(SaveDraft)
 
-	failed, _ := updateState(state, DraftSaveFailed{RequestID: save.RequestID, ChatID: 7, TopicID: 0, Error: domain.AppError{Message: "private raw failure"}})
-	if failed.Toast == nil || failed.Toast.Message != "Could not sync draft" {
-		t.Fatalf("failure toast = %#v", failed.Toast)
+	updateState(&state, DraftSaveFailed{RequestID: save.RequestID, ChatID: 7, TopicID: 0, Error: domain.AppError{Message: "private raw failure"}})
+	if state.Toast == nil || state.Toast.Message != "Could not sync draft" {
+		t.Fatalf("failure toast = %#v", state.Toast)
 	}
-	if syncState := failed.TopicDraftSync[allKey]; syncState.Pending {
+	if syncState := state.TopicDraftSync[allKey]; syncState.Pending {
 		t.Fatalf("failure sync state = %#v", syncState)
 	}
-	if failed.TopicDrafts[allKey] != "all draft" {
-		t.Fatalf("failure cleared the local ALL draft: %q", failed.TopicDrafts[allKey])
+	if state.TopicDrafts[allKey] != "all draft" {
+		t.Fatalf("failure cleared the local ALL draft: %q", state.TopicDrafts[allKey])
 	}
 }
 
@@ -336,7 +336,7 @@ func TestAllModeReplyBeginAndRestoreCarryTopicIDZero(t *testing.T) {
 	state.Messages[7] = []domain.Message{{ID: 55, ChatID: 7, TopicID: 0, Kind: domain.MessageText, SenderName: "Sender", Text: "body"}}
 	state.SelectedMessageChat, state.SelectedMessage = 7, 55
 
-	replying, commands := updateState(state, ActionReceived{Action: ReplyMessage})
+	commands := updateState(&state, ActionReceived{Action: ReplyMessage})
 	if len(commands) != 1 {
 		t.Fatalf("reply commands = %#v", commands)
 	}
@@ -344,23 +344,23 @@ func TestAllModeReplyBeginAndRestoreCarryTopicIDZero(t *testing.T) {
 	if save.TopicID != 0 || save.ChatID != 7 || save.ReplyToMessageID != 55 {
 		t.Fatalf("reply save = %#v", save)
 	}
-	if replying.ReplyTarget == nil || replying.ReplyTarget.TopicID != 0 || replying.ReplyTarget.MessageID != 55 {
-		t.Fatalf("reply target = %#v", replying.ReplyTarget)
+	if state.ReplyTarget == nil || state.ReplyTarget.TopicID != 0 || state.ReplyTarget.MessageID != 55 {
+		t.Fatalf("reply target = %#v", state.ReplyTarget)
 	}
-	if replying.TopicDraftReplies[allKey] != 55 {
-		t.Fatalf("reply draft map = %#v", replying.TopicDraftReplies)
+	if state.TopicDraftReplies[allKey] != 55 {
+		t.Fatalf("reply draft map = %#v", state.TopicDraftReplies)
 	}
 
 	// Cancel reply.
-	cancelled, commands := updateState(replying, ActionReceived{Action: CancelReply})
+	commands = updateState(&state, ActionReceived{Action: CancelReply})
 	if len(commands) != 1 {
 		t.Fatalf("cancel commands = %#v", commands)
 	}
 	if clear := commands[0].(SaveDraft); clear.TopicID != 0 || clear.ReplyToMessageID != 0 {
 		t.Fatalf("cancel save = %#v", clear)
 	}
-	if cancelled.ReplyTarget != nil || cancelled.TopicDraftReplies[allKey] != 0 {
-		t.Fatalf("cancel state = target:%#v replies:%#v", cancelled.ReplyTarget, cancelled.TopicDraftReplies)
+	if state.ReplyTarget != nil || state.TopicDraftReplies[allKey] != 0 {
+		t.Fatalf("cancel state = target:%#v replies:%#v", state.ReplyTarget, state.TopicDraftReplies)
 	}
 
 	// Restore reply from persisted ALL draft.
@@ -382,18 +382,18 @@ func TestAllModeReplyBeginAndRestoreCarryTopicIDZero(t *testing.T) {
 	foreign.Focus = FocusConversation
 	foreign.Messages[7] = []domain.Message{{ID: 77, ChatID: 7, TopicID: 5, Kind: domain.MessageText, SenderName: "Other", Text: "foreign"}}
 	foreign.SelectedMessageChat, foreign.SelectedMessage = 7, 77
-	replyingForeign, foreignCommands := updateState(foreign, ActionReceived{Action: ReplyMessage})
+	foreignCommands := updateState(&foreign, ActionReceived{Action: ReplyMessage})
 	if len(foreignCommands) != 1 {
 		t.Fatalf("foreign reply commands = %#v", foreignCommands)
 	}
 	if save := foreignCommands[0].(SaveDraft); save.TopicID != 0 || save.ReplyToMessageID != 77 {
 		t.Fatalf("foreign reply save = %#v", save)
 	}
-	if replyingForeign.ReplyTarget == nil || replyingForeign.ReplyTarget.TopicID != 0 || replyingForeign.ReplyTarget.MessageID != 77 {
-		t.Fatalf("foreign reply target = %#v", replyingForeign.ReplyTarget)
+	if foreign.ReplyTarget == nil || foreign.ReplyTarget.TopicID != 0 || foreign.ReplyTarget.MessageID != 77 {
+		t.Fatalf("foreign reply target = %#v", foreign.ReplyTarget)
 	}
-	if replyingForeign.TopicDraftReplies[allKey] != 77 {
-		t.Fatalf("foreign reply draft map = %#v", replyingForeign.TopicDraftReplies)
+	if foreign.TopicDraftReplies[allKey] != 77 {
+		t.Fatalf("foreign reply draft map = %#v", foreign.TopicDraftReplies)
 	}
 }
 
@@ -408,13 +408,13 @@ func TestActivateTopicDisablesShowAll(t *testing.T) {
 		Selected:  1,
 	}
 
-	reduced, _ := updateState(state, ActionReceived{Action: Activate})
+	updateState(&state, ActionReceived{Action: Activate})
 
-	if reduced.ShowAll[7] {
-		t.Fatalf("ShowAll not cleared: %#v", reduced.ShowAll)
+	if state.ShowAll[7] {
+		t.Fatalf("ShowAll not cleared: %#v", state.ShowAll)
 	}
-	if reduced.SelectedTopics[7] != 101 {
-		t.Fatalf("SelectedTopics = %#v", reduced.SelectedTopics)
+	if state.SelectedTopics[7] != 101 {
+		t.Fatalf("SelectedTopics = %#v", state.SelectedTopics)
 	}
 }
 
@@ -424,14 +424,14 @@ func TestMessageSearchAllowedInAllMode(t *testing.T) {
 	delete(state.SelectedTopics, 7)
 	state.Focus = FocusConversation
 
-	reduced, _ := updateState(state, ActionReceived{Action: OpenMessageSearch})
+	updateState(&state, ActionReceived{Action: OpenMessageSearch})
 
-	if reduced.MessageSearch == nil {
+	if state.MessageSearch == nil {
 		t.Fatal("MessageSearch not opened in ALL mode")
 	}
 	// TopicID should be 0 (whole-chat search).
-	if reduced.MessageSearch.TopicID != 0 {
-		t.Fatalf("TopicID = %d, want 0", reduced.MessageSearch.TopicID)
+	if state.MessageSearch.TopicID != 0 {
+		t.Fatalf("TopicID = %d, want 0", state.MessageSearch.TopicID)
 	}
 }
 
@@ -440,9 +440,9 @@ func TestMessageSearchBlockedWithoutSelectionOrAll(t *testing.T) {
 	// No selected topic, no ALL mode.
 	state.Focus = FocusConversation
 
-	reduced, _ := updateState(state, ActionReceived{Action: OpenMessageSearch})
+	updateState(&state, ActionReceived{Action: OpenMessageSearch})
 
-	if reduced.MessageSearch != nil {
+	if state.MessageSearch != nil {
 		t.Fatal("MessageSearch opened without selected topic or ALL mode")
 	}
 }
@@ -451,16 +451,13 @@ func TestChatSearchJumpDisablesShowAll(t *testing.T) {
 	state := topicsBaseState(t)
 	state.ShowAll[7] = true
 
-	// Simulate jumping from a chat search to a message in chat 7.
+	// Simulate jumping from a chat search to a message in chat 7 while ALL
+	// mode is active; the landing logic must disable ALL mode.
 	msg := domain.Message{ID: 42, ChatID: 7, TopicID: 0, Kind: domain.MessageText, Text: "msg"}
-	reduced, _ := updateState(state, ActionReceived{Action: SelectChat, ChatID: 7})
-	_ = reduced
-	// Directly call the landing logic.
-	state2 := state
-	state2.ShowAll[7] = true
-	opened, _ := openChatFromMessageResult(state2, msg)
-	if opened.ShowAll[7] {
-		t.Fatalf("ShowAll not disabled after chat search jump: %#v", opened.ShowAll)
+	updateState(&state, ActionReceived{Action: SelectChat, ChatID: 7})
+	openChatFromMessageResult(&state, msg)
+	if state.ShowAll[7] {
+		t.Fatalf("ShowAll not disabled after chat search jump: %#v", state.ShowAll)
 	}
 }
 
@@ -472,7 +469,7 @@ func TestAllModeDraftsPersistAcrossTopicSelections(t *testing.T) {
 	allKey := topicKey{ChatID: 7, TopicID: 0}
 
 	// Type in ALL mode.
-	state, _ = updateState(state, ComposerValueChanged{ChatID: 7, Value: "all draft"})
+	updateState(&state, ComposerValueChanged{ChatID: 7, Value: "all draft"})
 	if state.TopicDrafts[allKey] != "all draft" {
 		t.Fatalf("ALL draft = %q", state.TopicDrafts[allKey])
 	}
@@ -482,7 +479,7 @@ func TestAllModeDraftsPersistAcrossTopicSelections(t *testing.T) {
 	state.SelectedTopics[7] = 101
 
 	// Type in topic mode.
-	state, _ = updateState(state, ComposerValueChanged{ChatID: 7, Value: "topic draft"})
+	updateState(&state, ComposerValueChanged{ChatID: 7, Value: "topic draft"})
 	topicKey := topicKey{ChatID: 7, TopicID: 101}
 	if state.TopicDrafts[topicKey] != "topic draft" {
 		t.Fatalf("topic draft = %q", state.TopicDrafts[topicKey])
@@ -495,21 +492,5 @@ func TestAllModeDraftsPersistAcrossTopicSelections(t *testing.T) {
 	// The ALL draft should still be there.
 	if state.TopicDrafts[allKey] != "all draft" {
 		t.Fatalf("ALL draft lost: %q", state.TopicDrafts[allKey])
-	}
-}
-
-func TestCloneReducerStateCopiesShowAll(t *testing.T) {
-	state := topicsBaseState(t)
-	state.ShowAll[7] = true
-
-	clone := cloneReducerState(state)
-
-	if !clone.ShowAll[7] {
-		t.Fatal("ShowAll not copied to clone")
-	}
-	// Mutating the clone should not affect the original.
-	clone.ShowAll[7] = false
-	if !state.ShowAll[7] {
-		t.Fatal("mutating clone ShowAll affected original")
 	}
 }

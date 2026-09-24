@@ -50,9 +50,12 @@ type toastExpiredMsg struct{ generation uint64 }
 // Production signal handling sends this message instead of quitting Bubble Tea.
 type ProcessQuitMsg struct{}
 
-// NewAppModel creates an app-backed Bubble Tea model owning initial as its
-// current application state. The supplied value is copied into a distinct
-// pointer so later reductions mutate only this model's state.
+// NewAppModel creates an app-backed Bubble Tea model that takes ownership of
+// initial. The supplied value is copied into a distinct State, but AppModel
+// keeps the caller's nested maps, slices, and pointer members: do not read or
+// mutate them through the caller's copy afterwards. Snapshot returns a shallow,
+// synchronous read-only view of the owned state; it is not a deep snapshot and
+// is not safe to hold across goroutines while Update is running.
 func NewAppModel(initial State, session *Handler) (AppModel, error) {
 	if session == nil {
 		return AppModel{}, errors.New("frontend: nil effect session")
@@ -75,15 +78,16 @@ func NewAppModel(initial State, session *Handler) (AppModel, error) {
 	}, nil
 }
 
-// apply reduces one event against the owned state, storing the result through
-// the shared pointer, and returns the commands the reducer emitted.
+// applyMessage reduces one event in place against the AppModel-owned state.
+// Init starts the loop; subsequent mutations run through Update. Effect commands
+// run off-loop and only return messages for Update to apply.
 func (m AppModel) applyMessage(event Event) []Effect {
-	state, commands := updateState(*m.state, event)
-	*m.state = state
-	return commands
+	return updateState(m.state, event)
 }
 
-// Snapshot returns the current application state value. Callers that read more
+// Snapshot returns the current application state value. It is a shallow,
+// synchronous read-only view, not a deep snapshot, and is not safe to carry
+// across goroutines while the Update loop is running. Callers that read more
 // than one field take a single snapshot and reuse it.
 func (m AppModel) Snapshot() State {
 	if m.state == nil {

@@ -21,29 +21,42 @@ func chatSearchBaseState() State {
 	return state
 }
 
+// Each scenario starts with its own mutable search state.
+func submittedChatSearch(query string) State {
+	state := chatSearchBaseState()
+	updateState(&state, ActionReceived{Action: OpenChatSearch})
+	updateState(&state, ChatSearchValueChanged{Value: query})
+	updateState(&state, ActionReceived{Action: SubmitChatSearch})
+	return state
+}
+
 func TestChatSearchOpenAndSubmitExactUsername(t *testing.T) {
 	state := chatSearchBaseState()
-	opened, commands := updateState(state, ActionReceived{Action: OpenChatSearch})
-	if len(commands) != 0 || opened.ChatSearch == nil || opened.Focus != FocusChatSearchInput || opened.ChatSearch.PreviousFocus != FocusChats {
-		t.Fatalf("open = state %#v commands %#v", opened.ChatSearch, commands)
+	commands := updateState(&state, ActionReceived{Action: OpenChatSearch})
+	if len(commands) != 0 || state.ChatSearch == nil || state.Focus != FocusChatSearchInput || state.ChatSearch.PreviousFocus != FocusChats {
+		t.Fatalf("open = state %#v commands %#v", state.ChatSearch, commands)
 	}
-	changed, _ := updateState(opened, ChatSearchValueChanged{Value: "  @BotFather\n"})
-	if got := string(changed.ChatSearch.Input); got != "  @BotFather" {
+	updateState(&state, ChatSearchValueChanged{Value: "  @BotFather\n"})
+	if got := string(state.ChatSearch.Input); got != "  @BotFather" {
 		t.Fatalf("input = %q", got)
 	}
-	submitted, commands := updateState(changed, ActionReceived{Action: SubmitChatSearch})
+	commands = updateState(&state, ActionReceived{Action: SubmitChatSearch})
 	if len(commands) != 3 {
 		t.Fatalf("commands = %#v", commands)
 	}
-	if submitted.Focus != FocusChatSearchResults || !submitted.ChatSearch.PublicLoading || !submitted.ChatSearch.MessagesLoading || !submitted.ChatSearch.Submitted || submitted.ChatSearch.Query != "BotFather" {
-		t.Fatalf("submitted = %#v focus=%v", submitted.ChatSearch, submitted.Focus)
+	if state.Focus != FocusChatSearchResults || !state.ChatSearch.PublicLoading || !state.ChatSearch.MessagesLoading || !state.ChatSearch.Submitted || state.ChatSearch.Query != "BotFather" {
+		t.Fatalf("submitted = %#v focus=%v", state.ChatSearch, state.Focus)
 	}
-	if submitted.Drafts[7] != "keep draft" {
+	if state.Drafts[7] != "keep draft" {
 		t.Fatal("chat search changed the existing draft")
 	}
 
-	blank, _ := updateState(opened, ChatSearchValueChanged{Value: " @ "})
-	blank, blankCommands := updateState(blank, ActionReceived{Action: SubmitChatSearch})
+	// A blank submit branches from the opened search, so rebuild that fixture
+	// instead of mutating the submitted state above.
+	blank := chatSearchBaseState()
+	updateState(&blank, ActionReceived{Action: OpenChatSearch})
+	updateState(&blank, ChatSearchValueChanged{Value: " @ "})
+	blankCommands := updateState(&blank, ActionReceived{Action: SubmitChatSearch})
 	if len(blankCommands) != 0 || blank.ChatSearch.Submitted {
 		t.Fatalf("blank submit = %#v %#v", blank.ChatSearch, blankCommands)
 	}
@@ -52,62 +65,62 @@ func TestChatSearchOpenAndSubmitExactUsername(t *testing.T) {
 func TestChatSearchOpensOnlyFromChatsAndCloses(t *testing.T) {
 	state := chatSearchBaseState()
 	state.Focus = FocusConversation
-	unchanged, commands := updateState(state, ActionReceived{Action: OpenChatSearch})
+	commands := updateState(&state, ActionReceived{Action: OpenChatSearch})
+	unchanged := state
 	if len(commands) != 0 || unchanged.ChatSearch != nil {
 		t.Fatalf("conversation open = %#v %#v", unchanged.ChatSearch, commands)
 	}
 
-	opened, _ := updateState(chatSearchBaseState(), ActionReceived{Action: OpenChatSearch})
-	closed, commands := updateState(opened, ActionReceived{Action: Close})
+	opened := chatSearchBaseState()
+	updateState(&opened, ActionReceived{Action: OpenChatSearch})
+	commands = updateState(&opened, ActionReceived{Action: Close})
+	closed := opened
 	if len(commands) != 0 || closed.ChatSearch != nil || closed.Focus != FocusChats {
 		t.Fatalf("close = %#v focus=%v commands=%#v", closed.ChatSearch, closed.Focus, commands)
 	}
 }
 
 func TestChatSearchResultsStaleGuardAndEditQuery(t *testing.T) {
-	state := chatSearchBaseState()
-	opened, _ := updateState(state, ActionReceived{Action: OpenChatSearch})
-	opened, _ = updateState(opened, ChatSearchValueChanged{Value: "@botfather"})
-	submitted, _ := updateState(opened, ActionReceived{Action: SubmitChatSearch})
+	submitted := submittedChatSearch("@botfather")
 	found := domain.Chat{ID: 99, Kind: domain.ChatPrivate, Title: "BotFather", Username: "BotFather", CanSend: true}
 
-	// Stale guard: event with different RequestID should be ignored.
-	before := cloneReducerState(submitted)
-	stale, commands := updateState(submitted, PublicChatsSearched{RequestID: submitted.ChatSearch.RequestID + 99, Chats: []domain.Chat{found}})
-	if len(commands) != 0 || !reflect.DeepEqual(stale, before) {
-		t.Fatal("stale result mutated chat search")
+	requestID := submitted.ChatSearch.RequestID
+	want := submittedChatSearch("@botfather")
+	commands := updateState(&submitted, PublicChatsSearched{RequestID: requestID + 99, Chats: []domain.Chat{found}})
+	if len(commands) != 0 || !reflect.DeepEqual(submitted, want) {
+		t.Fatalf("stale result changed active search: %#v effects=%#v", submitted.ChatSearch, commands)
 	}
 
-	// Loaded: event with matching RequestID should update state.
-	requestID := submitted.ChatSearch.RequestID
-	loaded, _ := updateState(submitted, PublicChatsSearched{RequestID: requestID, Chats: []domain.Chat{found}})
-	if loaded.ChatSearch.PublicLoading || len(loaded.ChatSearch.PublicChats) != 1 || loaded.ChatSearch.PublicChats[0].ID != 99 {
-		t.Fatalf("loaded = %#v", loaded.ChatSearch)
+	updateState(&submitted, PublicChatsSearched{RequestID: requestID, Chats: []domain.Chat{found}})
+	if submitted.ChatSearch.PublicLoading || len(submitted.ChatSearch.PublicChats) != 1 || submitted.ChatSearch.PublicChats[0].ID != 99 {
+		t.Fatalf("loaded = %#v", submitted.ChatSearch)
 	}
-	edited, commands := updateState(loaded, ActionReceived{Action: OpenChatSearch})
-	if len(commands) != 0 || edited.Focus != FocusChatSearchInput || edited.ChatSearch.Submitted || edited.ChatSearch.RequestID != 0 || string(edited.ChatSearch.Input) != "@botfather" {
-		t.Fatalf("edit query = %#v focus=%v commands=%#v", edited.ChatSearch, edited.Focus, commands)
+	commands = updateState(&submitted, ActionReceived{Action: OpenChatSearch})
+	if len(commands) != 0 || submitted.Focus != FocusChatSearchInput || submitted.ChatSearch.Submitted || submitted.ChatSearch.RequestID != 0 || string(submitted.ChatSearch.Input) != "@botfather" {
+		t.Fatalf("edit query = %#v focus=%v commands=%#v", submitted.ChatSearch, submitted.Focus, commands)
 	}
-	staleAfterEdit, _ := updateState(edited, PublicChatSearchFailed{RequestID: 10, Error: domain.AppError{Message: "raw"}})
-	if !reflect.DeepEqual(staleAfterEdit, edited) {
-		t.Fatal("invalidated failure mutated edited query")
+	want = submittedChatSearch("@botfather")
+	updateState(&want, PublicChatsSearched{RequestID: requestID, Chats: []domain.Chat{found}})
+	updateState(&want, ActionReceived{Action: OpenChatSearch})
+	staleCommands := updateState(&submitted, PublicChatSearchFailed{RequestID: requestID, Error: domain.AppError{Message: "raw"}})
+	if len(staleCommands) != 0 || !reflect.DeepEqual(submitted, want) {
+		t.Fatalf("invalidated failure changed edited query: %#v effects=%#v", submitted.ChatSearch, staleCommands)
 	}
 }
 
 func TestChatSearchActivationAddsSelectsAndOpensChat(t *testing.T) {
-	state := chatSearchBaseState()
-	opened, _ := updateState(state, ActionReceived{Action: OpenChatSearch})
-	opened, _ = updateState(opened, ChatSearchValueChanged{Value: "@botfather"})
-	submitted, _ := updateState(opened, ActionReceived{Action: SubmitChatSearch})
+	submitted := submittedChatSearch("@botfather")
 	found := domain.Chat{
 		ID: 99, Kind: domain.ChatPrivate, Title: "BotFather", Username: "BotFather", CanSend: true,
 		Avatar: domain.AvatarRef{FileID: 4, UniqueID: "bot-avatar"},
 	}
 	requestID := submitted.ChatSearch.RequestID
 	// Send both events to clear loading flags.
-	loaded, _ := updateState(submitted, PublicChatsSearched{RequestID: requestID, Chats: []domain.Chat{found}})
-	loaded, _ = updateState(loaded, AllMessagesSearched{RequestID: requestID, Messages: []domain.Message{}})
-	activated, commands := updateState(loaded, ActionReceived{Action: Activate})
+	updateState(&submitted, PublicChatsSearched{RequestID: requestID, Chats: []domain.Chat{found}})
+	loaded := submitted
+	updateState(&loaded, AllMessagesSearched{RequestID: requestID, Messages: []domain.Message{}})
+	commands := updateState(&loaded, ActionReceived{Action: Activate})
+	activated := loaded
 	if activated.ChatSearch != nil || activated.Focus != FocusConversation {
 		t.Fatalf("activated search/focus = %#v %v", activated.ChatSearch, activated.Focus)
 	}
@@ -137,18 +150,18 @@ func TestChatSearchActivationAddsSelectsAndOpensChat(t *testing.T) {
 }
 
 func TestChatSearchMouseSelectionRequiresReturnedIdentity(t *testing.T) {
-	state := chatSearchBaseState()
-	opened, _ := updateState(state, ActionReceived{Action: OpenChatSearch})
-	opened, _ = updateState(opened, ChatSearchValueChanged{Value: "botfather"})
-	submitted, _ := updateState(opened, ActionReceived{Action: SubmitChatSearch})
+	submitted := submittedChatSearch("botfather")
 	requestID := submitted.ChatSearch.RequestID
-	loaded, _ := updateState(submitted, PublicChatsSearched{RequestID: requestID, Chats: []domain.Chat{{ID: 99, Title: "BotFather"}}})
-	loaded, _ = updateState(loaded, AllMessagesSearched{RequestID: requestID, Messages: []domain.Message{}})
-	unchanged, commands := updateState(loaded, ActionReceived{Action: SelectChat, ChatID: 100})
+	updateState(&submitted, PublicChatsSearched{RequestID: requestID, Chats: []domain.Chat{{ID: 99, Title: "BotFather"}}})
+	loaded := submitted
+	updateState(&loaded, AllMessagesSearched{RequestID: requestID, Messages: []domain.Message{}})
+	commands := updateState(&loaded, ActionReceived{Action: SelectChat, ChatID: 100})
+	unchanged := loaded
 	if len(commands) != 0 || unchanged.ChatSearch == nil {
 		t.Fatalf("wrong result = %#v %#v", unchanged.ChatSearch, commands)
 	}
-	selected, commands := updateState(loaded, ActionReceived{Action: SelectChat, ChatID: 99})
+	commands = updateState(&loaded, ActionReceived{Action: SelectChat, ChatID: 99})
+	selected := loaded
 	if selected.ChatSearch != nil || selected.Focus != FocusConversation || chatIndex(selected.Chats, 99) < 0 || len(commands) == 0 {
 		t.Fatalf("selected = %#v focus=%v commands=%#v", selected.ChatSearch, selected.Focus, commands)
 	}
@@ -163,8 +176,10 @@ func TestChatSearchValueChangedFiltersLocalChats(t *testing.T) {
 		domain.Chat{ID: 11, Title: "GitHub", Order: 40},
 		domain.Chat{ID: 12, Title: "NoMatch", Order: 30},
 	)
-	opened, _ := updateState(state, ActionReceived{Action: OpenChatSearch})
-	changed, _ := updateState(opened, ChatSearchValueChanged{Value: "tele"})
+	updateState(&state, ActionReceived{Action: OpenChatSearch})
+	opened := state
+	updateState(&opened, ChatSearchValueChanged{Value: "tele"})
+	changed := opened
 	search := changed.ChatSearch
 	if search == nil {
 		t.Fatal("ChatSearch is nil")
@@ -182,10 +197,13 @@ func TestChatSearchValueChangedClearsWhenBlank(t *testing.T) {
 	state.Chats = append(state.Chats,
 		domain.Chat{ID: 10, Title: "Telegram", Username: "telegram", Order: 50},
 	)
-	opened, _ := updateState(state, ActionReceived{Action: OpenChatSearch})
-	changed, _ := updateState(opened, ChatSearchValueChanged{Value: "tele"})
+	updateState(&state, ActionReceived{Action: OpenChatSearch})
+	opened := state
+	updateState(&opened, ChatSearchValueChanged{Value: "tele"})
+	changed := opened
 	// Now clear.
-	cleared, _ := updateState(changed, ChatSearchValueChanged{Value: ""})
+	updateState(&changed, ChatSearchValueChanged{Value: ""})
+	cleared := changed
 	search := cleared.ChatSearch
 	if len(search.LocalChats) != 0 {
 		t.Fatalf("expected empty local chats, got %v", search.LocalChats)
@@ -196,15 +214,13 @@ func TestChatSearchValueChangedClearsWhenBlank(t *testing.T) {
 }
 
 func TestChatSearchPublicChatsSearched(t *testing.T) {
-	state := chatSearchBaseState()
-	opened, _ := updateState(state, ActionReceived{Action: OpenChatSearch})
-	opened, _ = updateState(opened, ChatSearchValueChanged{Value: "test"})
-	submitted, _ := updateState(opened, ActionReceived{Action: SubmitChatSearch})
+	submitted := submittedChatSearch("test")
 	publicChats := []domain.Chat{
 		{ID: 100, Title: "Public Group", Username: "publicgroup", Order: 20},
 	}
 	requestID := submitted.ChatSearch.RequestID
-	loaded, _ := updateState(submitted, PublicChatsSearched{RequestID: requestID, Chats: publicChats})
+	updateState(&submitted, PublicChatsSearched{RequestID: requestID, Chats: publicChats})
+	loaded := submitted
 	if loaded.ChatSearch.PublicLoading {
 		t.Fatal("PublicLoading should be false after search")
 	}
@@ -217,12 +233,10 @@ func TestChatSearchPublicChatsSearched(t *testing.T) {
 }
 
 func TestChatSearchPublicChatsSearchFailed(t *testing.T) {
-	state := chatSearchBaseState()
-	opened, _ := updateState(state, ActionReceived{Action: OpenChatSearch})
-	opened, _ = updateState(opened, ChatSearchValueChanged{Value: "test"})
-	submitted, _ := updateState(opened, ActionReceived{Action: SubmitChatSearch})
+	submitted := submittedChatSearch("test")
 	requestID := submitted.ChatSearch.RequestID
-	failed, _ := updateState(submitted, PublicChatsSearchFailed{RequestID: requestID, Error: domain.AppError{Message: "network error"}})
+	updateState(&submitted, PublicChatsSearchFailed{RequestID: requestID, Error: domain.AppError{Message: "network error"}})
+	failed := submitted
 	if failed.ChatSearch.PublicLoading {
 		t.Fatal("PublicLoading should be false after failure")
 	}
@@ -235,15 +249,13 @@ func TestChatSearchPublicChatsSearchFailed(t *testing.T) {
 }
 
 func TestChatSearchAllMessagesSearched(t *testing.T) {
-	state := chatSearchBaseState()
-	opened, _ := updateState(state, ActionReceived{Action: OpenChatSearch})
-	opened, _ = updateState(opened, ChatSearchValueChanged{Value: "needle"})
-	submitted, _ := updateState(opened, ActionReceived{Action: SubmitChatSearch})
+	submitted := submittedChatSearch("needle")
 	messages := []domain.Message{
 		{ID: 1, ChatID: 7, Kind: domain.MessageText, Text: "This has a needle", SentAt: time.Now()},
 	}
 	requestID := submitted.ChatSearch.RequestID
-	loaded, _ := updateState(submitted, AllMessagesSearched{RequestID: requestID, Messages: messages})
+	updateState(&submitted, AllMessagesSearched{RequestID: requestID, Messages: messages})
+	loaded := submitted
 	if loaded.ChatSearch.MessagesLoading {
 		t.Fatal("MessagesLoading should be false after search")
 	}
@@ -253,12 +265,10 @@ func TestChatSearchAllMessagesSearched(t *testing.T) {
 }
 
 func TestChatSearchAllMessagesSearchFailed(t *testing.T) {
-	state := chatSearchBaseState()
-	opened, _ := updateState(state, ActionReceived{Action: OpenChatSearch})
-	opened, _ = updateState(opened, ChatSearchValueChanged{Value: "test"})
-	submitted, _ := updateState(opened, ActionReceived{Action: SubmitChatSearch})
+	submitted := submittedChatSearch("test")
 	requestID := submitted.ChatSearch.RequestID
-	failed, _ := updateState(submitted, AllMessagesSearchFailed{RequestID: requestID, Error: domain.AppError{Message: "search error"}})
+	updateState(&submitted, AllMessagesSearchFailed{RequestID: requestID, Error: domain.AppError{Message: "search error"}})
+	failed := submitted
 	if failed.ChatSearch.MessagesLoading {
 		t.Fatal("MessagesLoading should be false after failure")
 	}
@@ -273,8 +283,10 @@ func TestChatSearchAllMessagesSearchFailed(t *testing.T) {
 func TestChatSearchLiveTypingEmitsBothAndStaysInInput(t *testing.T) {
 	state := chatSearchBaseState()
 	state.Chats = append(state.Chats, domain.Chat{ID: 10, Title: "Telegram", Username: "telegram", Order: 50})
-	opened, _ := updateState(state, ActionReceived{Action: OpenChatSearch})
-	typed, commands := updateState(opened, ChatSearchValueChanged{Value: "tele"})
+	updateState(&state, ActionReceived{Action: OpenChatSearch})
+	opened := state
+	commands := updateState(&opened, ChatSearchValueChanged{Value: "tele"})
+	typed := opened
 	search := typed.ChatSearch
 	if typed.Focus != FocusChatSearchInput || !search.Submitted {
 		t.Fatalf("live focus/submitted = %v %#v", typed.Focus, search)
@@ -307,28 +319,33 @@ func TestChatSearchLiveTypingEmitsBothAndStaysInInput(t *testing.T) {
 
 func TestChatSearchRemoteArrivalPreservesInputFocus(t *testing.T) {
 	state := chatSearchBaseState()
-	opened, _ := updateState(state, ActionReceived{Action: OpenChatSearch})
-	typed, _ := updateState(opened, ChatSearchValueChanged{Value: "tele"})
+	updateState(&state, ActionReceived{Action: OpenChatSearch})
+	opened := state
+	updateState(&opened, ChatSearchValueChanged{Value: "tele"})
+	typed := opened
 	requestID := typed.ChatSearch.RequestID
-	loaded, _ := updateState(typed, PublicChatsSearched{RequestID: requestID, Chats: []domain.Chat{{ID: 99, Title: "Pub"}}})
+	updateState(&typed, PublicChatsSearched{RequestID: requestID, Chats: []domain.Chat{{ID: 99, Title: "Pub"}}})
+	loaded := typed
 	if loaded.Focus != FocusChatSearchInput || loaded.ChatSearch.PublicLoading || len(loaded.ChatSearch.PublicChats) != 1 {
 		t.Fatalf("public arrival = focus %v search %#v", loaded.Focus, loaded.ChatSearch)
 	}
-	loaded, _ = updateState(loaded, AllMessagesSearched{RequestID: requestID, Messages: []domain.Message{{ID: 5, ChatID: 7, Kind: domain.MessageText, Text: "hi"}}})
+	updateState(&loaded, AllMessagesSearched{RequestID: requestID, Messages: []domain.Message{{ID: 5, ChatID: 7, Kind: domain.MessageText, Text: "hi"}}})
 	if loaded.Focus != FocusChatSearchInput || loaded.ChatSearch.MessagesLoading || len(loaded.ChatSearch.GlobalMessages) != 1 {
 		t.Fatalf("messages arrival = focus %v search %#v", loaded.Focus, loaded.ChatSearch)
 	}
 }
 
 func TestChatSearchMessageActivationJumpsToContext(t *testing.T) {
-	state := chatSearchBaseState()
-	opened, _ := updateState(state, ActionReceived{Action: OpenChatSearch})
-	typed, _ := updateState(opened, ChatSearchValueChanged{Value: "needle"})
+	typed := chatSearchBaseState()
+	updateState(&typed, ActionReceived{Action: OpenChatSearch})
+	updateState(&typed, ChatSearchValueChanged{Value: "needle"})
 	requestID := typed.ChatSearch.RequestID
-	loaded, _ := updateState(typed, PublicChatsSearched{RequestID: requestID, Chats: nil})
+	updateState(&typed, PublicChatsSearched{RequestID: requestID, Chats: nil})
+	loaded := typed
 	msg := domain.Message{ID: 20, ChatID: 7, Kind: domain.MessageText, Text: "needle hit", SentAt: time.Now()}
-	loaded, _ = updateState(loaded, AllMessagesSearched{RequestID: requestID, Messages: []domain.Message{msg}})
-	activated, commands := updateState(loaded, ActionReceived{Action: Activate})
+	updateState(&loaded, AllMessagesSearched{RequestID: requestID, Messages: []domain.Message{msg}})
+	commands := updateState(&loaded, ActionReceived{Action: Activate})
+	activated := loaded
 	if activated.ChatSearch != nil {
 		t.Fatalf("message activation must clear ChatSearch: %#v", activated.ChatSearch)
 	}
@@ -352,20 +369,23 @@ func TestChatSearchMessageActivationJumpsToContext(t *testing.T) {
 		{ID: 20, ChatID: 7, Kind: domain.MessageText, Text: "needle hit"},
 		{ID: 30, ChatID: 7, Kind: domain.MessageText, Text: "new"},
 	}}
-	landed, _ := updateState(activated, SearchMessageContextLoaded{RequestID: activated.MessageSearch.RequestID, ChatID: 7, MessageID: 20, Page: page})
+	updateState(&activated, SearchMessageContextLoaded{RequestID: activated.MessageSearch.RequestID, ChatID: 7, MessageID: 20, Page: page})
+	landed := activated
 	if landed.MessageSearch != nil || landed.Focus != FocusConversation || landed.SelectedMessage != 20 || landed.SelectedMessageChat != 7 {
 		t.Fatalf("landed = search %#v focus %v sel %v", landed.MessageSearch, landed.Focus, landed.SelectedMessage)
 	}
 }
 
 func TestChatSearchMouseMessageSelectionJumps(t *testing.T) {
-	state := chatSearchBaseState()
-	opened, _ := updateState(state, ActionReceived{Action: OpenChatSearch})
-	typed, _ := updateState(opened, ChatSearchValueChanged{Value: "needle"})
+	typed := chatSearchBaseState()
+	updateState(&typed, ActionReceived{Action: OpenChatSearch})
+	updateState(&typed, ChatSearchValueChanged{Value: "needle"})
 	requestID := typed.ChatSearch.RequestID
-	loaded, _ := updateState(typed, PublicChatsSearched{RequestID: requestID, Chats: nil})
-	loaded, _ = updateState(loaded, AllMessagesSearched{RequestID: requestID, Messages: []domain.Message{{ID: 20, ChatID: 7, Kind: domain.MessageText, Text: "hit"}}})
-	selected, commands := updateState(loaded, ActionReceived{Action: SelectMessage, ChatID: 7, MessageID: 20})
+	updateState(&typed, PublicChatsSearched{RequestID: requestID, Chats: nil})
+	loaded := typed
+	updateState(&loaded, AllMessagesSearched{RequestID: requestID, Messages: []domain.Message{{ID: 20, ChatID: 7, Kind: domain.MessageText, Text: "hit"}}})
+	commands := updateState(&loaded, ActionReceived{Action: SelectMessage, ChatID: 7, MessageID: 20})
+	selected := loaded
 	if selected.ChatSearch != nil || selected.MessageSearch == nil {
 		t.Fatalf("mouse jump = search %#v msgsearch %#v", selected.ChatSearch, selected.MessageSearch)
 	}

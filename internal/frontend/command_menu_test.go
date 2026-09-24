@@ -41,7 +41,7 @@ func TestAppModelSlashDeliversBotCommandLoad(t *testing.T) {
 	state.Focus = FocusComposer
 	state.Chats = []domain.Chat{{ID: 9, CanSend: true}}
 
-	_, effects := updateState(state, ComposerValueChanged{ChatID: 9, Value: "/"})
+	effects := updateState(&state, ComposerValueChanged{ChatID: 9, Value: "/"})
 	found := false
 	for _, effect := range effects {
 		if load, ok := effect.(LoadBotCommands); ok {

@@ -50,11 +50,12 @@ func TestComputeLayoutModeMatchesAppResizeReducer(t *testing.T) {
 
 	for _, width := range widths {
 		for _, height := range heights {
-			resized, _ := updateState(InitialState(), Resized{Width: width, Height: height})
+			state := InitialState()
+			updateState(&state, Resized{Width: width, Height: height})
 
 			got := ComputeLayout(width, height, false, FocusChats).Mode
-			if got != resized.Layout {
-				t.Errorf("ComputeLayout(%d, %d).Mode = %v, app reducer Layout = %v", width, height, got, resized.Layout)
+			if got != state.Layout {
+				t.Errorf("ComputeLayout(%d, %d).Mode = %v, app reducer Layout = %v", width, height, got, state.Layout)
 			}
 		}
 	}

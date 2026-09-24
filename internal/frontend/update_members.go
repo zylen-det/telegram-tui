@@ -6,16 +6,16 @@ import (
 	"github.com/zylen-det/telegram-tui/internal/telegram"
 )
 
-func openMembers(state State) (State, []Effect) {
-	chat, ok := detailsChat(state)
+func openMembers(state *State) []Effect {
+	chat, ok := detailsChat(*state)
 	if !ok || state.Focus != FocusDetails {
-		return state, nil
+		return nil
 	}
 	chatID := chat.ID
 	if chat.Kind != domain.ChatBasicGroup && chat.Kind != domain.ChatSupergroup && chat.Kind != domain.ChatChannel {
-		return state, nil
+		return nil
 	}
-	requestID := allocateRequestID(&state)
+	requestID := allocateRequestID(state)
 	state.Members = &MembersState{
 		RequestID:     requestID,
 		ChatID:        chatID,
@@ -26,7 +26,7 @@ func openMembers(state State) (State, []Effect) {
 		state.DetailsSelected = 1
 	}
 	state.Focus = FocusMembers
-	return state, []Effect{LoadMembers{
+	return []Effect{LoadMembers{
 		RequestID: requestID,
 		ChatID:    chatID,
 		Cursor:    telegram.MemberCursor{Limit: pageSize},
@@ -35,11 +35,11 @@ func openMembers(state State) (State, []Effect) {
 
 // openUserInfo opens the single Members modal directly for one user, backed
 // by an explicit user fetch instead of the member list.
-func openUserInfo(state State, chatID domain.ChatID, userID domain.UserID, previousFocus Focus) (State, []Effect) {
+func openUserInfo(state *State, chatID domain.ChatID, userID domain.UserID, previousFocus Focus) []Effect {
 	if userID == 0 {
-		return state, nil
+		return nil
 	}
-	requestID := allocateRequestID(&state)
+	requestID := allocateRequestID(state)
 	state.Members = &MembersState{
 		RequestID:     requestID,
 		ChatID:        chatID,
@@ -49,13 +49,13 @@ func openUserInfo(state State, chatID domain.ChatID, userID domain.UserID, previ
 		Single:        true,
 	}
 	state.Focus = FocusMembers
-	return state, []Effect{LoadUserInfo{RequestID: requestID, ChatID: chatID, UserID: userID}}
+	return []Effect{LoadUserInfo{RequestID: requestID, ChatID: chatID, UserID: userID}}
 }
 
-func reduceUserInfoLoaded(state State, event UserInfoLoaded) (State, []Effect) {
+func reduceUserInfoLoaded(state *State, event UserInfoLoaded) []Effect {
 	members := state.Members
 	if members == nil || !members.Single || members.RequestID != event.RequestID || members.ChatID != event.ChatID {
-		return state, nil
+		return nil
 	}
 	if event.User.ID == 0 {
 		return reduceUserInfoFailed(state, UserInfoLoadFailed{RequestID: event.RequestID, ChatID: event.ChatID, UserID: event.UserID, Error: userInfoError()})
@@ -73,25 +73,25 @@ func reduceUserInfoLoaded(state State, event UserInfoLoaded) (State, []Effect) {
 	members.Loading = false
 	members.Error = nil
 	state.Focus = FocusMembers
-	return state, requestMissingDetailAvatar(&state, detail)
+	return requestMissingDetailAvatar(state, detail)
 }
 
-func reduceUserInfoFailed(state State, event UserInfoLoadFailed) (State, []Effect) {
+func reduceUserInfoFailed(state *State, event UserInfoLoadFailed) []Effect {
 	members := state.Members
 	if members == nil || !members.Single || members.RequestID != event.RequestID || members.ChatID != event.ChatID {
-		return state, nil
+		return nil
 	}
 	failure := userInfoError()
 	members.Error = &failure
 	members.Loading = false
 	state.Focus = FocusMembers
-	return state, nil
+	return nil
 }
 
-func reduceMembersAction(state State, event ActionReceived) (State, []Effect) {
+func reduceMembersAction(state *State, event ActionReceived) []Effect {
 	members := state.Members
 	if members == nil {
-		return state, nil
+		return nil
 	}
 	if members.Detail != nil {
 		return reduceMemberDetailActionRouter(state, event)
@@ -106,7 +106,7 @@ func reduceMembersAction(state State, event ActionReceived) (State, []Effect) {
 		return reduceAction(state, event)
 	case SelectNext, SelectPrevious:
 		if state.Focus != FocusMembers || members.Loading || len(members.Results) == 0 {
-			return state, nil
+			return nil
 		}
 		delta := 1
 		if event.Action == SelectPrevious {
@@ -116,7 +116,7 @@ func reduceMembersAction(state State, event ActionReceived) (State, []Effect) {
 		return maybePaginateMembers(state)
 	case SelectMember:
 		if state.Focus != FocusMembers || event.ChatID != members.ChatID {
-			return state, nil
+			return nil
 		}
 		for index := range members.Results {
 			if members.Results[index].User.ID == event.UserID {
@@ -126,13 +126,13 @@ func reduceMembersAction(state State, event ActionReceived) (State, []Effect) {
 		}
 	case Activate:
 		if state.Focus != FocusMembers || members.Loading || len(members.Results) == 0 {
-			return state, nil
+			return nil
 		}
 		selected := max(0, min(members.Selected, len(members.Results)-1))
 		return openMemberDetail(state, members.ChatID, members.Results[selected].User.ID)
 	case OpenMemberDetail:
 		if state.Focus != FocusMembers {
-			return state, nil
+			return nil
 		}
 		userID := event.UserID
 		if userID == 0 && len(members.Results) > 0 {
@@ -140,13 +140,13 @@ func reduceMembersAction(state State, event ActionReceived) (State, []Effect) {
 		}
 		return openMemberDetail(state, members.ChatID, userID)
 	}
-	return state, nil
+	return nil
 }
 
 // reduceMemberDetailActionRouter handles keys while the modal shows one
 // member's detail view. Close backs out to the list; list-only actions such
 // as chat selection still apply.
-func reduceMemberDetailActionRouter(state State, event ActionReceived) (State, []Effect) {
+func reduceMemberDetailActionRouter(state *State, event ActionReceived) []Effect {
 	members := state.Members
 	switch event.Action {
 	case Close:
@@ -154,48 +154,48 @@ func reduceMemberDetailActionRouter(state State, event ActionReceived) (State, [
 		if members.Single {
 			state.Focus = members.PreviousFocus
 			state.Members = nil
-			return state, nil
+			return nil
 		}
 		members.Detail = nil
-		return state, nil
+		return nil
 	case SelectChat:
 		state.Focus = FocusConversation
 		state.Members = nil
 		return reduceAction(state, event)
 	case CloseMemberDetail:
 		if event.ChatID != 0 && event.ChatID != members.ChatID {
-			return state, nil
+			return nil
 		}
 		if members.Single {
 			state.Focus = members.PreviousFocus
 			state.Members = nil
-			return state, nil
+			return nil
 		}
 		members.Detail = nil
-		return state, nil
+		return nil
 	default:
 		return reduceMemberDetailAction(state, event)
 	}
 }
 
-func maybePaginateMembers(state State) (State, []Effect) {
+func maybePaginateMembers(state *State) []Effect {
 	members := state.Members
 	if members == nil || members.Loading || members.Done || len(members.Results) == 0 || members.Selected != len(members.Results)-1 {
-		return state, nil
+		return nil
 	}
 	return requestNextMembersPage(state)
 }
 
-func requestNextMembersPage(state State) (State, []Effect) {
+func requestNextMembersPage(state *State) []Effect {
 	members := state.Members
 	if members == nil || members.Loading || members.Done {
-		return state, nil
+		return nil
 	}
-	requestID := allocateRequestID(&state)
+	requestID := allocateRequestID(state)
 	members.RequestID = requestID
 	members.Loading = true
 	members.Error = nil
-	return state, []Effect{LoadMembers{
+	return []Effect{LoadMembers{
 		RequestID: requestID,
 		ChatID:    members.ChatID,
 		Cursor: telegram.MemberCursor{
@@ -205,10 +205,10 @@ func requestNextMembersPage(state State) (State, []Effect) {
 	}}
 }
 
-func reduceMembersLoaded(state State, event MembersLoaded) (State, []Effect) {
+func reduceMembersLoaded(state *State, event MembersLoaded) []Effect {
 	members := state.Members
 	if members == nil || members.RequestID != event.RequestID || members.ChatID != event.ChatID {
-		return state, nil
+		return nil
 	}
 	previousOffset := members.NextOffset
 	seen := make(map[domain.UserID]struct{}, len(members.Results)+len(event.Page.Members))
@@ -239,17 +239,17 @@ func reduceMembersLoaded(state State, event MembersLoaded) (State, []Effect) {
 	if len(event.Page.Members) == 0 && !members.Done {
 		return requestNextMembersPage(state)
 	}
-	return state, nil
+	return nil
 }
 
-func reduceMembersLoadFailed(state State, event MembersLoadFailed) (State, []Effect) {
+func reduceMembersLoadFailed(state *State, event MembersLoadFailed) []Effect {
 	members := state.Members
 	if members == nil || members.RequestID != event.RequestID || members.ChatID != event.ChatID {
-		return state, nil
+		return nil
 	}
 	failure := membersError()
 	members.Error = &failure
 	members.Loading = false
 	state.Focus = FocusMembers
-	return state, nil
+	return nil
 }

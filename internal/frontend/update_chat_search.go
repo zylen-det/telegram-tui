@@ -7,23 +7,21 @@ import (
 	"github.com/zylen-det/telegram-tui/internal/domain"
 )
 
-func openChatSearch(state State) (State, []Effect) {
+func openChatSearch(state *State) []Effect {
 	if state.Focus != FocusChats || state.ChatSearch != nil {
-		return state, nil
+		return nil
 	}
 	state.ChatSearch = &ChatSearchState{PreviousFocus: state.Focus}
 	state.Focus = FocusChatSearchInput
-	return state, nil
+	return nil
 }
 
-func reduceChatSearchValueChanged(state State, event ChatSearchValueChanged) (State, []Effect) {
+func reduceChatSearchValueChanged(state *State, event ChatSearchValueChanged) []Effect {
 	active := state.ChatSearch
 	if active == nil || state.Focus != FocusChatSearchInput {
-		return state, nil
+		return nil
 	}
-	// Copy-on-write: clone the owned ChatSearchState so the caller's State keeps
-	// its previous query and result sections.
-	search := *active
+	search := active
 	input := make([]rune, 0, len(event.Value))
 	for _, value := range event.Value {
 		if value != '\r' && value != '\n' {
@@ -46,8 +44,7 @@ func reduceChatSearchValueChanged(state State, event ChatSearchValueChanged) (St
 		search.MessagesError = nil
 		search.Selected = 0
 		search.Submitted = false
-		state.ChatSearch = &search
-		return state, nil
+		return nil
 	}
 
 	// Synchronous local filter, capped for live preview.
@@ -71,7 +68,7 @@ func reduceChatSearchValueChanged(state State, event ChatSearchValueChanged) (St
 	search.LocalChats = matches
 
 	// One live generation for both remote sections so stale results die together.
-	requestID := allocateRequestID(&state)
+	requestID := allocateRequestID(state)
 	search.RequestID = requestID
 	search.PublicLoading = true
 	search.MessagesLoading = true
@@ -81,26 +78,25 @@ func reduceChatSearchValueChanged(state State, event ChatSearchValueChanged) (St
 	search.GlobalMessages = nil
 	search.Selected = 0
 	search.Submitted = true
-	state.ChatSearch = &search
-	return state, []Effect{
+	return []Effect{
 		SearchPublicChatsCommand{RequestID: requestID, Query: search.Query},
 		SearchAllMessagesCommand{RequestID: requestID, Query: search.Query, Limit: 10},
 	}
 }
 
-func reduceChatSearchAction(state State, event ActionReceived) (State, []Effect) {
+func reduceChatSearchAction(state *State, event ActionReceived) []Effect {
 	search := state.ChatSearch
 	if search == nil {
-		return state, nil
+		return nil
 	}
 	switch event.Action {
 	case Close:
 		state.Focus = search.PreviousFocus
 		state.ChatSearch = nil
-		return state, nil
+		return nil
 	case OpenChatSearch:
 		if state.Focus != FocusChatSearchResults {
-			return state, nil
+			return nil
 		}
 		search.RequestID = 0
 		search.PublicLoading = false
@@ -109,16 +105,16 @@ func reduceChatSearchAction(state State, event ActionReceived) (State, []Effect)
 		search.MessagesError = nil
 		search.Submitted = false
 		state.Focus = FocusChatSearchInput
-		return state, nil
+		return nil
 	case SubmitChatSearch:
 		// Explicit search button / legacy submit: same as Activate in input.
 		if state.Focus != FocusChatSearchInput {
-			return state, nil
+			return nil
 		}
 		return activateChatSearchSelection(state)
 	case SelectNext, SelectPrevious:
 		if (state.Focus != FocusChatSearchInput && state.Focus != FocusChatSearchResults) || len(flattenChatSearchResults(search)) == 0 {
-			return state, nil
+			return nil
 		}
 		delta := 1
 		if event.Action == SelectPrevious {
@@ -126,10 +122,10 @@ func reduceChatSearchAction(state State, event ActionReceived) (State, []Effect)
 		}
 		count := len(flattenChatSearchResults(search))
 		search.Selected = max(0, min(count-1, search.Selected+delta))
-		return state, nil
+		return nil
 	case SelectChat:
 		if state.Focus != FocusChatSearchInput && state.Focus != FocusChatSearchResults {
-			return state, nil
+			return nil
 		}
 		for _, chat := range flattenChatSearchChats(search) {
 			if chat.ID != 0 && chat.ID == event.ChatID {
@@ -138,7 +134,7 @@ func reduceChatSearchAction(state State, event ActionReceived) (State, []Effect)
 		}
 	case SelectMessage:
 		if state.Focus != FocusChatSearchInput && state.Focus != FocusChatSearchResults {
-			return state, nil
+			return nil
 		}
 		for _, msg := range search.GlobalMessages {
 			if msg.ChatID == event.ChatID && msg.ID == event.MessageID {
@@ -147,19 +143,19 @@ func reduceChatSearchAction(state State, event ActionReceived) (State, []Effect)
 		}
 	case Activate:
 		if state.Focus != FocusChatSearchInput && state.Focus != FocusChatSearchResults {
-			return state, nil
+			return nil
 		}
 		return activateChatSearchSelection(state)
 	}
-	return state, nil
+	return nil
 }
 
 // activateChatSearchSelection activates the flattened selection, or falls back
 // to an exact @username lookup when there is nothing to activate.
-func activateChatSearchSelection(state State) (State, []Effect) {
+func activateChatSearchSelection(state *State) []Effect {
 	search := state.ChatSearch
 	if search == nil {
-		return state, nil
+		return nil
 	}
 	flattened := flattenChatSearchResults(search)
 	if search.Selected >= 0 && search.Selected < len(flattened) {
@@ -173,9 +169,9 @@ func activateChatSearchSelection(state State) (State, []Effect) {
 	username := strings.TrimSpace(string(search.Input))
 	username = strings.TrimPrefix(username, "@")
 	if username == "" {
-		return state, nil
+		return nil
 	}
-	requestID := allocateRequestID(&state)
+	requestID := allocateRequestID(state)
 	search.RequestID = requestID
 	search.Query = username
 	search.PublicLoading = true
@@ -187,17 +183,17 @@ func activateChatSearchSelection(state State) (State, []Effect) {
 	search.Selected = 0
 	search.Submitted = true
 	state.Focus = FocusChatSearchResults
-	return state, []Effect{
+	return []Effect{
 		SearchPublicChatCommand{RequestID: requestID, Username: username},
 		SearchPublicChatsCommand{RequestID: requestID, Query: username},
 		SearchAllMessagesCommand{RequestID: requestID, Query: username, Limit: 10},
 	}
 }
 
-func reducePublicChatSearched(state State, event PublicChatSearched) (State, []Effect) {
+func reducePublicChatSearched(state *State, event PublicChatSearched) []Effect {
 	search := state.ChatSearch
 	if search == nil || search.RequestID != event.RequestID {
-		return state, nil
+		return nil
 	}
 	if event.Chat.ID == 0 {
 		search.PublicChats = nil
@@ -207,26 +203,26 @@ func reducePublicChatSearched(state State, event PublicChatSearched) (State, []E
 	search.PublicLoading = false
 	search.PublicError = nil
 	clampChatSearchSelection(search)
-	return state, nil
+	return nil
 }
 
-func reducePublicChatSearchFailed(state State, event PublicChatSearchFailed) (State, []Effect) {
+func reducePublicChatSearchFailed(state *State, event PublicChatSearchFailed) []Effect {
 	search := state.ChatSearch
 	if search == nil || search.RequestID != event.RequestID {
-		return state, nil
+		return nil
 	}
 	failure := chatSearchError()
 	search.PublicError = &failure
 	search.PublicLoading = false
 	search.PublicChats = nil
 	clampChatSearchSelection(search)
-	return state, nil
+	return nil
 }
 
-func reducePublicChatsSearched(state State, event PublicChatsSearched) (State, []Effect) {
+func reducePublicChatsSearched(state *State, event PublicChatsSearched) []Effect {
 	search := state.ChatSearch
 	if search == nil || search.RequestID != event.RequestID {
-		return state, nil
+		return nil
 	}
 	chats := make([]domain.Chat, 0, len(event.Chats))
 	for _, chat := range event.Chats {
@@ -241,26 +237,26 @@ func reducePublicChatsSearched(state State, event PublicChatsSearched) (State, [
 	search.PublicLoading = false
 	search.PublicError = nil
 	clampChatSearchSelection(search)
-	return state, nil
+	return nil
 }
 
-func reducePublicChatsSearchFailed(state State, event PublicChatsSearchFailed) (State, []Effect) {
+func reducePublicChatsSearchFailed(state *State, event PublicChatsSearchFailed) []Effect {
 	search := state.ChatSearch
 	if search == nil || search.RequestID != event.RequestID {
-		return state, nil
+		return nil
 	}
 	failure := domain.AppError{Kind: domain.ErrorNetwork, Op: "search public chats", Message: "Could not search public chats"}
 	search.PublicError = &failure
 	search.PublicLoading = false
 	search.PublicChats = nil
 	clampChatSearchSelection(search)
-	return state, nil
+	return nil
 }
 
-func reduceAllMessagesSearched(state State, event AllMessagesSearched) (State, []Effect) {
+func reduceAllMessagesSearched(state *State, event AllMessagesSearched) []Effect {
 	search := state.ChatSearch
 	if search == nil || search.RequestID != event.RequestID {
-		return state, nil
+		return nil
 	}
 	messages := make([]domain.Message, 0, len(event.Messages))
 	for _, msg := range event.Messages {
@@ -275,20 +271,20 @@ func reduceAllMessagesSearched(state State, event AllMessagesSearched) (State, [
 	search.MessagesLoading = false
 	search.MessagesError = nil
 	clampChatSearchSelection(search)
-	return state, nil
+	return nil
 }
 
-func reduceAllMessagesSearchFailed(state State, event AllMessagesSearchFailed) (State, []Effect) {
+func reduceAllMessagesSearchFailed(state *State, event AllMessagesSearchFailed) []Effect {
 	search := state.ChatSearch
 	if search == nil || search.RequestID != event.RequestID {
-		return state, nil
+		return nil
 	}
 	failure := domain.AppError{Kind: domain.ErrorNetwork, Op: "search all messages", Message: "Could not search messages"}
 	search.MessagesError = &failure
 	search.MessagesLoading = false
 	search.GlobalMessages = nil
 	clampChatSearchSelection(search)
-	return state, nil
+	return nil
 }
 
 func chatSearchError() domain.AppError {
@@ -366,35 +362,35 @@ func clampChatSearchSelection(search *ChatSearchState) {
 
 // openChatFromSearchResult opens the chat identified by the search result
 // and navigates back to the previous focus.
-func openChatFromSearchResult(state State, chat domain.Chat) (State, []Effect) {
-	previousID, hadPrevious := activeChatID(state)
-	focusedID, hadFocused := focusedChatID(state)
+func openChatFromSearchResult(state *State, chat domain.Chat) []Effect {
+	previousID, hadPrevious := activeChatID(*state)
+	focusedID, hadFocused := focusedChatID(*state)
 	upsertChat(&state.Chats, chat)
 	sortChats(state.Chats)
 	if hadPrevious {
-		preserveChatSelection(&state, previousID)
+		preserveChatSelection(state, previousID)
 	}
 	if hadFocused {
-		preserveChatFocus(&state, focusedID)
+		preserveChatFocus(state, focusedID)
 	}
 
 	state.ChatSearch = nil
 	state.Focus = FocusChats
-	opened, commands := reduceAction(state, ActionReceived{Action: SelectChat, ChatID: chat.ID})
-	if chatIndex(opened.Chats, chat.ID) < 0 {
-		return state, nil
+	commands := reduceAction(state, ActionReceived{Action: SelectChat, ChatID: chat.ID})
+	if chatIndex(state.Chats, chat.ID) < 0 {
+		return nil
 	}
-	opened, openCommands := openActiveChatFromList(opened)
+	openCommands := openActiveChatFromList(state)
 	commands = append(commands, openCommands...)
-	commands = append(commands, requestMissingChatAvatars(&opened, []domain.Chat{chat})...)
-	return opened, commands
+	commands = append(commands, requestMissingChatAvatars(state, []domain.Chat{chat})...)
+	return commands
 }
 
 // openChatFromMessageResult selects the containing chat and jumps to the
 // message context so the user lands on the exact matched message.
-func openChatFromMessageResult(state State, msg domain.Message) (State, []Effect) {
-	previousID, hadPrevious := activeChatID(state)
-	focusedID, hadFocused := focusedChatID(state)
+func openChatFromMessageResult(state *State, msg domain.Message) []Effect {
+	previousID, hadPrevious := activeChatID(*state)
+	focusedID, hadFocused := focusedChatID(*state)
 	chat := findChatByID(state.Chats, msg.ChatID)
 	if chat.ID == 0 {
 		chat = domain.Chat{ID: msg.ChatID}
@@ -402,44 +398,44 @@ func openChatFromMessageResult(state State, msg domain.Message) (State, []Effect
 	upsertChat(&state.Chats, chat)
 	sortChats(state.Chats)
 	if hadPrevious {
-		preserveChatSelection(&state, previousID)
+		preserveChatSelection(state, previousID)
 	}
 	if hadFocused {
-		preserveChatFocus(&state, focusedID)
+		preserveChatFocus(state, focusedID)
 	}
 
 	state.ChatSearch = nil
 	state.Focus = FocusChats
-	opened, commands := reduceAction(state, ActionReceived{Action: SelectChat, ChatID: msg.ChatID})
-	if chatIndex(opened.Chats, msg.ChatID) < 0 {
-		return state, nil
+	commands := reduceAction(state, ActionReceived{Action: SelectChat, ChatID: msg.ChatID})
+	if chatIndex(state.Chats, msg.ChatID) < 0 {
+		return nil
 	}
 	// Landing from a chat search targets a single message: leave ALL mode.
-	if opened.ShowAll == nil {
-		opened.ShowAll = make(map[domain.ChatID]bool)
+	if state.ShowAll == nil {
+		state.ShowAll = make(map[domain.ChatID]bool)
 	}
-	opened.ShowAll[msg.ChatID] = false
+	state.ShowAll[msg.ChatID] = false
 	if msg.TopicID != 0 {
 		// The matched message lives in a forum topic: require a forum chat,
 		// select the topic, and jump through the topic-scoped context load.
-		if !opened.Chats[opened.SelectedChat].IsForum {
-			return state, nil
+		if !state.Chats[state.SelectedChat].IsForum {
+			return nil
 		}
-		if opened.ForumTopics == nil {
-			opened.ForumTopics = make(map[domain.ChatID]map[domain.TopicID]domain.ForumTopic)
+		if state.ForumTopics == nil {
+			state.ForumTopics = make(map[domain.ChatID]map[domain.TopicID]domain.ForumTopic)
 		}
-		if opened.ForumTopics[msg.ChatID] == nil {
-			opened.ForumTopics[msg.ChatID] = make(map[domain.TopicID]domain.ForumTopic)
+		if state.ForumTopics[msg.ChatID] == nil {
+			state.ForumTopics[msg.ChatID] = make(map[domain.TopicID]domain.ForumTopic)
 		}
-		if _, tracked := opened.ForumTopics[msg.ChatID][msg.TopicID]; !tracked {
-			opened.ForumTopics[msg.ChatID][msg.TopicID] = domain.ForumTopic{ID: msg.TopicID, ChatID: msg.ChatID, Name: "Topic"}
+		if _, tracked := state.ForumTopics[msg.ChatID][msg.TopicID]; !tracked {
+			state.ForumTopics[msg.ChatID][msg.TopicID] = domain.ForumTopic{ID: msg.TopicID, ChatID: msg.ChatID, Name: "Topic"}
 		}
-		if opened.SelectedTopics == nil {
-			opened.SelectedTopics = make(map[domain.ChatID]domain.TopicID)
+		if state.SelectedTopics == nil {
+			state.SelectedTopics = make(map[domain.ChatID]domain.TopicID)
 		}
-		opened.SelectedTopics[msg.ChatID] = msg.TopicID
-		requestID := allocateRequestID(&opened)
-		opened.MessageSearch = &MessageSearchState{
+		state.SelectedTopics[msg.ChatID] = msg.TopicID
+		requestID := allocateRequestID(state)
+		state.MessageSearch = &MessageSearchState{
 			RequestID:     requestID,
 			ChatID:        msg.ChatID,
 			TopicID:       msg.TopicID,
@@ -449,17 +445,17 @@ func openChatFromMessageResult(state State, msg domain.Message) (State, []Effect
 			Submitted:     true,
 			JumpMessageID: msg.ID,
 		}
-		opened.Focus = FocusConversation
+		state.Focus = FocusConversation
 		commands = append(commands, LoadSearchMessageContext{
 			RequestID: requestID,
 			ChatID:    msg.ChatID,
 			TopicID:   msg.TopicID,
 			MessageID: msg.ID,
 		})
-		return opened, commands
+		return commands
 	}
-	requestID := allocateRequestID(&opened)
-	opened.MessageSearch = &MessageSearchState{
+	requestID := allocateRequestID(state)
+	state.MessageSearch = &MessageSearchState{
 		RequestID:     requestID,
 		ChatID:        msg.ChatID,
 		Query:         "",
@@ -468,13 +464,13 @@ func openChatFromMessageResult(state State, msg domain.Message) (State, []Effect
 		Submitted:     true,
 		JumpMessageID: msg.ID,
 	}
-	opened.Focus = FocusConversation
+	state.Focus = FocusConversation
 	commands = append(commands, LoadSearchMessageContext{
 		RequestID: requestID,
 		ChatID:    msg.ChatID,
 		MessageID: msg.ID,
 	})
-	return opened, commands
+	return commands
 }
 
 // findChatByID finds a chat by ID in the slice, or returns an empty Chat.

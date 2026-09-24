@@ -14,7 +14,7 @@ func TestDesktopNotificationForEligibleBlurredMessage(t *testing.T) {
 	state.Chats = []domain.Chat{{ID: 1, Title: "  Project\nchat  "}}
 	message := domain.Message{ID: 100, ChatID: 1, Kind: domain.MessageText, Text: " Hello\nthere ", SenderName: " Alice  Example "}
 
-	_, commands := updateState(state, TelegramEvent{Value: telegram.MessageUpserted{Message: message}})
+	commands := updateState(&state, TelegramEvent{Value: telegram.MessageUpserted{Message: message}})
 	if len(commands) != 1 {
 		t.Fatalf("commands = %#v, want one notification", commands)
 	}
@@ -33,7 +33,7 @@ func TestDesktopNotificationMediaCaptionAndEmptySender(t *testing.T) {
 	state.Chats = []domain.Chat{{ID: 2, Title: "Media"}}
 	message := domain.Message{ID: 200, ChatID: 2, Kind: domain.MessagePhoto, Text: " nice\n sunset "}
 
-	_, commands := updateState(state, TelegramEvent{Value: telegram.MessageUpserted{Message: message}})
+	commands := updateState(&state, TelegramEvent{Value: telegram.MessageUpserted{Message: message}})
 	if len(commands) != 1 {
 		t.Fatalf("commands = %#v, want one notification", commands)
 	}
@@ -47,19 +47,20 @@ func TestDesktopNotificationSuppression(t *testing.T) {
 	baseMessage := domain.Message{ID: 10, ChatID: 1, Kind: domain.MessageText, Text: "hello", SenderName: "Alice"}
 	tests := []struct {
 		name    string
-		state   State
+		fn      func() State
 		message domain.Message
 	}{
-		{name: "focused", state: func() State { s := notificationTestState(); s.TerminalFocused = true; return s }(), message: baseMessage},
-		{name: "muted", state: func() State { s := notificationTestState(); s.Chats[0].Muted = true; return s }(), message: baseMessage},
-		{name: "outgoing", state: notificationTestState(), message: func() domain.Message { m := baseMessage; m.Outgoing = true; return m }()},
-		{name: "service flag", state: notificationTestState(), message: func() domain.Message { m := baseMessage; m.Service = true; return m }()},
-		{name: "service kind", state: notificationTestState(), message: func() domain.Message { m := baseMessage; m.Kind = domain.MessageService; return m }()},
-		{name: "unknown chat", state: notificationTestState(), message: func() domain.Message { m := baseMessage; m.ChatID = 99; return m }()},
+		{name: "focused", fn: func() State { s := notificationTestState(); s.TerminalFocused = true; return s }, message: baseMessage},
+		{name: "muted", fn: func() State { s := notificationTestState(); s.Chats[0].Muted = true; return s }, message: baseMessage},
+		{name: "outgoing", fn: notificationTestState, message: func() domain.Message { m := baseMessage; m.Outgoing = true; return m }()},
+		{name: "service flag", fn: notificationTestState, message: func() domain.Message { m := baseMessage; m.Service = true; return m }()},
+		{name: "service kind", fn: notificationTestState, message: func() domain.Message { m := baseMessage; m.Kind = domain.MessageService; return m }()},
+		{name: "unknown chat", fn: notificationTestState, message: func() domain.Message { m := baseMessage; m.ChatID = 99; return m }()},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, commands := updateState(test.state, TelegramEvent{Value: telegram.MessageUpserted{Message: test.message}})
+			state := test.fn()
+			commands := updateState(&state, TelegramEvent{Value: telegram.MessageUpserted{Message: test.message}})
 			for _, command := range commands {
 				if _, ok := command.(ShowDesktopNotification); ok {
 					t.Fatalf("suppressed message emitted notification: %#v", commands)
@@ -72,12 +73,12 @@ func TestDesktopNotificationSuppression(t *testing.T) {
 func TestDesktopNotificationSuppressesReupsert(t *testing.T) {
 	state := notificationTestState()
 	message := domain.Message{ID: 10, ChatID: 1, Kind: domain.MessageText, Text: "first", SenderName: "Alice"}
-	state, commands := updateState(state, TelegramEvent{Value: telegram.MessageUpserted{Message: message}})
+	commands := updateState(&state, TelegramEvent{Value: telegram.MessageUpserted{Message: message}})
 	if len(commands) != 1 {
 		t.Fatalf("first upsert commands = %#v", commands)
 	}
 	message.Text = "updated"
-	_, commands = updateState(state, TelegramEvent{Value: telegram.MessageUpserted{Message: message}})
+	commands = updateState(&state, TelegramEvent{Value: telegram.MessageUpserted{Message: message}})
 	for _, command := range commands {
 		if _, ok := command.(ShowDesktopNotification); ok {
 			t.Fatalf("re-upsert emitted notification: %#v", commands)
@@ -92,7 +93,7 @@ func TestDesktopNotificationBodyIsRuneBounded(t *testing.T) {
 		SenderName: strings.Repeat("界", 150),
 		Text:       strings.Repeat("🙂", 300),
 	}
-	_, commands := updateState(state, TelegramEvent{Value: telegram.MessageUpserted{Message: message}})
+	commands := updateState(&state, TelegramEvent{Value: telegram.MessageUpserted{Message: message}})
 	notification := commands[0].(ShowDesktopNotification)
 	body := []rune(notification.Body)
 	if len(body) != notificationBodyLimit || body[len(body)-1] != '…' {
@@ -106,7 +107,7 @@ func TestDesktopNotificationAppendsAfterMediaWork(t *testing.T) {
 		ID: 10, ChatID: 1, Kind: domain.MessagePhoto, SenderName: "Alice",
 		Media: domain.MessageMedia{Thumbnail: domain.MediaFileRef{ID: 7, CanDownload: true}},
 	}
-	_, commands := updateState(state, TelegramEvent{Value: telegram.MessageUpserted{Message: message}})
+	commands := updateState(&state, TelegramEvent{Value: telegram.MessageUpserted{Message: message}})
 	if len(commands) != 2 {
 		t.Fatalf("commands = %#v, want media work then notification", commands)
 	}
@@ -119,7 +120,8 @@ func TestDesktopNotificationAppendsAfterMediaWork(t *testing.T) {
 }
 
 func TestTerminalFocusChangedPointerIsNormalized(t *testing.T) {
-	state, _ := updateState(InitialState(), &TerminalFocusChanged{Focused: false})
+	state := InitialState()
+	updateState(&state, &TerminalFocusChanged{Focused: false})
 	if state.TerminalFocused {
 		t.Fatal("pointer focus event did not update state")
 	}

@@ -8,14 +8,14 @@ import (
 	"github.com/zylen-det/telegram-tui/internal/telegram"
 )
 
-func openMessageSearch(state State) (State, []Effect) {
-	chatID, ok := activeChatID(state)
+func openMessageSearch(state *State) []Effect {
+	chatID, ok := activeChatID(*state)
 	if !ok || state.Focus != FocusConversation {
-		return state, nil
+		return nil
 	}
 	chat := state.Chats[state.SelectedChat]
 	if chat.IsForum && state.SelectedTopics[chatID] == 0 && !state.ShowAll[chatID] {
-		return state, nil
+		return nil
 	}
 	topicID := domain.TopicID(0)
 	if chat.IsForum {
@@ -25,53 +25,49 @@ func openMessageSearch(state State) (State, []Effect) {
 	}
 	state.MessageSearch = &MessageSearchState{ChatID: chatID, TopicID: topicID, PreviousFocus: state.Focus}
 	state.Focus = FocusSearchInput
-	return state, nil
+	return nil
 }
 
-func reduceMessageSearchValueChanged(state State, event MessageSearchValueChanged) (State, []Effect) {
+func reduceMessageSearchValueChanged(state *State, event MessageSearchValueChanged) []Effect {
 	active := state.MessageSearch
 	if active == nil || state.Focus != FocusSearchInput || active.ChatID != event.ChatID {
-		return state, nil
+		return nil
 	}
-	// Copy-on-write: clone the owned MessageSearchState so the caller's State
-	// keeps the previous query and result slices.
-	search := *active
-	search.Input = []rune(event.Value)
-	state.MessageSearch = &search
-	return state, nil
+	active.Input = []rune(event.Value)
+	return nil
 }
 
-func reduceMessageSearchAction(state State, event ActionReceived) (State, []Effect) {
+func reduceMessageSearchAction(state *State, event ActionReceived) []Effect {
 	search := state.MessageSearch
 	if search == nil {
-		return state, nil
+		return nil
 	}
 	switch event.Action {
 	case Close:
 		state.Focus = search.PreviousFocus
 		state.MessageSearch = nil
-		return state, nil
+		return nil
 	case SelectChat:
 		state.Focus = FocusConversation
 		state.MessageSearch = nil
 		return reduceAction(state, event)
 	case OpenMessageSearch:
 		// From results, '/' returns to the query and invalidates in-flight work.
-		search.RequestID = allocateRequestID(&state)
+		search.RequestID = allocateRequestID(state)
 		search.Loading = false
 		search.JumpMessageID = 0
 		search.Error = nil
 		state.Focus = FocusSearchInput
-		return state, nil
+		return nil
 	case SubmitMessageSearch:
 		if state.Focus != FocusSearchInput {
-			return state, nil
+			return nil
 		}
 		query := strings.TrimSpace(string(search.Input))
 		if query == "" {
-			return state, nil
+			return nil
 		}
-		requestID := allocateRequestID(&state)
+		requestID := allocateRequestID(state)
 		search.RequestID = requestID
 		search.Query = query
 		search.Loading = true
@@ -84,7 +80,7 @@ func reduceMessageSearchAction(state State, event ActionReceived) (State, []Effe
 		search.Submitted = true
 		search.JumpMessageID = 0
 		state.Focus = FocusSearchResults
-		return state, []Effect{SearchChatMessages{
+		return []Effect{SearchChatMessages{
 			RequestID: requestID,
 			ChatID:    search.ChatID,
 			TopicID:   search.TopicID,
@@ -93,7 +89,7 @@ func reduceMessageSearchAction(state State, event ActionReceived) (State, []Effe
 		}}
 	case SelectMessage:
 		if state.Focus != FocusSearchResults || event.ChatID != search.ChatID {
-			return state, nil
+			return nil
 		}
 		for index := range search.Results {
 			if search.Results[index].ID == event.MessageID {
@@ -101,10 +97,10 @@ func reduceMessageSearchAction(state State, event ActionReceived) (State, []Effe
 				return maybePaginateMessageSearch(state)
 			}
 		}
-		return state, nil
+		return nil
 	case SelectNext, SelectPrevious:
 		if state.Focus != FocusSearchResults || len(search.Results) == 0 || search.JumpMessageID != 0 {
-			return state, nil
+			return nil
 		}
 		delta := 1
 		if event.Action == SelectPrevious {
@@ -114,32 +110,32 @@ func reduceMessageSearchAction(state State, event ActionReceived) (State, []Effe
 		return maybePaginateMessageSearch(state)
 	case Activate:
 		if state.Focus != FocusSearchResults || search.Loading || search.Selected < 0 || search.Selected >= len(search.Results) {
-			return state, nil
+			return nil
 		}
 		target := search.Results[search.Selected].ID
 		if target == 0 {
-			return state, nil
+			return nil
 		}
-		requestID := allocateRequestID(&state)
+		requestID := allocateRequestID(state)
 		search.RequestID = requestID
 		search.JumpMessageID = target
 		search.Loading = true
 		search.Error = nil
-		return state, []Effect{LoadSearchMessageContext{RequestID: requestID, ChatID: search.ChatID, TopicID: search.TopicID, MessageID: target}}
+		return []Effect{LoadSearchMessageContext{RequestID: requestID, ChatID: search.ChatID, TopicID: search.TopicID, MessageID: target}}
 	}
-	return state, nil
+	return nil
 }
 
-func maybePaginateMessageSearch(state State) (State, []Effect) {
+func maybePaginateMessageSearch(state *State) []Effect {
 	search := state.MessageSearch
 	if search == nil || search.Loading || search.Done || search.NextFromMessageID == 0 || len(search.Results) == 0 || search.Selected != len(search.Results)-1 {
-		return state, nil
+		return nil
 	}
-	requestID := allocateRequestID(&state)
+	requestID := allocateRequestID(state)
 	search.RequestID = requestID
 	search.Loading = true
 	search.Error = nil
-	return state, []Effect{SearchChatMessages{
+	return []Effect{SearchChatMessages{
 		RequestID: requestID,
 		ChatID:    search.ChatID,
 		TopicID:   search.TopicID,
@@ -151,10 +147,10 @@ func maybePaginateMessageSearch(state State) (State, []Effect) {
 	}}
 }
 
-func reduceChatMessagesSearched(state State, event ChatMessagesSearched) (State, []Effect) {
+func reduceChatMessagesSearched(state *State, event ChatMessagesSearched) []Effect {
 	search := state.MessageSearch
 	if search == nil || search.RequestID != event.RequestID || search.ChatID != event.ChatID || search.TopicID != event.TopicID || search.JumpMessageID != 0 {
-		return state, nil
+		return nil
 	}
 	seen := make(map[domain.MessageID]struct{}, len(search.Results)+len(event.Page.Messages))
 	for _, message := range search.Results {
@@ -181,25 +177,25 @@ func reduceChatMessagesSearched(state State, event ChatMessagesSearched) (State,
 		search.Selected = max(0, min(len(search.Results)-1, search.Selected))
 	}
 	state.Focus = FocusSearchResults
-	return state, nil
+	return nil
 }
 
-func reduceChatMessagesSearchFailed(state State, event ChatMessagesSearchFailed) (State, []Effect) {
+func reduceChatMessagesSearchFailed(state *State, event ChatMessagesSearchFailed) []Effect {
 	search := state.MessageSearch
 	if search == nil || search.RequestID != event.RequestID || search.ChatID != event.ChatID || search.TopicID != event.TopicID || search.JumpMessageID != 0 {
-		return state, nil
+		return nil
 	}
 	failure := messageSearchError()
 	search.Error = &failure
 	search.Loading = false
 	state.Focus = FocusSearchResults
-	return state, nil
+	return nil
 }
 
-func reduceSearchMessageContextLoaded(state State, event SearchMessageContextLoaded) (State, []Effect) {
+func reduceSearchMessageContextLoaded(state *State, event SearchMessageContextLoaded) []Effect {
 	search := state.MessageSearch
 	if search == nil || search.RequestID != event.RequestID || search.ChatID != event.ChatID || search.TopicID != event.TopicID || search.JumpMessageID != event.MessageID {
-		return state, nil
+		return nil
 	}
 	found := false
 	for _, message := range event.Page.Messages {
@@ -232,23 +228,23 @@ func reduceSearchMessageContextLoaded(state State, event SearchMessageContextLoa
 	state.History[event.ChatID] = history
 	state.Focus = FocusConversation
 	state.MessageSearch = nil
-	commands := requestMissingMessageAvatars(&state, event.Page.Messages)
-	commands = append(commands, requestMissingThumbnails(&state, event.Page.Messages)...)
-	return state, commands
+	commands := requestMissingMessageAvatars(state, event.Page.Messages)
+	commands = append(commands, requestMissingThumbnails(state, event.Page.Messages)...)
+	return commands
 }
 
-func reduceSearchMessageContextFailed(state State, event SearchMessageContextFailed) (State, []Effect) {
+func reduceSearchMessageContextFailed(state *State, event SearchMessageContextFailed) []Effect {
 	search := state.MessageSearch
 	if search == nil || search.RequestID != event.RequestID || search.ChatID != event.ChatID || search.TopicID != event.TopicID || search.JumpMessageID != event.MessageID {
-		return state, nil
+		return nil
 	}
 	failure := messageContextError()
 	search.Error = &failure
 	search.Loading = false
 	search.JumpMessageID = 0
 	state.Focus = FocusSearchResults
-	setToast(&state, failure, 4*time.Second)
-	return state, nil
+	setToast(state, failure, 4*time.Second)
+	return nil
 }
 
 func limitMessagesAround(messages []domain.Message, target domain.MessageID, limit int) []domain.Message {
@@ -265,20 +261,20 @@ func limitMessagesAround(messages []domain.Message, target domain.MessageID, lim
 	return append([]domain.Message(nil), messages[start:end]...)
 }
 
-func openPinnedMessages(state State) (State, []Effect) {
-	chatID, ok := activeChatID(state)
+func openPinnedMessages(state *State) []Effect {
+	chatID, ok := activeChatID(*state)
 	if !ok || state.Focus != FocusConversation {
-		return state, nil
+		return nil
 	}
 	chat := state.Chats[state.SelectedChat]
 	if chat.IsForum && state.SelectedTopics[chatID] == 0 && !state.ShowAll[chatID] {
-		return state, nil
+		return nil
 	}
 	topicID := domain.TopicID(0)
 	if chat.IsForum {
 		topicID = state.SelectedTopics[chatID]
 	}
-	requestID := allocateRequestID(&state)
+	requestID := allocateRequestID(state)
 	state.PinnedMessages = &PinnedMessagesState{
 		ChatID:            chatID,
 		TopicID:           topicID,
@@ -294,7 +290,7 @@ func openPinnedMessages(state State) (State, []Effect) {
 		JumpMessageID:     0,
 	}
 	state.Focus = FocusPinnedResults
-	return state, []Effect{LoadPinnedMessages{
+	return []Effect{LoadPinnedMessages{
 		RequestID: requestID,
 		ChatID:    chatID,
 		TopicID:   topicID,
@@ -302,23 +298,23 @@ func openPinnedMessages(state State) (State, []Effect) {
 	}}
 }
 
-func reducePinnedMessagesAction(state State, event ActionReceived) (State, []Effect) {
+func reducePinnedMessagesAction(state *State, event ActionReceived) []Effect {
 	pinned := state.PinnedMessages
 	if pinned == nil {
-		return state, nil
+		return nil
 	}
 	switch event.Action {
 	case Close:
 		state.Focus = pinned.PreviousFocus
 		state.PinnedMessages = nil
-		return state, nil
+		return nil
 	case SelectChat:
 		state.Focus = FocusConversation
 		state.PinnedMessages = nil
 		return reduceAction(state, event)
 	case SelectNext, SelectPrevious:
 		if state.Focus != FocusPinnedResults || pinned.Loading || len(pinned.Results) == 0 || pinned.JumpMessageID != 0 {
-			return state, nil
+			return nil
 		}
 		delta := 1
 		if event.Action == SelectPrevious {
@@ -328,21 +324,21 @@ func reducePinnedMessagesAction(state State, event ActionReceived) (State, []Eff
 		return maybePaginatePinnedMessages(state)
 	case Activate:
 		if state.Focus != FocusPinnedResults || pinned.Loading || pinned.Selected < 0 || pinned.Selected >= len(pinned.Results) {
-			return state, nil
+			return nil
 		}
 		target := pinned.Results[pinned.Selected].ID
 		if target == 0 {
-			return state, nil
+			return nil
 		}
-		requestID := allocateRequestID(&state)
+		requestID := allocateRequestID(state)
 		pinned.RequestID = requestID
 		pinned.JumpMessageID = target
 		pinned.Loading = true
 		pinned.Error = nil
-		return state, []Effect{LoadPinnedMessageContext{RequestID: requestID, ChatID: pinned.ChatID, TopicID: pinned.TopicID, MessageID: target}}
+		return []Effect{LoadPinnedMessageContext{RequestID: requestID, ChatID: pinned.ChatID, TopicID: pinned.TopicID, MessageID: target}}
 	case SelectMessage:
 		if state.Focus != FocusPinnedResults || event.ChatID != pinned.ChatID {
-			return state, nil
+			return nil
 		}
 		for index := range pinned.Results {
 			if pinned.Results[index].ID == event.MessageID {
@@ -350,21 +346,21 @@ func reducePinnedMessagesAction(state State, event ActionReceived) (State, []Eff
 				return maybePaginatePinnedMessages(state)
 			}
 		}
-		return state, nil
+		return nil
 	}
-	return state, nil
+	return nil
 }
 
-func maybePaginatePinnedMessages(state State) (State, []Effect) {
+func maybePaginatePinnedMessages(state *State) []Effect {
 	pinned := state.PinnedMessages
 	if pinned == nil || pinned.Loading || pinned.Done || pinned.NextFromMessageID == 0 || len(pinned.Results) == 0 || pinned.Selected != len(pinned.Results)-1 {
-		return state, nil
+		return nil
 	}
-	requestID := allocateRequestID(&state)
+	requestID := allocateRequestID(state)
 	pinned.RequestID = requestID
 	pinned.Loading = true
 	pinned.Error = nil
-	return state, []Effect{LoadPinnedMessages{
+	return []Effect{LoadPinnedMessages{
 		RequestID: requestID,
 		ChatID:    pinned.ChatID,
 		TopicID:   pinned.TopicID,
@@ -375,10 +371,10 @@ func maybePaginatePinnedMessages(state State) (State, []Effect) {
 	}}
 }
 
-func reducePinnedMessagesLoaded(state State, event PinnedMessagesLoaded) (State, []Effect) {
+func reducePinnedMessagesLoaded(state *State, event PinnedMessagesLoaded) []Effect {
 	pinned := state.PinnedMessages
 	if pinned == nil || pinned.RequestID != event.RequestID || pinned.ChatID != event.ChatID || pinned.TopicID != event.TopicID || pinned.JumpMessageID != 0 {
-		return state, nil
+		return nil
 	}
 	seen := make(map[domain.MessageID]struct{}, len(pinned.Results)+len(event.Page.Messages))
 	for _, message := range pinned.Results {
@@ -405,25 +401,25 @@ func reducePinnedMessagesLoaded(state State, event PinnedMessagesLoaded) (State,
 		pinned.Selected = max(0, min(len(pinned.Results)-1, pinned.Selected))
 	}
 	state.Focus = FocusPinnedResults
-	return state, nil
+	return nil
 }
 
-func reducePinnedMessagesLoadFailed(state State, event PinnedMessagesLoadFailed) (State, []Effect) {
+func reducePinnedMessagesLoadFailed(state *State, event PinnedMessagesLoadFailed) []Effect {
 	pinned := state.PinnedMessages
 	if pinned == nil || pinned.RequestID != event.RequestID || pinned.ChatID != event.ChatID || pinned.TopicID != event.TopicID || pinned.JumpMessageID != 0 {
-		return state, nil
+		return nil
 	}
 	failure := pinnedSearchError()
 	pinned.Error = &failure
 	pinned.Loading = false
 	state.Focus = FocusPinnedResults
-	return state, nil
+	return nil
 }
 
-func reducePinnedMessageContextLoaded(state State, event PinnedMessageContextLoaded) (State, []Effect) {
+func reducePinnedMessageContextLoaded(state *State, event PinnedMessageContextLoaded) []Effect {
 	pinned := state.PinnedMessages
 	if pinned == nil || pinned.RequestID != event.RequestID || pinned.ChatID != event.ChatID || pinned.TopicID != event.TopicID || pinned.JumpMessageID != event.MessageID {
-		return state, nil
+		return nil
 	}
 	found := false
 	for _, message := range event.Page.Messages {
@@ -456,9 +452,9 @@ func reducePinnedMessageContextLoaded(state State, event PinnedMessageContextLoa
 	state.History[event.ChatID] = history
 	state.Focus = FocusConversation
 	state.PinnedMessages = nil
-	commands := requestMissingMessageAvatars(&state, event.Page.Messages)
-	commands = append(commands, requestMissingThumbnails(&state, event.Page.Messages)...)
-	return state, commands
+	commands := requestMissingMessageAvatars(state, event.Page.Messages)
+	commands = append(commands, requestMissingThumbnails(state, event.Page.Messages)...)
+	return commands
 }
 
 func pinnedSearchError() domain.AppError {
@@ -469,16 +465,16 @@ func pinnedContextError() domain.AppError {
 	return domain.AppError{Kind: domain.ErrorNetwork, Op: "load pinned message context", Message: "Could not open pinned message"}
 }
 
-func reducePinnedMessageContextFailed(state State, event PinnedMessageContextFailed) (State, []Effect) {
+func reducePinnedMessageContextFailed(state *State, event PinnedMessageContextFailed) []Effect {
 	pinned := state.PinnedMessages
 	if pinned == nil || pinned.RequestID != event.RequestID || pinned.ChatID != event.ChatID || pinned.TopicID != event.TopicID || pinned.JumpMessageID != event.MessageID {
-		return state, nil
+		return nil
 	}
 	failure := pinnedContextError()
 	pinned.Error = &failure
 	pinned.Loading = false
 	pinned.JumpMessageID = 0
 	state.Focus = FocusPinnedResults
-	setToast(&state, failure, 4*time.Second)
-	return state, nil
+	setToast(state, failure, 4*time.Second)
+	return nil
 }

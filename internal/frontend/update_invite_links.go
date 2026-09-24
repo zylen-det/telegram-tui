@@ -58,33 +58,33 @@ func InviteLinkMenuItems(links *InviteLinksState) []InviteLinkMenuItem {
 	return items
 }
 
-func openInviteLinks(state State) (State, []Effect) {
-	chat, ok := detailsChat(state)
+func openInviteLinks(state *State) []Effect {
+	chat, ok := detailsChat(*state)
 	if !ok || state.Focus != FocusDetails {
-		return state, nil
+		return nil
 	}
 	chatID := chat.ID
 	if !chat.CanManageInviteLinks || (chat.Kind != domain.ChatBasicGroup && chat.Kind != domain.ChatSupergroup && chat.Kind != domain.ChatChannel) {
-		return state, nil
+		return nil
 	}
-	requestID := allocateRequestID(&state)
+	requestID := allocateRequestID(state)
 	state.InviteLinks = &InviteLinksState{RequestID: requestID, ChatID: chatID, PreviousFocus: FocusDetails, Loading: true}
 	state.DetailsSelected = 2
 	state.Focus = FocusInviteLinks
-	return state, []Effect{LoadInviteLinksCommand{RequestID: requestID, ChatID: chatID, Cursor: telegram.InviteLinkCursor{Limit: pageSize}}}
+	return []Effect{LoadInviteLinksCommand{RequestID: requestID, ChatID: chatID, Cursor: telegram.InviteLinkCursor{Limit: pageSize}}}
 }
 
-func reduceInviteLinksAction(state State, event ActionReceived) (State, []Effect) {
+func reduceInviteLinksAction(state *State, event ActionReceived) []Effect {
 	links := state.InviteLinks
 	if links == nil || state.Focus != FocusInviteLinks || (event.ChatID != 0 && event.ChatID != links.ChatID) {
-		return state, nil
+		return nil
 	}
 	if links.Working {
 		if event.Action == Close {
 			state.Focus = links.PreviousFocus
 			state.InviteLinks = nil
 		}
-		return state, nil
+		return nil
 	}
 	if event.Action != SelectNext && event.Action != SelectPrevious && event.Action != Activate {
 		links.Notice = ""
@@ -95,19 +95,19 @@ func reduceInviteLinksAction(state State, event ActionReceived) (State, []Effect
 		if links.Confirming {
 			links.Confirming = false
 			links.DetailSelected = 2
-			return state, nil
+			return nil
 		}
 		if links.DetailURL != "" {
 			links.DetailURL = ""
 			links.Selected = 0
-			return state, nil
+			return nil
 		}
 		state.Focus = links.PreviousFocus
 		state.InviteLinks = nil
-		return state, nil
+		return nil
 	case SelectNext, SelectPrevious:
 		if len(items) == 0 {
-			return state, nil
+			return nil
 		}
 		selected := &links.Selected
 		if links.DetailURL != "" || links.Confirming {
@@ -121,10 +121,10 @@ func reduceInviteLinksAction(state State, event ActionReceived) (State, []Effect
 		if links.DetailURL == "" && !links.Confirming {
 			return maybePaginateInviteLinks(state)
 		}
-		return state, nil
+		return nil
 	case Activate:
 		if len(items) == 0 {
-			return state, nil
+			return nil
 		}
 		selected := links.Selected
 		if links.DetailURL != "" || links.Confirming {
@@ -138,29 +138,29 @@ func reduceInviteLinksAction(state State, event ActionReceived) (State, []Effect
 		}
 	case OpenInviteLinkDetail:
 		if links.DetailURL != "" || event.InviteURL == "" || !inviteLinkKnown(links, event.InviteURL) {
-			return state, nil
+			return nil
 		}
 		links.DetailURL = event.InviteURL
 		links.DetailSelected = 0
 	case CreateInviteLink:
 		if links.DetailURL != "" || links.Loading || links.Error != nil {
-			return state, nil
+			return nil
 		}
-		requestID := allocateRequestID(&state)
+		requestID := allocateRequestID(state)
 		links.RequestID = requestID
 		links.Working = true
-		return state, []Effect{CreateInviteLinkCommand{RequestID: requestID, ChatID: links.ChatID}}
+		return []Effect{CreateInviteLinkCommand{RequestID: requestID, ChatID: links.ChatID}}
 	case CopyInviteLink:
 		if links.DetailURL == "" || event.InviteURL != links.DetailURL {
-			return state, nil
+			return nil
 		}
-		requestID := allocateRequestID(&state)
+		requestID := allocateRequestID(state)
 		links.RequestID = requestID
 		links.Working = true
-		return state, []Effect{CopyInviteLinkCommand{RequestID: requestID, ChatID: links.ChatID, URL: links.DetailURL}}
+		return []Effect{CopyInviteLinkCommand{RequestID: requestID, ChatID: links.ChatID, URL: links.DetailURL}}
 	case RevokeInviteLink:
 		if links.DetailURL == "" || event.InviteURL != links.DetailURL {
-			return state, nil
+			return nil
 		}
 		links.Confirming = true
 		links.DetailSelected = 0
@@ -169,15 +169,15 @@ func reduceInviteLinksAction(state State, event ActionReceived) (State, []Effect
 		links.DetailSelected = 2
 	case ConfirmRevokeInviteLink:
 		if !links.Confirming || links.DetailURL == "" || event.InviteURL != links.DetailURL {
-			return state, nil
+			return nil
 		}
-		requestID := allocateRequestID(&state)
+		requestID := allocateRequestID(state)
 		links.RequestID = requestID
 		links.Working = true
 		links.Confirming = false
-		return state, []Effect{RevokeInviteLinkCommand{RequestID: requestID, ChatID: links.ChatID, URL: links.DetailURL}}
+		return []Effect{RevokeInviteLinkCommand{RequestID: requestID, ChatID: links.ChatID, URL: links.DetailURL}}
 	}
-	return state, nil
+	return nil
 }
 
 func inviteLinkKnown(links *InviteLinksState, url string) bool {
@@ -192,32 +192,32 @@ func inviteLinkKnown(links *InviteLinksState, url string) bool {
 	return false
 }
 
-func maybePaginateInviteLinks(state State) (State, []Effect) {
+func maybePaginateInviteLinks(state *State) []Effect {
 	links := state.InviteLinks
 	items := InviteLinkMenuItems(links)
 	if links == nil || links.Loading || links.Working || links.Done || len(items) == 0 || links.Selected != len(items)-1 {
-		return state, nil
+		return nil
 	}
-	requestID := allocateRequestID(&state)
+	requestID := allocateRequestID(state)
 	links.RequestID = requestID
 	links.Loading = true
-	return state, []Effect{LoadInviteLinksCommand{RequestID: requestID, ChatID: links.ChatID, Cursor: links.NextCursor}}
+	return []Effect{LoadInviteLinksCommand{RequestID: requestID, ChatID: links.ChatID, Cursor: links.NextCursor}}
 }
 
-func reloadInviteLinks(state State) (State, []Effect) {
+func reloadInviteLinks(state *State) []Effect {
 	links := state.InviteLinks
 	if links == nil {
-		return state, nil
+		return nil
 	}
-	requestID := allocateRequestID(&state)
+	requestID := allocateRequestID(state)
 	*links = InviteLinksState{RequestID: requestID, ChatID: links.ChatID, PreviousFocus: links.PreviousFocus, Loading: true}
-	return state, []Effect{LoadInviteLinksCommand{RequestID: requestID, ChatID: links.ChatID, Cursor: telegram.InviteLinkCursor{Limit: pageSize}}}
+	return []Effect{LoadInviteLinksCommand{RequestID: requestID, ChatID: links.ChatID, Cursor: telegram.InviteLinkCursor{Limit: pageSize}}}
 }
 
-func reduceInviteLinksLoaded(state State, event InviteLinksLoaded) (State, []Effect) {
+func reduceInviteLinksLoaded(state *State, event InviteLinksLoaded) []Effect {
 	links := state.InviteLinks
 	if links == nil || links.RequestID != event.RequestID || links.ChatID != event.ChatID || !links.Loading {
-		return state, nil
+		return nil
 	}
 	if links.Primary == nil && event.Page.Primary != nil {
 		primary := *event.Page.Primary
@@ -249,23 +249,23 @@ func reduceInviteLinksLoaded(state State, event InviteLinksLoaded) (State, []Eff
 	links.Error = nil
 	items := InviteLinkMenuItems(links)
 	links.Selected = max(0, min(len(items)-1, links.Selected))
-	return state, nil
+	return nil
 }
 
-func reduceInviteLinksLoadFailed(state State, event InviteLinksLoadFailed) (State, []Effect) {
+func reduceInviteLinksLoadFailed(state *State, event InviteLinksLoadFailed) []Effect {
 	links := state.InviteLinks
 	if links == nil || links.RequestID != event.RequestID || links.ChatID != event.ChatID || !links.Loading {
-		return state, nil
+		return nil
 	}
 	links.Loading = false
 	links.Error = &domain.AppError{Kind: domain.ErrorNetwork, Op: "load invite links", Message: "Could not load invite links"}
-	return state, nil
+	return nil
 }
 
-func reduceInviteLinkCreated(state State, event InviteLinkCreated) (State, []Effect) {
+func reduceInviteLinkCreated(state *State, event InviteLinkCreated) []Effect {
 	links := state.InviteLinks
 	if links == nil || links.RequestID != event.RequestID || links.ChatID != event.ChatID || !links.Working {
-		return state, nil
+		return nil
 	}
 	links.Working = false
 	if event.Link.URL == "" {
@@ -275,61 +275,61 @@ func reduceInviteLinkCreated(state State, event InviteLinkCreated) (State, []Eff
 	links.DetailURL = event.Link.URL
 	links.DetailSelected = 1
 	links.Notice = "Invite link created"
-	setToast(&state, domain.AppError{Message: "Invite link created"}, 2*time.Second)
-	return state, nil
+	setToast(state, domain.AppError{Message: "Invite link created"}, 2*time.Second)
+	return nil
 }
 
-func reduceInviteLinkCreateFailed(state State, event InviteLinkCreateFailed) (State, []Effect) {
+func reduceInviteLinkCreateFailed(state *State, event InviteLinkCreateFailed) []Effect {
 	links := state.InviteLinks
 	if links == nil || links.RequestID != event.RequestID || links.ChatID != event.ChatID {
-		return state, nil
+		return nil
 	}
 	links.Working = false
 	links.Notice = "Could not create invite link"
-	setToast(&state, domain.AppError{Kind: domain.ErrorNetwork, Op: "create invite link", Message: "Could not create invite link"}, 3*time.Second)
-	return state, nil
+	setToast(state, domain.AppError{Kind: domain.ErrorNetwork, Op: "create invite link", Message: "Could not create invite link"}, 3*time.Second)
+	return nil
 }
 
-func reduceInviteLinkRevoked(state State, event InviteLinkRevoked) (State, []Effect) {
+func reduceInviteLinkRevoked(state *State, event InviteLinkRevoked) []Effect {
 	links := state.InviteLinks
 	if links == nil || links.RequestID != event.RequestID || links.ChatID != event.ChatID || links.DetailURL != event.URL || !links.Working {
-		return state, nil
+		return nil
 	}
-	setToast(&state, domain.AppError{Message: "Invite link revoked"}, 2*time.Second)
-	state, commands := reloadInviteLinks(state)
+	setToast(state, domain.AppError{Message: "Invite link revoked"}, 2*time.Second)
+	commands := reloadInviteLinks(state)
 	state.InviteLinks.Notice = "Invite link revoked"
-	return state, commands
+	return commands
 }
 
-func reduceInviteLinkRevokeFailed(state State, event InviteLinkRevokeFailed) (State, []Effect) {
+func reduceInviteLinkRevokeFailed(state *State, event InviteLinkRevokeFailed) []Effect {
 	links := state.InviteLinks
 	if links == nil || links.RequestID != event.RequestID || links.ChatID != event.ChatID || links.DetailURL != event.URL || !links.Working {
-		return state, nil
+		return nil
 	}
 	links.Working = false
 	links.Notice = "Could not revoke invite link"
-	setToast(&state, domain.AppError{Kind: domain.ErrorNetwork, Op: "revoke invite link", Message: "Could not revoke invite link"}, 3*time.Second)
-	return state, nil
+	setToast(state, domain.AppError{Kind: domain.ErrorNetwork, Op: "revoke invite link", Message: "Could not revoke invite link"}, 3*time.Second)
+	return nil
 }
 
-func reduceInviteLinkCopied(state State, event InviteLinkCopied) (State, []Effect) {
+func reduceInviteLinkCopied(state *State, event InviteLinkCopied) []Effect {
 	links := state.InviteLinks
 	if links == nil || links.RequestID != event.RequestID || links.ChatID != event.ChatID || links.DetailURL != event.URL || !links.Working {
-		return state, nil
+		return nil
 	}
 	links.Working = false
 	links.Notice = "Invite link copied"
-	setToast(&state, domain.AppError{Message: "Invite link copied"}, 2*time.Second)
-	return state, nil
+	setToast(state, domain.AppError{Message: "Invite link copied"}, 2*time.Second)
+	return nil
 }
 
-func reduceInviteLinkCopyFailed(state State, event InviteLinkCopyFailed) (State, []Effect) {
+func reduceInviteLinkCopyFailed(state *State, event InviteLinkCopyFailed) []Effect {
 	links := state.InviteLinks
 	if links == nil || links.RequestID != event.RequestID || links.ChatID != event.ChatID || links.DetailURL != event.URL || !links.Working {
-		return state, nil
+		return nil
 	}
 	links.Working = false
 	links.Notice = "Could not copy invite link"
-	setToast(&state, domain.AppError{Kind: domain.ErrorNetwork, Op: "copy invite link", Message: "Could not copy invite link"}, 3*time.Second)
-	return state, nil
+	setToast(state, domain.AppError{Kind: domain.ErrorNetwork, Op: "copy invite link", Message: "Could not copy invite link"}, 3*time.Second)
+	return nil
 }

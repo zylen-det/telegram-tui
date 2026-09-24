@@ -19,41 +19,38 @@ func promptValueState() State {
 
 func TestPromptValueChangedReplacesMatchingWholeValue(t *testing.T) {
 	state := promptValueState()
-	inputCopy := cloneReducerState(state)
 	value := "s界🙂cret"
 
-	got, commands := updateState(state, PromptValueChanged{PromptID: 41, Value: value})
+	commands := updateState(&state, PromptValueChanged{PromptID: 41, Value: value})
 
 	if len(commands) != 0 {
 		t.Fatalf("commands = %d, want 0", len(commands))
 	}
-	if got.Prompt == nil || string(got.Prompt.Input) != value {
-		t.Fatalf("prompt input = %#v, want %q", got.Prompt, value)
-	}
-	if !reflect.DeepEqual(state, inputCopy) {
-		t.Fatalf("input state mutated:\ngot  = %#v\nwant = %#v", state, inputCopy)
+	if state.Prompt == nil || string(state.Prompt.Input) != value {
+		t.Fatalf("prompt input = %#v, want %q", state.Prompt, value)
 	}
 }
 
 func TestPromptValueChangedRejectsStaleOrInactiveIdentity(t *testing.T) {
 	tests := []struct {
 		name  string
-		state State
+		fn    func() State
 		event PromptValueChanged
 	}{
-		{name: "wrong prompt ID", state: promptValueState(), event: PromptValueChanged{PromptID: 99, Value: "new"}},
-		{name: "zero prompt ID", state: promptValueState(), event: PromptValueChanged{PromptID: 0, Value: "new"}},
-		{name: "wrong focus", state: func() State { s := promptValueState(); s.Focus = FocusConversation; return s }(), event: PromptValueChanged{PromptID: 41, Value: "new"}},
-		{name: "no prompt", state: func() State { s := promptValueState(); s.Prompt = nil; return s }(), event: PromptValueChanged{PromptID: 41, Value: "new"}},
-		{name: "quitting", state: func() State { s := promptValueState(); s.Quitting = true; return s }(), event: PromptValueChanged{PromptID: 41, Value: "new"}},
+		{name: "wrong prompt ID", fn: promptValueState, event: PromptValueChanged{PromptID: 99, Value: "new"}},
+		{name: "zero prompt ID", fn: promptValueState, event: PromptValueChanged{PromptID: 0, Value: "new"}},
+		{name: "wrong focus", fn: func() State { s := promptValueState(); s.Focus = FocusConversation; return s }, event: PromptValueChanged{PromptID: 41, Value: "new"}},
+		{name: "no prompt", fn: func() State { s := promptValueState(); s.Prompt = nil; return s }, event: PromptValueChanged{PromptID: 41, Value: "new"}},
+		{name: "quitting", fn: func() State { s := promptValueState(); s.Quitting = true; return s }, event: PromptValueChanged{PromptID: 41, Value: "new"}},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			inputCopy := cloneReducerState(test.state)
-			got, commands := updateState(test.state, test.event)
-			if !reflect.DeepEqual(got, inputCopy) {
-				t.Fatalf("result changed:\ngot  = %#v\nwant = %#v", got, inputCopy)
+			state := test.fn()
+			unchanged := test.fn()
+			commands := updateState(&state, test.event)
+			if !reflect.DeepEqual(state, unchanged) {
+				t.Fatalf("result changed:\ngot  = %#v\nwant = %#v", state, unchanged)
 			}
 			if len(commands) != 0 {
 				t.Fatalf("commands = %d, want 0", len(commands))
@@ -64,11 +61,11 @@ func TestPromptValueChangedRejectsStaleOrInactiveIdentity(t *testing.T) {
 
 func TestPromptValueChangedAcceptsEmptyWholeValue(t *testing.T) {
 	state := promptValueState()
-	got, commands := updateState(state, PromptValueChanged{PromptID: 41, Value: ""})
+	commands := updateState(&state, PromptValueChanged{PromptID: 41, Value: ""})
 	if len(commands) != 0 {
 		t.Fatalf("commands = %d, want 0", len(commands))
 	}
-	if got.Prompt == nil || got.Prompt.Input == nil || len(got.Prompt.Input) != 0 {
-		t.Fatalf("prompt input = %#v, want non-nil empty rune slice", got.Prompt)
+	if state.Prompt == nil || state.Prompt.Input == nil || len(state.Prompt.Input) != 0 {
+		t.Fatalf("prompt input = %#v, want non-nil empty rune slice", state.Prompt)
 	}
 }

@@ -29,40 +29,45 @@ func TestMessageSelectionUsesChatScopedIdentityAndSurvivesMatchingUpdate(t *test
 	state.Chats = []domain.Chat{{ID: 9}, {ID: 10}}
 	state.Messages[9] = []domain.Message{{ID: 1, ChatID: 9}, {ID: 2, ChatID: 9}}
 	state.Messages[10] = []domain.Message{{ID: 2, ChatID: 10}}
-	selected, _ := updateState(state, ActionReceived{Action: SelectMessage, ChatID: 9, MessageID: 2})
-	if selected.SelectedMessageChat != 9 || selected.SelectedMessage != 2 {
-		t.Fatalf("selection identity = (%d, %d), want (9, 2)", selected.SelectedMessageChat, selected.SelectedMessage)
+	updateState(&state, ActionReceived{Action: SelectMessage, ChatID: 9, MessageID: 2})
+	if state.SelectedMessageChat != 9 || state.SelectedMessage != 2 {
+		t.Fatalf("selection identity = (%d, %d), want (9, 2)", state.SelectedMessageChat, state.SelectedMessage)
 	}
-	updated, _ := updateState(selected, TelegramEvent{Value: telegram.MessageUpserted{Message: domain.Message{ID: 2, ChatID: 9}}})
-	if updated.SelectedMessageChat != 9 || updated.SelectedMessage != 2 {
+	updateState(&state, TelegramEvent{Value: telegram.MessageUpserted{Message: domain.Message{ID: 2, ChatID: 9}}})
+	if state.SelectedMessageChat != 9 || state.SelectedMessage != 2 {
 		t.Fatal("matching update cleared selection")
 	}
-	changed, _ := updateState(updated, ActionReceived{Action: SelectChat, ChatID: 10})
-	if changed.SelectedMessageChat != 10 || changed.SelectedMessage != 2 {
-		t.Fatalf("chat change selection identity = (%d, %d)", changed.SelectedMessageChat, changed.SelectedMessage)
+	updateState(&state, ActionReceived{Action: SelectChat, ChatID: 10})
+	if state.SelectedMessageChat != 10 || state.SelectedMessage != 2 {
+		t.Fatalf("chat change selection identity = (%d, %d)", state.SelectedMessageChat, state.SelectedMessage)
 	}
 }
 
 func TestMessageActionMenuIsCapabilityAwareAndCopyCommandIsContentOpaqueToState(t *testing.T) {
-	state := InitialState()
-	state.Focus = FocusConversation
-	state.Chats = []domain.Chat{{ID: 9}}
-	state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "private"}}
-	state.SelectedMessageChat, state.SelectedMessage = 9, 2
-	opened, _ := updateState(state, ActionReceived{Action: OpenMessageActionMenu})
-	if opened.MessageMenu == nil || opened.MessageMenu.ChatID != 9 || opened.MessageMenu.MessageID != 2 || !opened.MessageMenu.Capabilities.Copy {
-		t.Fatalf("menu metadata = %#v", opened.MessageMenu)
+	openMenu := func() State {
+		menu := InitialState()
+		menu.Focus = FocusConversation
+		menu.Chats = []domain.Chat{{ID: 9}}
+		menu.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "private"}}
+		menu.SelectedMessageChat, menu.SelectedMessage = 9, 2
+		updateState(&menu, ActionReceived{Action: OpenMessageActionMenu})
+		return menu
 	}
-	copied, commands := updateState(opened, ActionReceived{Action: CopyMessage})
-	if copied.MessageMenu != nil || len(commands) != 1 {
-		t.Fatalf("copy transition = menu:%#v command-count:%d", copied.MessageMenu, len(commands))
+	state := openMenu()
+	if state.MessageMenu == nil || state.MessageMenu.ChatID != 9 || state.MessageMenu.MessageID != 2 || !state.MessageMenu.Capabilities.Copy {
+		t.Fatalf("menu metadata = %#v", state.MessageMenu)
 	}
-	if _, ok := commands[0].(WriteClipboard); !ok {
-		t.Fatalf("copy command type = %T", commands[0])
+	commands := updateState(&state, ActionReceived{Action: CopyMessage})
+	if state.MessageMenu != nil || len(commands) != 1 {
+		t.Fatalf("copy transition = menu:%#v command-count:%d", state.MessageMenu, len(commands))
 	}
-	closed, _ := updateState(opened, ActionReceived{Action: Close})
-	if closed.MessageMenu != nil {
-		t.Fatal("close retained message menu")
+	if command, ok := commands[0].(WriteClipboard); !ok || command.Text != "private" {
+		t.Fatalf("copy command = %#v", commands[0])
+	}
+	state = openMenu()
+	commands = updateState(&state, ActionReceived{Action: Close})
+	if state.MessageMenu != nil || state.Focus != FocusConversation || len(commands) != 0 {
+		t.Fatalf("close = focus:%v menu:%#v effects:%#v", state.Focus, state.MessageMenu, commands)
 	}
 }
 
@@ -72,8 +77,8 @@ func TestMessageSelectionClearsWhenSelectedMessageDisappears(t *testing.T) {
 	state.Messages[9] = []domain.Message{{ID: 1, ChatID: 9}}
 	state.SelectedMessageChat, state.SelectedMessage = 9, 2
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2}
-	got, _ := updateState(state, MessagesLoaded{ChatID: 9, Page: telegram.MessagePage{Messages: []domain.Message{{ID: 1, ChatID: 9}}, Done: true}})
-	if got.SelectedMessage != 0 || got.SelectedMessageChat != 0 || got.MessageMenu != nil {
+	updateState(&state, MessagesLoaded{ChatID: 9, Page: telegram.MessagePage{Messages: []domain.Message{{ID: 1, ChatID: 9}}, Done: true}})
+	if state.SelectedMessage != 0 || state.SelectedMessageChat != 0 || state.MessageMenu != nil {
 		t.Fatal("missing selected message was retained")
 	}
 }
@@ -82,27 +87,30 @@ func TestMessageKeyboardNavigationAndMenuIdentityRemainAtomic(t *testing.T) {
 	state := InitialState()
 	state.Focus = FocusConversation
 	state.Chats = []domain.Chat{{ID: 9}}
-	state.Messages[9] = []domain.Message{{ID: 1, ChatID: 9, Kind: domain.MessageText}, {ID: 2, ChatID: 9, Kind: domain.MessageText}}
+	state.Messages[9] = []domain.Message{{ID: 1, ChatID: 9, Kind: domain.MessageText, Text: "first"}, {ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "second"}}
 	state.SelectedMessageChat, state.SelectedMessage = 9, 1
 
-	next, _ := updateState(state, ActionReceived{Action: SelectNextMessage})
-	if next.SelectedChat != 0 || next.SelectedMessage != 2 || next.SelectedMessageChat != 9 {
-		t.Fatalf("message navigation changed wrong identity")
+	updateState(&state, ActionReceived{Action: SelectNextMessage})
+	if state.SelectedChat != 0 || state.SelectedMessage != 2 || state.SelectedMessageChat != 9 {
+		t.Fatal("message navigation changed wrong identity")
 	}
-	previous, _ := updateState(next, ActionReceived{Action: SelectPreviousMessage})
-	if previous.SelectedMessage != 1 {
+	updateState(&state, ActionReceived{Action: SelectPreviousMessage})
+	if state.SelectedMessage != 1 {
 		t.Fatal("previous message navigation failed")
 	}
 
-	opened, _ := updateState(state, ActionReceived{Action: OpenMessageActionMenu})
-	opened.SelectedMessage = 2 // prove menu target, not mutable selection, owns execution
-	_, commands := updateState(opened, ActionReceived{Action: CopyMessage})
+	updateState(&state, ActionReceived{Action: OpenMessageActionMenu})
+	if state.MessageMenu == nil || state.MessageMenu.MessageID != 1 {
+		t.Fatalf("menu target = %#v", state.MessageMenu)
+	}
+	state.SelectedMessage = 2 // menu target must survive a later selection change
+	commands := updateState(&state, ActionReceived{Action: CopyMessage})
 	if len(commands) != 1 {
 		t.Fatal("menu identity did not produce copy command")
 	}
-	command := commands[0].(WriteClipboard)
-	if command.Text != state.Messages[9][0].DisplayText() {
-		t.Fatal("copy did not use the menu-owned message identity")
+	command, ok := commands[0].(WriteClipboard)
+	if !ok || command.Text != "first" {
+		t.Fatalf("copy did not use menu-owned message: %#v", commands[0])
 	}
 }
 
@@ -119,61 +127,72 @@ func TestMessageNavigationViewportFollowsSelectionAndStopsAtEndpoints(t *testing
 	}
 	state.SelectedMessageChat, state.SelectedMessage = 9, 5
 
-	older, commands := updateState(state, ActionReceived{Action: SelectPreviousMessage})
-	if len(commands) != 0 || older.SelectedMessage != 4 || older.History[9].ViewOffset != 1 || !older.History[9].FollowSelection {
-		t.Fatalf("first older navigation = selected:%d offset:%d commands:%#v", older.SelectedMessage, older.History[9].ViewOffset, commands)
+	newest := state
+	newest.History = map[domain.ChatID]HistoryState{9: {}}
+	commands := updateState(&state, ActionReceived{Action: SelectPreviousMessage})
+	if len(commands) != 0 || state.SelectedMessage != 4 || state.History[9].ViewOffset != 1 || !state.History[9].FollowSelection {
+		t.Fatalf("first older navigation = selected:%d offset:%d commands:%#v", state.SelectedMessage, state.History[9].ViewOffset, commands)
 	}
-	older, commands = updateState(older, ActionReceived{Action: SelectPreviousMessage})
-	if len(commands) != 0 || older.SelectedMessage != 3 || older.History[9].ViewOffset != 2 || !older.History[9].FollowSelection {
-		t.Fatalf("second older navigation = selected:%d offset:%d commands:%#v", older.SelectedMessage, older.History[9].ViewOffset, commands)
+	commands = updateState(&state, ActionReceived{Action: SelectPreviousMessage})
+	if len(commands) != 0 || state.SelectedMessage != 3 || state.History[9].ViewOffset != 2 || !state.History[9].FollowSelection {
+		t.Fatalf("second older navigation = selected:%d offset:%d commands:%#v", state.SelectedMessage, state.History[9].ViewOffset, commands)
+	}
+	commands = updateState(&state, ActionReceived{Action: SelectNextMessage})
+	if len(commands) != 0 || state.SelectedMessage != 4 || state.History[9].ViewOffset != 1 || !state.History[9].FollowSelection {
+		t.Fatalf("newer navigation = selected:%d offset:%d commands:%#v", state.SelectedMessage, state.History[9].ViewOffset, commands)
+	}
+	commands = updateState(&state, ActionReceived{Action: PageDown})
+	if len(commands) != 0 || state.History[9].FollowSelection {
+		t.Fatalf("manual pagination retained selection follow: %#v %#v", state.History[9], commands)
 	}
 
-	newer, commands := updateState(older, ActionReceived{Action: SelectNextMessage})
-	if len(commands) != 0 || newer.SelectedMessage != 4 || newer.History[9].ViewOffset != 1 || !newer.History[9].FollowSelection {
-		t.Fatalf("newer navigation = selected:%d offset:%d commands:%#v", newer.SelectedMessage, newer.History[9].ViewOffset, commands)
-	}
-	paged, commands := updateState(newer, ActionReceived{Action: PageDown})
-	if len(commands) != 0 || paged.History[9].FollowSelection {
-		t.Fatalf("manual pagination retained selection follow: %#v %#v", paged.History[9], commands)
-	}
-
-	oldest := state
+	oldest := newest
 	oldest.SelectedMessage = 1
 	oldest.History = map[domain.ChatID]HistoryState{9: {ViewOffset: 4}}
-	atOldest, commands := updateState(oldest, ActionReceived{Action: SelectPreviousMessage})
-	if len(commands) != 0 || atOldest.SelectedMessage != 1 || atOldest.History[9].ViewOffset != 4 {
-		t.Fatalf("oldest endpoint = selected:%d offset:%d commands:%#v", atOldest.SelectedMessage, atOldest.History[9].ViewOffset, commands)
+	commands = updateState(&oldest, ActionReceived{Action: SelectPreviousMessage})
+	if len(commands) != 0 || oldest.SelectedMessage != 1 || oldest.History[9].ViewOffset != 4 {
+		t.Fatalf("oldest endpoint = selected:%d offset:%d commands:%#v", oldest.SelectedMessage, oldest.History[9].ViewOffset, commands)
 	}
 
-	atNewest, commands := updateState(state, ActionReceived{Action: SelectNextMessage})
-	if len(commands) != 0 || atNewest.SelectedMessage != 5 || atNewest.History[9].ViewOffset != 0 {
-		t.Fatalf("newest endpoint = selected:%d offset:%d commands:%#v", atNewest.SelectedMessage, atNewest.History[9].ViewOffset, commands)
+	commands = updateState(&newest, ActionReceived{Action: SelectNextMessage})
+	if len(commands) != 0 || newest.SelectedMessage != 5 || newest.History[9].ViewOffset != 0 {
+		t.Fatalf("newest endpoint = selected:%d offset:%d commands:%#v", newest.SelectedMessage, newest.History[9].ViewOffset, commands)
 	}
 }
 
 func TestAuthoritativeMessageActionsLoadAndRejectStaleResults(t *testing.T) {
-	state := InitialState()
-	state.Chats = []domain.Chat{{ID: 9}}
-	state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "private"}}
-	state.SelectedMessageChat, state.SelectedMessage = 9, 2
-	opened, commands := updateState(state, ActionReceived{Action: OpenMessageActionMenu})
-	if opened.MessageMenu == nil || !opened.MessageMenu.Loading || !opened.MessageMenu.Capabilities.Copy || opened.MessageMenu.Capabilities.Reply || len(commands) != 1 {
-		t.Fatalf("opened = %#v commands=%#v", opened.MessageMenu, commands)
+	base := func() State {
+		state := InitialState()
+		state.Chats = []domain.Chat{{ID: 9}}
+		state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "private"}}
+		state.SelectedMessageChat, state.SelectedMessage = 9, 2
+		return state
+	}
+	state := base()
+	commands := updateState(&state, ActionReceived{Action: OpenMessageActionMenu})
+	if state.MessageMenu == nil || !state.MessageMenu.Loading || !state.MessageMenu.Capabilities.Copy || state.MessageMenu.Capabilities.Reply || len(commands) != 1 {
+		t.Fatalf("opened = %#v commands=%#v", state.MessageMenu, commands)
 	}
 	request, ok := commands[0].(GetMessageProperties)
-	if !ok || request.ChatID != 9 || request.MessageID != 2 || request.RequestID != opened.MessageMenu.RequestID {
+	if !ok || request.ChatID != 9 || request.MessageID != 2 || request.RequestID != state.MessageMenu.RequestID {
 		t.Fatalf("request = %#v", commands[0])
 	}
-	loaded, _ := updateState(opened, MessagePropertiesLoaded{RequestID: request.RequestID, ChatID: 9, MessageID: 2, Capabilities: domain.MessageCapabilities{Copy: true, Reply: true, Edit: true}})
-	if loaded.MessageMenu == nil || loaded.MessageMenu.Loading || !loaded.MessageMenu.Capabilities.Reply || !loaded.MessageMenu.Capabilities.Edit {
-		t.Fatalf("loaded = %#v", loaded.MessageMenu)
+	updateState(&state, MessagePropertiesLoaded{RequestID: request.RequestID, ChatID: 9, MessageID: 2, Capabilities: domain.MessageCapabilities{Copy: true, Reply: true, Edit: true}})
+	if state.MessageMenu == nil || state.MessageMenu.Loading || !state.MessageMenu.Capabilities.Reply || !state.MessageMenu.Capabilities.Edit {
+		t.Fatalf("loaded = %#v", state.MessageMenu)
 	}
-	stale, _ := updateState(loaded, MessagePropertiesLoaded{RequestID: request.RequestID + 1, ChatID: 9, MessageID: 2})
-	if !stale.MessageMenu.Capabilities.Edit {
+	updateState(&state, MessagePropertiesLoaded{RequestID: request.RequestID + 1, ChatID: 9, MessageID: 2})
+	if state.MessageMenu == nil || !state.MessageMenu.Capabilities.Edit {
 		t.Fatal("stale result replaced snapshot")
 	}
-	closed, _ := updateState(opened, ActionReceived{Action: Close})
-	closed, _ = updateState(closed, MessagePropertiesLoaded{RequestID: request.RequestID, ChatID: 9, MessageID: 2, Capabilities: domain.MessageCapabilities{Edit: true}})
+
+	closed := base()
+	updateState(&closed, ActionReceived{Action: OpenMessageActionMenu})
+	if closed.MessageMenu == nil || !closed.MessageMenu.Loading {
+		t.Fatal("close branch did not start with a loading menu")
+	}
+	updateState(&closed, ActionReceived{Action: Close})
+	updateState(&closed, MessagePropertiesLoaded{RequestID: request.RequestID, ChatID: 9, MessageID: 2, Capabilities: domain.MessageCapabilities{Edit: true}})
 	if closed.MessageMenu != nil {
 		t.Fatal("closed modal accepted result")
 	}
@@ -184,9 +203,11 @@ func TestAuthoritativeMessageActionsFailureIsSafe(t *testing.T) {
 	state.Chats = []domain.Chat{{ID: 9}}
 	state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "secret-body"}}
 	state.SelectedMessageChat, state.SelectedMessage = 9, 2
-	opened, commands := updateState(state, ActionReceived{Action: OpenMessageActionMenu})
+	commands := updateState(&state, ActionReceived{Action: OpenMessageActionMenu})
+	opened := state
 	request := commands[0].(GetMessageProperties)
-	failed, _ := updateState(opened, MessagePropertiesLoadFailed{RequestID: request.RequestID, ChatID: 9, MessageID: 2, Error: domain.AppError{Message: "raw secret-body 9 2"}})
+	updateState(&opened, MessagePropertiesLoadFailed{RequestID: request.RequestID, ChatID: 9, MessageID: 2, Error: domain.AppError{Message: "raw secret-body 9 2"}})
+	failed := opened
 	if failed.MessageMenu == nil || failed.MessageMenu.Loading || !failed.MessageMenu.Capabilities.Copy || failed.MessageMenu.Capabilities.Reply || failed.MessageMenu.Capabilities.Edit || failed.MessageMenu.Error == nil || failed.MessageMenu.Error.Message != "Could not load message actions" {
 		t.Fatalf("failed = %#v", failed.MessageMenu)
 	}
@@ -200,11 +221,13 @@ func TestAuthoritativeMessageActionsCloseWhenTargetIsEvicted(t *testing.T) {
 		state.Messages[9] = append(state.Messages[9], domain.Message{ID: domain.MessageID(index), ChatID: 9, Kind: domain.MessageText, SentAt: time.Unix(int64(index), 0)})
 	}
 	state.SelectedMessageChat, state.SelectedMessage = 9, 1
-	opened, _ := updateState(state, ActionReceived{Action: OpenMessageActionMenu})
+	updateState(&state, ActionReceived{Action: OpenMessageActionMenu})
+	opened := state
 	if opened.MessageMenu == nil || !opened.MessageMenu.Loading {
 		t.Fatal("authoritative action menu did not open")
 	}
-	evicted, _ := updateState(opened, TelegramEvent{Value: telegram.MessageUpserted{Message: domain.Message{ID: 999, ChatID: 9, Kind: domain.MessageText, SentAt: time.Unix(999, 0)}}})
+	updateState(&opened, TelegramEvent{Value: telegram.MessageUpserted{Message: domain.Message{ID: 999, ChatID: 9, Kind: domain.MessageText, SentAt: time.Unix(999, 0)}}})
+	evicted := opened
 	if evicted.MessageMenu != nil || evicted.SelectedMessage == 1 {
 		t.Fatal("evicted target retained action-menu identity")
 	}
@@ -217,47 +240,48 @@ func TestMessageMenuTracksOptimisticIdentityReplacement(t *testing.T) {
 	state.SelectedMessageChat, state.SelectedMessage = 9, -1
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: -1, Capabilities: state.Messages[9][0].Capabilities()}
 
-	queued, _ := updateState(state, TextQueued{LocalID: -1, Message: domain.Message{ID: -2, ChatID: 9, Kind: domain.MessageText}})
-	if queued.SelectedMessage != -2 || queued.MessageMenu == nil || queued.MessageMenu.MessageID != -2 {
+	updateState(&state, TextQueued{LocalID: -1, Message: domain.Message{ID: -2, ChatID: 9, Kind: domain.MessageText}})
+	if state.SelectedMessage != -2 || state.MessageMenu == nil || state.MessageMenu.MessageID != -2 {
 		t.Fatal("queued replacement left stale menu identity")
 	}
-	sent, _ := updateState(queued, TelegramEvent{Value: telegram.MessageSendSucceeded{OldID: -2, Message: domain.Message{ID: 100, ChatID: 9, Kind: domain.MessageText}}})
-	if sent.SelectedMessage != 100 || sent.MessageMenu == nil || sent.MessageMenu.MessageID != 100 {
+	updateState(&state, TelegramEvent{Value: telegram.MessageSendSucceeded{OldID: -2, Message: domain.Message{ID: 100, ChatID: 9, Kind: domain.MessageText}}})
+	if state.SelectedMessage != 100 || state.MessageMenu == nil || state.MessageMenu.MessageID != 100 {
 		t.Fatal("durable replacement left stale menu identity")
 	}
 }
 
 func TestCopyMessageResultUsesOnlyConstantSafeToast(t *testing.T) {
 	state := InitialState()
-	succeeded, _ := updateState(state, ClipboardWritten{})
-	if succeeded.Toast == nil || succeeded.Toast.Message != "Message copied" {
-		t.Fatalf("success toast = %#v", succeeded.Toast)
+	updateState(&state, ClipboardWritten{})
+	if state.Toast == nil || state.Toast.Message != "Message copied" {
+		t.Fatalf("success toast = %#v", state.Toast)
 	}
 	failure := domain.AppError{Kind: domain.ErrorInternal, Message: "Could not copy message", Cause: errors.New("private raw cause")}
-	failed, _ := updateState(state, ClipboardWriteFailed{Error: failure})
-	if failed.Toast == nil || failed.Toast.Message != "Could not copy message" {
-		t.Fatalf("failure toast = %#v", failed.Toast)
+	updateState(&state, ClipboardWriteFailed{Error: failure})
+	if state.Toast == nil || state.Toast.Message != "Could not copy message" {
+		t.Fatalf("failure toast = %#v", state.Toast)
 	}
 }
 
 func TestToastLifecycleReplacesAndRejectsStaleExpiry(t *testing.T) {
 	state := InitialState()
-	first, _ := updateState(state, ClipboardWritten{})
-	if first.Toast == nil || first.ToastGeneration == 0 || first.ToastDuration != 2*time.Second {
-		t.Fatalf("success toast = %#v", first.Toast)
+	updateState(&state, ClipboardWritten{})
+	if state.Toast == nil || state.ToastGeneration == 0 || state.ToastDuration != 2*time.Second {
+		t.Fatalf("success toast = %#v", state.Toast)
 	}
-	firstGeneration := first.ToastGeneration
-	second, _ := updateState(first, OperationFailed{Error: domain.AppError{Kind: domain.ErrorNetwork, Message: "Try again"}})
-	if second.Toast == nil || second.ToastGeneration == firstGeneration || second.ToastDuration != 4*time.Second {
-		t.Fatalf("replacement toast = %#v", second.Toast)
+	firstGeneration := state.ToastGeneration
+	updateState(&state, OperationFailed{Error: domain.AppError{Kind: domain.ErrorNetwork, Message: "Try again"}})
+	if state.Toast == nil || state.ToastGeneration == firstGeneration || state.ToastDuration != 4*time.Second {
+		t.Fatalf("replacement toast = %#v", state.Toast)
 	}
-	stale, _ := updateState(second, ToastExpired{Generation: firstGeneration})
-	if stale.Toast == nil || stale.ToastGeneration != second.ToastGeneration {
-		t.Fatal("stale expiry cleared replacement toast")
+	secondGeneration := state.ToastGeneration
+	updateState(&state, ToastExpired{Generation: firstGeneration})
+	if state.Toast == nil || state.Toast.Message != "Try again" || state.ToastGeneration != secondGeneration {
+		t.Fatal("stale expiry changed replacement toast")
 	}
-	expired, _ := updateState(second, ToastExpired{Generation: second.ToastGeneration})
-	if expired.Toast != nil {
-		t.Fatalf("current expiry retained toast = %#v", expired.Toast)
+	updateState(&state, ToastExpired{Generation: secondGeneration})
+	if state.Toast != nil {
+		t.Fatalf("current expiry retained toast = %#v", state.Toast)
 	}
 }
 
@@ -267,21 +291,21 @@ func TestActionModalListNavigationAndActivation(t *testing.T) {
 	state.Chats = []domain.Chat{{ID: 9}}
 	state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "private"}}
 	state.SelectedMessageChat, state.SelectedMessage = 9, 2
-	opened, _ := updateState(state, ActionReceived{Action: OpenMessageActionMenu})
-	if opened.MessageMenu == nil || opened.Focus != FocusModal || opened.MessageMenu.Selected != 0 {
-		t.Fatalf("opened action modal = focus:%v menu:%#v", opened.Focus, opened.MessageMenu)
+	updateState(&state, ActionReceived{Action: OpenMessageActionMenu})
+	if state.MessageMenu == nil || state.Focus != FocusModal || state.MessageMenu.Selected != 0 {
+		t.Fatalf("opened action modal = focus:%v menu:%#v", state.Focus, state.MessageMenu)
 	}
-	opened, _ = updateState(opened, MessagePropertiesLoaded{RequestID: opened.MessageMenu.RequestID, ChatID: 9, MessageID: 2, Capabilities: domain.MessageCapabilities{Reply: true, Copy: true}})
-	if opened.MessageMenu.Selected != 1 {
-		t.Fatalf("authoritative actions did not preserve selected Copy action")
+	updateState(&state, MessagePropertiesLoaded{RequestID: state.MessageMenu.RequestID, ChatID: 9, MessageID: 2, Capabilities: domain.MessageCapabilities{Reply: true, Copy: true}})
+	if state.MessageMenu.Selected != 1 {
+		t.Fatal("authoritative actions did not preserve selected Copy action")
 	}
-	navigated, _ := updateState(opened, ActionReceived{Action: SelectPrevious})
-	if navigated.MessageMenu.Selected != 0 {
-		t.Fatalf("two-row navigation selected %d", navigated.MessageMenu.Selected)
+	updateState(&state, ActionReceived{Action: SelectPrevious})
+	if state.MessageMenu.Selected != 0 {
+		t.Fatalf("two-row navigation selected %d", state.MessageMenu.Selected)
 	}
-	closed, commands := updateState(navigated, ActionReceived{Action: Activate})
-	if closed.MessageMenu != nil || closed.Focus != FocusComposer || closed.ReplyTarget == nil || len(commands) != 1 {
-		t.Fatalf("reply activation = focus:%v menu-present:%t reply-present:%t commands:%d", closed.Focus, closed.MessageMenu != nil, closed.ReplyTarget != nil, len(commands))
+	commands := updateState(&state, ActionReceived{Action: Activate})
+	if state.MessageMenu != nil || state.Focus != FocusComposer || state.ReplyTarget == nil || len(commands) != 1 {
+		t.Fatalf("reply activation = focus:%v menu-present:%t reply-present:%t commands:%d", state.Focus, state.MessageMenu != nil, state.ReplyTarget != nil, len(commands))
 	}
 }
 
@@ -294,29 +318,36 @@ func TestReplyTargetClearsWhenTargetDisappears(t *testing.T) {
 		state.Messages[9] = append(state.Messages[9], domain.Message{ID: domain.MessageID(22 + index), ChatID: 9, Kind: domain.MessageText, SentAt: time.Unix(int64(index+1), 0)})
 	}
 	state.ReplyTarget = &ReplyTarget{ChatID: 9, MessageID: 22}
-	got, _ := updateState(state, TelegramEvent{Value: telegram.MessageUpserted{Message: domain.Message{ID: 999, ChatID: 9, Kind: domain.MessageText, SentAt: time.Unix(999, 0)}}})
+	updateState(&state, TelegramEvent{Value: telegram.MessageUpserted{Message: domain.Message{ID: 999, ChatID: 9, Kind: domain.MessageText, SentAt: time.Unix(999, 0)}}})
+	got := state
 	if got.ReplyTarget != nil {
 		t.Fatal("disappeared reply target was retained")
 	}
 }
 
 func TestReplyTargetLifecycleAndSendReply(t *testing.T) {
-	state := selectedWritableState()
-	state.Focus = FocusConversation
-	state.Drafts[9] = "draft"
-	state.Messages[9] = []domain.Message{{ID: 22, ChatID: 9, Kind: domain.MessageText, SenderName: "Sender", Text: "opaque"}}
-	state.SelectedMessageChat, state.SelectedMessage = 9, 22
-
-	replying, _ := updateState(state, ActionReceived{Action: ReplyMessage})
+	// updateState mutates in place, so each branch rebuilds its fixture.
+	replyingFixture := func() State {
+		state := selectedWritableState()
+		state.Focus = FocusConversation
+		state.Drafts[9] = "draft"
+		state.Messages[9] = []domain.Message{{ID: 22, ChatID: 9, Kind: domain.MessageText, SenderName: "Sender", Text: "opaque"}}
+		state.SelectedMessageChat, state.SelectedMessage = 9, 22
+		updateState(&state, ActionReceived{Action: ReplyMessage})
+		return state
+	}
+	replying := replyingFixture()
 	if replying.ReplyTarget == nil || replying.ReplyTarget.ChatID != 9 || replying.ReplyTarget.MessageID != 22 || replying.Focus != FocusComposer || replying.Drafts[9] != "draft" {
 		t.Fatal("reply target was not established atomically")
 	}
-	cancelled, _ := updateState(replying, ActionReceived{Action: Close})
+	cancelled := replyingFixture()
+	updateState(&cancelled, ActionReceived{Action: Close})
 	if cancelled.ReplyTarget != nil || cancelled.Focus != FocusComposer || cancelled.Drafts[9] != "draft" {
 		t.Fatal("first composer escape did not cancel reply only")
 	}
 
-	submitted, commands := updateState(replying, ActionReceived{Action: ComposerSubmit, At: time.Unix(1, 0)})
+	submitted := replyingFixture()
+	commands := updateState(&submitted, ActionReceived{Action: ComposerSubmit, At: time.Unix(1, 0)})
 	if submitted.ReplyTarget != nil || len(commands) != 2 || submitted.Messages[9][1].ReplyToMessageID != 22 {
 		t.Fatal("reply submit did not persist identity")
 	}
@@ -331,16 +362,16 @@ func TestComposerEscapeCancelsReplyThenDraftThenLeaves(t *testing.T) {
 	state.Drafts[9] = "draft"
 	state.ReplyTarget = &ReplyTarget{ChatID: 9, MessageID: 22}
 
-	withoutReply, _ := updateState(state, ActionReceived{Action: Close})
-	if withoutReply.ReplyTarget != nil || withoutReply.Drafts[9] != "draft" || withoutReply.Focus != FocusComposer {
+	updateState(&state, ActionReceived{Action: Close})
+	if state.ReplyTarget != nil || state.Drafts[9] != "draft" || state.Focus != FocusComposer {
 		t.Fatal("first escape did not cancel reply only")
 	}
-	withoutDraft, _ := updateState(withoutReply, ActionReceived{Action: Close})
-	if withoutDraft.Drafts[9] != "" || withoutDraft.Focus != FocusComposer {
+	updateState(&state, ActionReceived{Action: Close})
+	if state.Drafts[9] != "" || state.Focus != FocusComposer {
 		t.Fatal("second escape did not cancel draft only")
 	}
-	leftComposer, _ := updateState(withoutDraft, ActionReceived{Action: Close})
-	if leftComposer.Focus != FocusConversation {
+	updateState(&state, ActionReceived{Action: Close})
+	if state.Focus != FocusConversation {
 		t.Fatal("third escape did not leave empty composer")
 	}
 }
@@ -351,7 +382,8 @@ func TestReadyRefreshesChatsWithoutDiscardingCache(t *testing.T) {
 	state.Chats = []domain.Chat{{ID: 7, Title: "cached"}}
 	state.Messages[7] = []domain.Message{{ID: 11, ChatID: 7, Text: "cached message"}}
 
-	got, commands := updateState(state, TelegramEvent{Value: telegram.Ready{}, ReceivedAt: time.Unix(1, 0)})
+	commands := updateState(&state, TelegramEvent{Value: telegram.Ready{}, ReceivedAt: time.Unix(1, 0)})
+	got := state
 	if !got.ChatsLoading || got.ChatRequestID != 10 || got.NextRequestID != 11 {
 		t.Fatalf("chat request state = %#v", got)
 	}
@@ -374,7 +406,8 @@ func TestChatsLoadedSortsPreservesSelectionAndStartsHistoryAndAvatars(t *testing
 		{ID: 9, Title: "Team", Order: 20, Avatar: domain.AvatarRef{UniqueID: "team"}},
 		{ID: 3, Title: "Old", Order: 10},
 	}}
-	got, commands := updateState(state, ChatsLoaded{RequestID: 4, Page: page})
+	commands := updateState(&state, ChatsLoaded{RequestID: 4, Page: page})
+	got := state
 	if got.ChatsLoading || !got.ChatsLoaded || got.ChatsError != nil {
 		t.Fatalf("chat load indicators = %#v", got)
 	}
@@ -405,13 +438,14 @@ func TestStaleOldChatMessagesFillCacheWithoutActiveSideEffects(t *testing.T) {
 	state.History[2] = HistoryState{Loading: true, RequestID: 12, ViewOffset: 7}
 	activeBefore := state.History[2]
 
-	got, commands := updateState(state, MessagesLoaded{
+	commands := updateState(&state, MessagesLoaded{
 		RequestID: 11,
 		ChatID:    1,
 		Page: telegram.MessagePage{Messages: []domain.Message{{
 			ID: 10, ChatID: 1, Text: "old", SenderAvatar: domain.AvatarRef{UniqueID: "old-sender"},
 		}}},
 	})
+	got := state
 	if got.Messages[1][0].Text != "old" {
 		t.Fatalf("old chat cache = %#v", got.Messages[1])
 	}
@@ -422,7 +456,8 @@ func TestStaleOldChatMessagesFillCacheWithoutActiveSideEffects(t *testing.T) {
 		t.Fatalf("commands = %#v", commands)
 	}
 	failure := domain.AppError{Kind: domain.ErrorNetwork, Message: "old failure"}
-	failed, commands := updateState(state, MessagesLoadFailed{RequestID: 11, ChatID: 1, Error: failure})
+	commands = updateState(&state, MessagesLoadFailed{RequestID: 11, ChatID: 1, Error: failure})
+	failed := state
 	if failed.Toast != nil || failed.History[2] != activeBefore || len(commands) != 0 {
 		t.Fatalf("stale failure changed active indicators = (%#v, %#v)", failed, commands)
 	}
@@ -436,7 +471,8 @@ func TestSelectingCachedOldChatRequestsItsMissingSenderAvatars(t *testing.T) {
 	ref := domain.AvatarRef{UniqueID: "old-sender"}
 	state.Messages[1] = []domain.Message{{ID: 10, ChatID: 1, SenderAvatar: ref}}
 
-	got, commands := updateState(state, ActionReceived{Action: SelectChat, ChatID: 1})
+	commands := updateState(&state, ActionReceived{Action: SelectChat, ChatID: 1})
+	got := state
 	if got.SelectedChat != 0 || !got.Avatars["old-sender:message-group"].Loading {
 		t.Fatalf("selected cached chat = %#v", got)
 	}
@@ -449,7 +485,8 @@ func TestOptimisticSendQueueFailureAndCooldownRetry(t *testing.T) {
 	state.NextRequestID = 7
 	state.Drafts[9] = "hello"
 
-	submitted, commands := updateState(state, ActionReceived{Action: ComposerSubmit, At: now})
+	commands := updateState(&state, ActionReceived{Action: ComposerSubmit, At: now})
+	submitted := state
 	if submitted.Drafts[9] != "" || submitted.NextLocalID != -2 || len(submitted.Messages[9]) != 1 {
 		t.Fatalf("submitted state = %#v", submitted)
 	}
@@ -463,18 +500,21 @@ func TestOptimisticSendQueueFailureAndCooldownRetry(t *testing.T) {
 	})
 
 	failure := domain.AppError{Kind: domain.ErrorRateLimit, Message: "wait", RetryAfter: 5 * time.Second}
-	failed, _ := updateState(submitted, TextQueueFailed{RequestID: 7, LocalID: -1, Error: failure, FailedAt: now})
+	updateState(&submitted, TextQueueFailed{RequestID: 7, LocalID: -1, Error: failure, FailedAt: now})
+	failed := submitted
 	message := failed.Messages[9][0]
 	if message.Text != "hello" || message.SendState != domain.SendFailed || message.RetryAt != now.Add(5*time.Second) {
 		t.Fatalf("failed message = %#v", message)
 	}
 	failed.SelectedMessage = -1
 
-	before, commands := updateState(failed, ActionReceived{Action: Retry, MessageID: -1, At: now.Add(4 * time.Second)})
+	commands = updateState(&failed, ActionReceived{Action: Retry, MessageID: -1, At: now.Add(4 * time.Second)})
+	before := failed
 	if before.Messages[9][0].SendState != domain.SendFailed || len(commands) != 0 {
 		t.Fatalf("early retry = (%#v, %#v)", before.Messages[9][0], commands)
 	}
-	retried, commands := updateState(failed, ActionReceived{Action: Retry, MessageID: -1, At: now.Add(5 * time.Second)})
+	commands = updateState(&failed, ActionReceived{Action: Retry, MessageID: -1, At: now.Add(5 * time.Second)})
+	retried := failed
 	if retried.Messages[9][0].SendState != domain.SendPending || retried.Messages[9][0].Failure != nil {
 		t.Fatalf("retried message = %#v", retried.Messages[9][0])
 	}
@@ -486,19 +526,22 @@ func TestQueuedTemporaryReplyIdentitySurvivesFailureAndSuccessReplacement(t *tes
 	state := selectedWritableState()
 	state.Messages[9] = []domain.Message{{ID: -1, ChatID: 9, Text: "hello", Outgoing: true, SendState: domain.SendPending, HasReply: true, ReplyToMessageID: 22}}
 	temporary := domain.Message{ID: -44, ChatID: 9, Text: "hello", Outgoing: true, SendState: domain.SendPending}
-	queued, _ := updateState(state, TextQueued{RequestID: 3, LocalID: -1, Message: temporary})
+	updateState(&state, TextQueued{RequestID: 3, LocalID: -1, Message: temporary})
+	queued := state
 	if got := queued.Messages[9][0]; got.ReplyToMessageID != 22 || !got.HasReply {
 		t.Fatal("queued replacement lost reply identity")
 	}
 
 	failure := domain.AppError{Kind: domain.ErrorNetwork, Message: "offline", RetryAfter: 3 * time.Second}
-	failed, _ := updateState(queued, TelegramEvent{Value: telegram.MessageSendFailed{OldID: -44, Message: temporary, Error: failure}, ReceivedAt: now})
+	updateState(&queued, TelegramEvent{Value: telegram.MessageSendFailed{OldID: -44, Message: temporary, Error: failure}, ReceivedAt: now})
+	failed := queued
 	if got := failed.Messages[9][0]; got.ReplyToMessageID != 22 || !got.HasReply {
 		t.Fatal("failed replacement lost reply identity")
 	}
 
 	durable := domain.Message{ID: 88, ChatID: 9, Text: "hello", Outgoing: true, SendState: domain.SendSucceeded}
-	succeeded, _ := updateState(failed, TelegramEvent{Value: telegram.MessageSendSucceeded{OldID: -44, Message: durable}, ReceivedAt: now.Add(time.Second)})
+	updateState(&failed, TelegramEvent{Value: telegram.MessageSendSucceeded{OldID: -44, Message: durable}, ReceivedAt: now.Add(time.Second)})
+	succeeded := failed
 	if got := succeeded.Messages[9][0]; got.ReplyToMessageID != 22 || !got.HasReply {
 		t.Fatal("durable replacement lost reply identity")
 	}
@@ -509,7 +552,8 @@ func TestQueuedTemporaryMessageThenTDLibFailureAndSuccessReplaceAtomically(t *te
 	state := selectedWritableState()
 	state.Messages[9] = []domain.Message{{ID: -1, ChatID: 9, Text: "hello", Outgoing: true, SendState: domain.SendPending}}
 	temporary := domain.Message{ID: -44, ChatID: 9, Text: "hello", Outgoing: true, SendState: domain.SendPending}
-	queued, _ := updateState(state, TextQueued{RequestID: 3, LocalID: -1, Message: temporary})
+	updateState(&state, TextQueued{RequestID: 3, LocalID: -1, Message: temporary})
+	queued := state
 	if len(queued.Messages[9]) != 1 || queued.Messages[9][0].ID != -44 {
 		t.Fatalf("queued messages = %#v", queued.Messages[9])
 	}
@@ -517,13 +561,15 @@ func TestQueuedTemporaryMessageThenTDLibFailureAndSuccessReplaceAtomically(t *te
 	failure := domain.AppError{Kind: domain.ErrorNetwork, Message: "offline", RetryAfter: 3 * time.Second}
 	failedMessage := temporary
 	failedMessage.Text = ""
-	failed, _ := updateState(queued, TelegramEvent{Value: telegram.MessageSendFailed{OldID: -44, Message: failedMessage, Error: failure}, ReceivedAt: now})
+	updateState(&queued, TelegramEvent{Value: telegram.MessageSendFailed{OldID: -44, Message: failedMessage, Error: failure}, ReceivedAt: now})
+	failed := queued
 	if got := failed.Messages[9][0]; got.ID != -44 || got.Text != "hello" || got.SendState != domain.SendFailed || got.RetryAt != now.Add(3*time.Second) {
 		t.Fatalf("TDLib failure = %#v", got)
 	}
 
 	durable := domain.Message{ID: 88, ChatID: 9, Text: "hello", Outgoing: true, SendState: domain.SendSucceeded}
-	succeeded, _ := updateState(failed, TelegramEvent{Value: telegram.MessageSendSucceeded{OldID: -44, Message: durable}, ReceivedAt: now.Add(time.Second)})
+	updateState(&failed, TelegramEvent{Value: telegram.MessageSendSucceeded{OldID: -44, Message: durable}, ReceivedAt: now.Add(time.Second)})
+	succeeded := failed
 	if !reflect.DeepEqual(succeeded.Messages[9], []domain.Message{durable}) {
 		t.Fatalf("durable messages = %#v", succeeded.Messages[9])
 	}
@@ -538,20 +584,23 @@ func TestPaginationUsesPerChatNewestRelativeOffsets(t *testing.T) {
 	}
 	state.History[9] = HistoryState{OldestID: 1}
 
-	paged, commands := updateState(state, ActionReceived{Action: PageUp})
+	commands := updateState(&state, ActionReceived{Action: PageUp})
+	paged := state
 	if paged.History[9].ViewOffset != 11 || !paged.History[9].Loading || paged.History[9].RequestID != 20 {
 		t.Fatalf("paged history = %#v", paged.History[9])
 	}
 	assertCommands(t, commands, []Effect{LoadMessages{RequestID: 20, ChatID: 9, Cursor: telegram.MessageCursor{FromMessageID: 1, Limit: 50}}})
 
-	loaded, _ := updateState(paged, MessagesLoaded{RequestID: 20, ChatID: 9, Page: telegram.MessagePage{Done: true, Messages: []domain.Message{{ID: -1, ChatID: 9, SentAt: time.Unix(-1, 0)}, {ID: 1, ChatID: 9, SentAt: time.Unix(1, 0)}}}})
+	updateState(&paged, MessagesLoaded{RequestID: 20, ChatID: 9, Page: telegram.MessagePage{Done: true, Messages: []domain.Message{{ID: -1, ChatID: 9, SentAt: time.Unix(-1, 0)}, {ID: 1, ChatID: 9, SentAt: time.Unix(1, 0)}}}})
+	loaded := paged
 	if loaded.History[9].Loading || !loaded.History[9].Done || loaded.History[9].OldestID != -1 {
 		t.Fatalf("loaded history = %#v", loaded.History[9])
 	}
 	if len(loaded.Messages[9]) != 13 || loaded.Messages[9][0].ID != -1 {
 		t.Fatalf("deduplicated messages = %#v", loaded.Messages[9])
 	}
-	down, _ := updateState(loaded, ActionReceived{Action: PageDown})
+	updateState(&loaded, ActionReceived{Action: PageDown})
+	down := loaded
 	if down.History[9].ViewOffset != 0 {
 		t.Fatalf("page down offset = %d", down.History[9].ViewOffset)
 	}
@@ -563,7 +612,8 @@ func TestMessageUpsertUpdatesPreviewAndKeepsScrolledViewportAnchored(t *testing.
 	state.Messages[9] = []domain.Message{{ID: 1, ChatID: 9, SentAt: time.Unix(1, 0)}}
 	incoming := domain.Message{ID: 2, ChatID: 9, Text: "new", SentAt: time.Unix(2, 0), SenderAvatar: domain.AvatarRef{UniqueID: "sender"}}
 
-	got, commands := updateState(state, TelegramEvent{Value: telegram.MessageUpserted{Message: incoming}, ReceivedAt: time.Unix(3, 0)})
+	commands := updateState(&state, TelegramEvent{Value: telegram.MessageUpserted{Message: incoming}, ReceivedAt: time.Unix(3, 0)})
+	got := state
 	if got.History[9].ViewOffset != 5 || got.Chats[0].LastMessage != "new" || got.Chats[0].LastMessageAt != 2 {
 		t.Fatalf("updated state = %#v", got)
 	}
@@ -578,30 +628,34 @@ func TestDetailsAvatarModalOpenFailureAndRetry(t *testing.T) {
 	state.Chats[0].Title = "Mina"
 	state.Chats[0].Avatar = domain.AvatarRef{UniqueID: "small", OriginalUniqueID: "large"}
 
-	opened, commands := updateState(state, ActionReceived{Action: Activate})
+	commands := updateState(&state, ActionReceived{Action: Activate})
+	opened := state
 	if opened.Modal == nil || !opened.Modal.Loading || opened.Modal.RequestID != 30 || opened.Focus != FocusModal || opened.Modal.PreviousFocus != FocusDetails {
 		t.Fatalf("modal shell = %#v", opened)
 	}
 	assertCommands(t, commands, []Effect{OpenAvatar{RequestID: 30, Title: "Mina", Ref: state.Chats[0].Avatar}})
 
 	failure := domain.AppError{Kind: domain.ErrorMedia, Message: "try again"}
-	failed, _ := updateState(opened, AvatarOpenFailed{RequestID: 30, Error: failure})
+	updateState(&opened, AvatarOpenFailed{RequestID: 30, Error: failure})
+	failed := opened
 	if failed.Modal == nil || failed.Modal.Loading || failed.Modal.Error == nil {
 		t.Fatalf("failed modal = %#v", failed.Modal)
 	}
-	retried, commands := updateState(failed, ActionReceived{Action: Retry})
+	commands = updateState(&failed, ActionReceived{Action: Retry})
+	retried := failed
 	if retried.Modal.RequestID != 31 || !retried.Modal.Loading || retried.Modal.Error != nil || retried.Focus != FocusModal || retried.Modal.Path != "" {
 		t.Fatalf("retried modal = %#v", retried.Modal)
 	}
 	assertCommands(t, commands, []Effect{OpenAvatar{RequestID: 31, Title: "Mina", Ref: state.Chats[0].Avatar}})
 
-	ready, _ := updateState(retried, AvatarOpened{RequestID: 31, Title: "Mina", Path: "/tmp/mina.jpg"})
+	updateState(&retried, AvatarOpened{RequestID: 31, Title: "Mina", Path: "/tmp/mina.jpg"})
+	ready := retried
 	if ready.Modal.Loading || ready.Modal.Path != "/tmp/mina.jpg" || ready.Modal.Error != nil {
 		t.Fatalf("ready modal = %#v", ready.Modal)
 	}
-	stale, _ := updateState(ready, AvatarOpened{RequestID: 30, Title: "old", Path: "/tmp/old.jpg"})
-	if !reflect.DeepEqual(stale.Modal, ready.Modal) {
-		t.Fatalf("stale open changed modal = %#v", stale.Modal)
+	staleCommands := updateState(&ready, AvatarOpened{RequestID: 30, Title: "old", Path: "/tmp/old.jpg"})
+	if len(staleCommands) != 0 || ready.Modal == nil || ready.Modal.RequestID != 31 || ready.Modal.Title != "Mina" || ready.Modal.Path != "/tmp/mina.jpg" || ready.Focus != FocusModal {
+		t.Fatalf("stale avatar result changed modal = %#v effects=%#v", ready.Modal, staleCommands)
 	}
 }
 
@@ -610,12 +664,14 @@ func TestAvatarRenderFailureUsesPlaceholderAndRetryRetainsRequest(t *testing.T) 
 	ref := domain.AvatarRef{UniqueID: "mina"}
 	state.Avatars["mina:chat-list"] = AvatarState{Loading: true, Ref: ref, Role: avatar.RoleChatList}
 	failure := domain.AppError{Kind: domain.ErrorMedia, Message: "bad image"}
-	failed, _ := updateState(state, AvatarRenderFailed{Key: "mina:chat-list", Error: failure})
+	updateState(&state, AvatarRenderFailed{Key: "mina:chat-list", Error: failure})
+	failed := state
 	avatarState := failed.Avatars["mina:chat-list"]
 	if avatarState.Loading || avatarState.Error == nil || avatarState.Cells.Width != 6 || avatarState.Cells.Height != 3 {
 		t.Fatalf("failed avatar = %#v", avatarState)
 	}
-	retried, commands := updateState(failed, ActionReceived{Action: Retry, AvatarKey: "mina:chat-list"})
+	commands := updateState(&failed, ActionReceived{Action: Retry, AvatarKey: "mina:chat-list"})
+	retried := failed
 	if !retried.Avatars["mina:chat-list"].Loading || retried.Avatars["mina:chat-list"].Error != nil {
 		t.Fatalf("retried avatar = %#v", retried.Avatars["mina:chat-list"])
 	}
@@ -625,14 +681,15 @@ func TestAvatarRenderFailureUsesPlaceholderAndRetryRetainsRequest(t *testing.T) 
 func TestStartupFailureQuitsOnceAndLaterInputIsIgnored(t *testing.T) {
 	state := InitialState()
 	failure := domain.AppError{Kind: domain.ErrorConfiguration, Message: "configure account"}
-	failed, commands := updateState(state, StartupFailed{Error: failure})
+	commands := updateState(&state, StartupFailed{Error: failure})
+	failed := state
 	if !failed.Quitting || failed.Fatal == nil || failed.Fatal.Message != "configure account" {
 		t.Fatalf("failed state = %#v", failed)
 	}
 	assertCommands(t, commands, []Effect{BeginShutdown{}})
-	again, commands := updateState(failed, ActionReceived{Action: Quit, Rune: 'x'})
-	if !reflect.DeepEqual(again, failed) || len(commands) != 0 {
-		t.Fatalf("input after quit = (%#v, %#v)", again, commands)
+	commands = updateState(&failed, ActionReceived{Action: Quit, Rune: 'x'})
+	if len(commands) != 0 || !failed.Quitting || failed.Fatal == nil || failed.Fatal.Message != "configure account" {
+		t.Fatalf("input after quit changed fatal state: state=%#v effects=%#v", failed, commands)
 	}
 }
 
@@ -643,15 +700,18 @@ func TestChatLoadFailureAndStaleResultsRetainCachedChats(t *testing.T) {
 	state.Chats = []domain.Chat{{ID: 7, Title: "cached"}}
 	failure := domain.AppError{Kind: domain.ErrorNetwork, Message: "try again"}
 
-	stale, _ := updateState(state, ChatsLoadFailed{RequestID: 7, Error: failure})
+	updateState(&state, ChatsLoadFailed{RequestID: 7, Error: failure})
+	stale := state
 	if !stale.ChatsLoading || stale.ChatsError != nil {
 		t.Fatalf("stale failure changed indicators = %#v", stale)
 	}
-	current, _ := updateState(state, ChatsLoadFailed{RequestID: 8, Error: failure})
+	updateState(&state, ChatsLoadFailed{RequestID: 8, Error: failure})
+	current := state
 	if current.ChatsLoading || current.ChatsError == nil || current.Chats[0].Title != "cached" {
 		t.Fatalf("current failure state = %#v", current)
 	}
-	ignored, _ := updateState(current, ChatsLoaded{RequestID: 7, Page: telegram.ChatPage{Chats: []domain.Chat{{ID: 99}}}})
+	updateState(&current, ChatsLoaded{RequestID: 7, Page: telegram.ChatPage{Chats: []domain.Chat{{ID: 99}}}})
+	ignored := current
 	if !reflect.DeepEqual(ignored.Chats, current.Chats) {
 		t.Fatalf("stale chat success replaced cache = %#v", ignored.Chats)
 	}
@@ -665,12 +725,13 @@ func TestChatUpsertSortsPreservesSelectedIDAndRequestsOnlyNewAvatar(t *testing.T
 	state.Avatars["existing:chat-list"] = AvatarState{Loading: true}
 	updated := domain.Chat{ID: 7, Title: "Mina", Order: 30, Avatar: domain.AvatarRef{UniqueID: "new"}}
 
-	got, commands := updateState(state, TelegramEvent{Value: telegram.ChatUpserted{Chat: updated}})
+	commands := updateState(&state, TelegramEvent{Value: telegram.ChatUpserted{Chat: updated}})
+	got := state
 	if got.Chats[0].ID != 7 || got.SelectedChat != 0 || got.FocusedChat != 1 || got.Chats[0].Title != "Mina" {
 		t.Fatalf("upserted chats = %#v, selected=%d focused=%d", got.Chats, got.SelectedChat, got.FocusedChat)
 	}
 	assertCommands(t, commands, []Effect{RenderAvatar{Key: "new:chat-list", Ref: updated.Avatar, Role: avatar.RoleChatList}})
-	got, commands = updateState(got, TelegramEvent{Value: telegram.ChatUpserted{Chat: updated}})
+	commands = updateState(&got, TelegramEvent{Value: telegram.ChatUpserted{Chat: updated}})
 	if len(commands) != 0 {
 		t.Fatalf("duplicate avatar commands = %#v", commands)
 	}
@@ -685,51 +746,60 @@ func TestSelectionFocusAndCloseActionsRespectLayoutAndDrafts(t *testing.T) {
 	state.Drafts[2] = "two"
 	state.History[1] = HistoryState{Done: true}
 
-	focused, commands := updateState(state, ActionReceived{Action: SelectNext})
+	commands := updateState(&state, ActionReceived{Action: SelectNext})
+	focused := state
 	if focused.FocusedChat != 1 || focused.SelectedChat != 0 || focused.Drafts[1] != "one" || focused.Drafts[2] != "two" {
 		t.Fatalf("focused state = %#v", focused)
 	}
 	if len(commands) != 0 {
 		t.Fatalf("focus navigation commands = %#v, want none", commands)
 	}
-	menu, _ := updateState(focused, ActionReceived{Action: Activate})
+	updateState(&focused, ActionReceived{Action: Activate})
+	menu := focused
 	if menu.Focus != FocusChatActions || menu.ChatActions == nil || menu.ChatActions.ChatID != 2 {
 		t.Fatalf("wide activate did not open focused chat actions: %#v", menu.ChatActions)
 	}
-	activated, commands := updateState(menu, ActionReceived{Action: Activate})
+	commands = updateState(&menu, ActionReceived{Action: Activate})
+	activated := menu
 	if activated.Focus != FocusConversation || activated.SelectedChat != 1 || len(commands) == 0 {
 		t.Fatalf("wide activate = focus:%v selected:%d commands:%#v", activated.Focus, activated.SelectedChat, commands)
 	}
-	composer, _ := updateState(activated, ActionReceived{Action: FocusPane, TargetFocus: FocusComposer})
+	updateState(&activated, ActionReceived{Action: FocusPane, TargetFocus: FocusComposer})
+	composer := activated
 	if composer.Focus != FocusComposer {
 		t.Fatalf("focus composer = %v", composer.Focus)
 	}
-	closed, _ := updateState(composer, ActionReceived{Action: Close})
+	updateState(&composer, ActionReceived{Action: Close})
+	closed := composer
 	if closed.Focus != FocusComposer || closed.Drafts[2] != "" {
 		t.Fatalf("first composer close should cancel draft only: %#v", closed)
 	}
-	closed, _ = updateState(closed, ActionReceived{Action: Close})
+	updateState(&closed, ActionReceived{Action: Close})
 	if closed.Focus != FocusConversation {
 		t.Fatalf("second composer close focus = %v", closed.Focus)
 	}
 	closed.Layout = LayoutNarrow
-	chatList, _ := updateState(closed, ActionReceived{Action: Close})
+	updateState(&closed, ActionReceived{Action: Close})
+	chatList := closed
 	if chatList.Focus != FocusChats {
 		t.Fatalf("narrow close focus = %v", chatList.Focus)
 	}
 }
 
 func TestUnreadAndMentionNavigationWrapsFocusedChatWithoutSelecting(t *testing.T) {
-	state := InitialState()
-	state.Layout = LayoutWide
-	state.Focus = FocusChats
-	state.Chats = []domain.Chat{
-		{ID: 1, UnreadCount: 1, UnreadMentionCount: 1},
-		{ID: 2},
-		{ID: 3, UnreadCount: 2},
-		{ID: 4, UnreadMentionCount: 2},
+	fixture := func() State {
+		state := InitialState()
+		state.Layout = LayoutWide
+		state.Focus = FocusChats
+		state.Chats = []domain.Chat{
+			{ID: 1, UnreadCount: 1, UnreadMentionCount: 1},
+			{ID: 2},
+			{ID: 3, UnreadCount: 2},
+			{ID: 4, UnreadMentionCount: 2},
+		}
+		state.SelectedChat = 0
+		return state
 	}
-	state.SelectedChat = 0
 
 	for _, test := range []struct {
 		name   string
@@ -743,10 +813,14 @@ func TestUnreadAndMentionNavigationWrapsFocusedChatWithoutSelecting(t *testing.T
 		{name: "mention wraps", start: 3, action: SelectNextMention, wantID: 1},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			input := cloneReducerState(state)
-			input.FocusedChat = test.start
-			got, gotCommands := updateState(input, ActionReceived{Action: test.action})
-			want, wantCommands := updateState(input, ActionReceived{Action: FocusChat, ChatID: test.wantID})
+			// Each branch starts from its own freshly built fixture because
+			// updateState mutates the state it is given.
+			got := fixture()
+			got.FocusedChat = test.start
+			gotCommands := updateState(&got, ActionReceived{Action: test.action})
+			want := fixture()
+			want.FocusedChat = test.start
+			wantCommands := updateState(&want, ActionReceived{Action: FocusChat, ChatID: test.wantID})
 			if !reflect.DeepEqual(got, want) || !reflect.DeepEqual(gotCommands, wantCommands) {
 				t.Fatalf("navigation result = (%#v, %#v), want ordinary focus (%#v, %#v)", got, gotCommands, want, wantCommands)
 			}
@@ -768,18 +842,19 @@ func TestUnreadAndMentionNavigationNoMatchShowsToast(t *testing.T) {
 		state.Chats = []domain.Chat{{ID: 1, UnreadCount: 1, UnreadMentionCount: 1}, {ID: 2}}
 		state.SelectedChat = 0
 
-		got, commands := updateState(state, ActionReceived{Action: test.action})
-		if got.SelectedChat != state.SelectedChat || len(commands) != 0 {
-			t.Fatalf("action %v with current-only match navigated or emitted commands: selected=%d, commands=%#v", test.action, got.SelectedChat, commands)
+		commands := updateState(&state, ActionReceived{Action: test.action})
+		if state.SelectedChat != 0 || len(commands) != 0 {
+			t.Fatalf("action %v with current-only match navigated or emitted commands: selected=%d, commands=%#v", test.action, state.SelectedChat, commands)
 		}
-		if got.Toast == nil || got.Toast.Message != test.message || got.Toast.Kind != "" || got.ToastDuration != 2*time.Second || got.ToastGeneration == 0 {
-			t.Fatalf("action %v toast = %#v, duration=%v, generation=%d", test.action, got.Toast, got.ToastDuration, got.ToastGeneration)
+		if state.Toast == nil || state.Toast.Message != test.message || state.Toast.Kind != "" || state.ToastDuration != 2*time.Second || state.ToastGeneration == 0 {
+			t.Fatalf("action %v toast = %#v, duration=%v, generation=%d", test.action, state.Toast, state.ToastDuration, state.ToastGeneration)
 		}
 
 		state.Focus = FocusConversation
-		got, commands = updateState(state, ActionReceived{Action: test.action})
-		if !reflect.DeepEqual(got, state) || len(commands) != 0 {
-			t.Fatalf("action %v outside Chats focus changed state or emitted commands: %#v, %#v", test.action, got, commands)
+		before := cloneState(state)
+		commands = updateState(&state, ActionReceived{Action: test.action})
+		if !reflect.DeepEqual(state, before) || len(commands) != 0 {
+			t.Fatalf("action %v outside Chats focus changed state or emitted commands: %#v, %#v", test.action, state, commands)
 		}
 	}
 }
@@ -810,7 +885,8 @@ func TestFocusPaneAndCycleOnlyVisitVisiblePanes(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			state := InitialState()
 			state.Layout, state.Focus, state.DetailsOpen = test.state.Layout, test.state.Focus, test.state.DetailsOpen
-			got, _ := updateState(state, test.action)
+			updateState(&state, test.action)
+			got := state
 			if got.Focus != test.wantFocus {
 				t.Fatalf("Focus = %v, want %v", got.Focus, test.wantFocus)
 			}
@@ -821,9 +897,10 @@ func TestFocusPaneAndCycleOnlyVisitVisiblePanes(t *testing.T) {
 func TestComposerEditingAndSubmitGuardsArePerChat(t *testing.T) {
 	state := selectedWritableState()
 	state.Drafts[9] = "界"
-	edited, _ := updateState(state, ActionReceived{Rune: '面'})
-	edited, _ = updateState(edited, ActionReceived{Action: ComposerNewline})
-	edited, _ = updateState(edited, ActionReceived{Action: ComposerBackspace})
+	updateState(&state, ActionReceived{Rune: '面'})
+	edited := state
+	updateState(&edited, ActionReceived{Action: ComposerNewline})
+	updateState(&edited, ActionReceived{Action: ComposerBackspace})
 	if edited.Drafts[9] != "界面" {
 		t.Fatalf("edited draft = %q", edited.Drafts[9])
 	}
@@ -839,7 +916,8 @@ func TestComposerEditingAndSubmitGuardsArePerChat(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			candidate := selectedWritableState()
 			test.configure(&candidate)
-			got, commands := updateState(candidate, ActionReceived{Action: ComposerSubmit})
+			commands := updateState(&candidate, ActionReceived{Action: ComposerSubmit})
+			got := candidate
 			if len(commands) != 0 || !reflect.DeepEqual(got.Messages[9], candidate.Messages[9]) || got.Drafts[9] != candidate.Drafts[9] {
 				t.Fatalf("guard result = (%#v, %#v)", got, commands)
 			}
@@ -851,11 +929,13 @@ func TestCurrentAndStaleMessageLoadFailuresUpdateOnlyMatchingHistory(t *testing.
 	state := selectedWritableState()
 	state.History[9] = HistoryState{Loading: true, RequestID: 4, ViewOffset: 3}
 	failure := domain.AppError{Kind: domain.ErrorNetwork, Message: "retry history"}
-	stale, _ := updateState(state, MessagesLoadFailed{RequestID: 3, ChatID: 9, Error: failure})
+	updateState(&state, MessagesLoadFailed{RequestID: 3, ChatID: 9, Error: failure})
+	stale := state
 	if stale.History[9] != state.History[9] || stale.Toast != nil {
 		t.Fatalf("stale failure = %#v", stale)
 	}
-	current, _ := updateState(state, MessagesLoadFailed{RequestID: 4, ChatID: 9, Error: failure})
+	updateState(&state, MessagesLoadFailed{RequestID: 4, ChatID: 9, Error: failure})
+	current := state
 	if current.History[9].Loading || current.History[9].ViewOffset != 3 || current.Toast == nil || !current.Toast.Retryable() {
 		t.Fatalf("current failure = %#v", current)
 	}
@@ -869,7 +949,8 @@ func TestLoadedMessagesRenderEachMissingGroupAvatarOnce(t *testing.T) {
 		{ID: 1, ChatID: 9, SenderAvatar: ref},
 		{ID: 2, ChatID: 9, SenderAvatar: ref},
 	}}
-	got, commands := updateState(state, MessagesLoaded{RequestID: 5, ChatID: 9, Page: page})
+	commands := updateState(&state, MessagesLoaded{RequestID: 5, ChatID: 9, Page: page})
+	got := state
 	if len(commands) != 1 {
 		t.Fatalf("avatar commands = %#v", commands)
 	}
@@ -886,11 +967,13 @@ func TestActivateFailedSelectedMessageHonorsCooldownWithoutChangingFocus(t *test
 	state.SelectedMessage = -4
 	state.Messages[9] = []domain.Message{{ID: -4, ChatID: 9, Text: "retry me", Outgoing: true, SendState: domain.SendFailed, RetryAt: now.Add(time.Second)}}
 
-	early, commands := updateState(state, ActionReceived{Action: Activate, At: now})
+	commands := updateState(&state, ActionReceived{Action: Activate, At: now})
+	early := state
 	if early.Focus != FocusConversation || early.Messages[9][0].SendState != domain.SendFailed || len(commands) != 0 {
 		t.Fatalf("early activate = (%#v, %#v)", early, commands)
 	}
-	ready, commands := updateState(state, ActionReceived{Action: Activate, At: now.Add(time.Second)})
+	commands = updateState(&state, ActionReceived{Action: Activate, At: now.Add(time.Second)})
+	ready := state
 	if ready.Focus != FocusConversation || ready.Messages[9][0].SendState != domain.SendPending || len(commands) != 1 {
 		t.Fatalf("ready activate = (%#v, %#v)", ready, commands)
 	}
@@ -903,7 +986,8 @@ func TestResizeClampsEachChatOffsetAndMessageLimitPreservesOutgoingFailures(t *t
 	state.History[10] = HistoryState{ViewOffset: 4}
 	state.Messages[9] = []domain.Message{{ID: 1, ChatID: 9}, {ID: 2, ChatID: 9}}
 	state.Messages[10] = []domain.Message{{ID: 3, ChatID: 10}}
-	resized, _ := updateState(state, Resized{Width: 100, Height: 22})
+	updateState(&state, Resized{Width: 100, Height: 22})
+	resized := state
 	if resized.History[9].ViewOffset != 1 || resized.History[10].ViewOffset != 0 {
 		t.Fatalf("clamped histories = %#v", resized.History)
 	}
@@ -913,7 +997,8 @@ func TestResizeClampsEachChatOffsetAndMessageLimitPreservesOutgoingFailures(t *t
 	}
 	failed := domain.Message{ID: -1, ChatID: 9, Text: "keep", Outgoing: true, SendState: domain.SendFailed, SentAt: time.Unix(-1, 0)}
 	state.Messages[9] = append(state.Messages[9], failed)
-	limited, _ := updateState(state, TelegramEvent{Value: telegram.MessageUpserted{Message: domain.Message{ID: 9999, ChatID: 9, SentAt: time.Unix(9999, 0)}}})
+	updateState(&state, TelegramEvent{Value: telegram.MessageUpserted{Message: domain.Message{ID: 9999, ChatID: 9, SentAt: time.Unix(9999, 0)}}})
+	limited := state
 	if len(limited.Messages[9]) != maxMessagesPerChat || messageIndex(limited.Messages[9], -1) < 0 {
 		t.Fatalf("limited history length = %d, failed index = %d", len(limited.Messages[9]), messageIndex(limited.Messages[9], -1))
 	}
@@ -925,11 +1010,13 @@ func TestHistoryFailureRetainsErrorAndRetryUsesOldestCursor(t *testing.T) {
 	state.History[9] = HistoryState{Loading: true, RequestID: 7, OldestID: 55, ViewOffset: 3}
 	failure := domain.AppError{Kind: domain.ErrorNetwork, Message: "offline"}
 
-	failed, _ := updateState(state, MessagesLoadFailed{RequestID: 7, ChatID: 9, Error: failure})
+	updateState(&state, MessagesLoadFailed{RequestID: 7, ChatID: 9, Error: failure})
+	failed := state
 	if failed.History[9].Error == nil || failed.History[9].Loading {
 		t.Fatalf("history failure was not retained: %#v", failed.History[9])
 	}
-	retried, commands := updateState(failed, ActionReceived{Action: Retry})
+	commands := updateState(&failed, ActionReceived{Action: Retry})
+	retried := failed
 	history := retried.History[9]
 	if !history.Loading || history.Error != nil || history.RequestID != 20 {
 		t.Fatalf("history retry state = %#v", history)
@@ -948,7 +1035,8 @@ func TestAvatarFailurePlaceholderUsesDisplayLabel(t *testing.T) {
 	chat := domain.Chat{ID: 9, Title: "週末", Avatar: domain.AvatarRef{UniqueID: "AQAD-file-id"}}
 	key := avatar.CacheKey(chat.Avatar, avatar.RoleChatList)
 	state.Avatars[key] = AvatarState{Loading: true, Ref: chat.Avatar, Role: avatar.RoleChatList, Label: chat.Title}
-	got, _ := updateState(state, AvatarRenderFailed{Key: key, Error: domain.AppError{Kind: domain.ErrorMedia}})
+	updateState(&state, AvatarRenderFailed{Key: key, Error: domain.AppError{Kind: domain.ErrorMedia}})
+	got := state
 	cells := got.Avatars[key].Cells
 	center := (cells.Height/2)*cells.Width + cells.Width/2
 	if cells.Cells[center].Rune != '週' {
@@ -969,7 +1057,8 @@ func TestPaginationBeyondBoundKeepsNewlyLoadedOlderPage(t *testing.T) {
 		older = append(older, domain.Message{ID: domain.MessageID(id), ChatID: 9, SentAt: time.Unix(int64(id), 0)})
 	}
 
-	got, _ := updateState(state, MessagesLoaded{RequestID: 7, ChatID: 9, Page: telegram.MessagePage{Messages: older, Done: false}})
+	updateState(&state, MessagesLoaded{RequestID: 7, ChatID: 9, Page: telegram.MessagePage{Messages: older, Done: false}})
+	got := state
 
 	if len(got.Messages[9]) != maxMessagesPerChat {
 		t.Fatalf("message count = %d, want %d", len(got.Messages[9]), maxMessagesPerChat)
@@ -983,11 +1072,15 @@ func TestPaginationBeyondBoundKeepsNewlyLoadedOlderPage(t *testing.T) {
 }
 
 func TestSendResultReplacementIsScopedToMessageChat(t *testing.T) {
-	state := InitialState()
-	state.Messages[1] = []domain.Message{{ID: -30, ChatID: 1, Text: "first", SendState: domain.SendPending}}
-	state.Messages[2] = []domain.Message{{ID: -30, ChatID: 2, Text: "second", SendState: domain.SendPending}}
+	fixture := func() State {
+		state := InitialState()
+		state.Messages[1] = []domain.Message{{ID: -30, ChatID: 1, Text: "first", SendState: domain.SendPending}}
+		state.Messages[2] = []domain.Message{{ID: -30, ChatID: 2, Text: "second", SendState: domain.SendPending}}
+		return state
+	}
 
-	succeeded, _ := updateState(state, TelegramEvent{Value: telegram.MessageSendSucceeded{
+	succeeded := fixture()
+	updateState(&succeeded, TelegramEvent{Value: telegram.MessageSendSucceeded{
 		OldID:   -30,
 		Message: domain.Message{ID: 200, ChatID: 2, Text: "second", SendState: domain.SendSucceeded},
 	}})
@@ -995,7 +1088,8 @@ func TestSendResultReplacementIsScopedToMessageChat(t *testing.T) {
 		t.Fatalf("success replacement crossed chat boundary: %#v", succeeded.Messages)
 	}
 
-	failed, _ := updateState(state, TelegramEvent{Value: telegram.MessageSendFailed{
+	failed := fixture()
+	updateState(&failed, TelegramEvent{Value: telegram.MessageSendFailed{
 		OldID:   -30,
 		Message: domain.Message{ID: -31, ChatID: 2, Text: "second"},
 		Error:   domain.AppError{Kind: domain.ErrorNetwork},
@@ -1013,69 +1107,85 @@ func TestMessageEditLifecyclePreservesDraftAndRetriesWithoutOptimisticMutation(t
 	state.Drafts[9] = "ordinary"
 	state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "original"}}
 	state.SelectedMessageChat, state.SelectedMessage = 9, 2
-	opened, commands := updateState(state, ActionReceived{Action: EditMessage})
+	commands := updateState(&state, ActionReceived{Action: EditMessage})
+	opened := state
 	if opened.MessageMenu == nil || !opened.MessageMenu.Loading || len(commands) != 1 {
 		t.Fatal("edit shortcut did not open authoritative menu")
 	}
 	request := commands[0].(GetMessageProperties)
-	loaded, _ := updateState(opened, MessagePropertiesLoaded{RequestID: request.RequestID, ChatID: 9, MessageID: 2, Capabilities: domain.MessageCapabilities{Copy: true, Edit: true}})
+	updateState(&opened, MessagePropertiesLoaded{RequestID: request.RequestID, ChatID: 9, MessageID: 2, Capabilities: domain.MessageCapabilities{Copy: true, Edit: true}})
+	loaded := opened
 	if loaded.MessageMenu == nil || selectedMenuAction(loaded.MessageMenu) != EditMessage {
 		t.Fatal("authorized edit shortcut did not select Edit")
 	}
-	editing, _ := updateState(loaded, ActionReceived{Action: Activate})
+	updateState(&loaded, ActionReceived{Action: Activate})
+	editing := loaded
 	if editing.EditTarget == nil || editing.EditTarget.Buffer != "original" || editing.Drafts[9] != "ordinary" || editing.Focus != FocusComposer {
 		t.Fatal("edit mode did not isolate draft")
 	}
-	typed, _ := updateState(editing, ActionReceived{Action: NoAction, Rune: 'x'})
+	updateState(&editing, ActionReceived{Action: NoAction, Rune: 'x'})
+	typed := editing
 	if typed.EditTarget.Buffer != "originalx" || typed.Drafts[9] != "ordinary" || typed.Messages[9][0].Text != "original" {
 		t.Fatal("edit input mutated draft or body")
 	}
-	submitting, commands := updateState(typed, ActionReceived{Action: ComposerSubmit})
+	commands = updateState(&typed, ActionReceived{Action: ComposerSubmit})
+	submitting := typed
 	if len(commands) != 1 || !submitting.EditTarget.Submitting || submitting.Messages[9][0].Text != "original" {
 		t.Fatal("edit submit optimistic or absent")
 	}
 	edit := commands[0].(EditText)
-	failed, _ := updateState(submitting, TextEditFailed{RequestID: edit.RequestID, ChatID: 9, MessageID: 2, Error: domain.AppError{Message: "secret"}})
+	updateState(&submitting, TextEditFailed{RequestID: edit.RequestID, ChatID: 9, MessageID: 2, Error: domain.AppError{Message: "secret"}})
+	failed := submitting
 	if failed.EditTarget == nil || failed.EditTarget.Submitting || failed.EditTarget.Buffer != "originalx" || failed.EditTarget.Error == nil || failed.EditTarget.Error.Message != "Edit failed" || failed.EditTarget.Error.Cause != nil {
 		t.Fatal("failure did not retain safe retry")
 	}
-	retry, commands := updateState(failed, ActionReceived{Action: ComposerSubmit})
+	commands = updateState(&failed, ActionReceived{Action: ComposerSubmit})
+	retry := failed
 	if retry.EditTarget == nil || len(commands) != 1 {
 		t.Fatal("retry unavailable")
 	}
-	stale, _ := updateState(retry, TextEdited{RequestID: edit.RequestID, ChatID: 9, MessageID: 2, Message: domain.Message{ID: 2, ChatID: 9, Text: "stale"}})
+	updateState(&retry, TextEdited{RequestID: edit.RequestID, ChatID: 9, MessageID: 2, Message: domain.Message{ID: 2, ChatID: 9, Text: "stale"}})
+	stale := retry
 	if stale.EditTarget == nil || stale.Messages[9][0].Text != "original" {
 		t.Fatal("stale result applied")
 	}
 }
 
 func TestMessageEditCancelGuardsAndSuccessMergeMetadata(t *testing.T) {
-	state := InitialState()
-	state.Focus = FocusComposer
-	state.Chats = []domain.Chat{{ID: 9, CanSend: true}}
-	state.Drafts[9] = "ordinary"
 	original := domain.Message{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "original", SenderName: "sender", Outgoing: true, SentAt: time.Unix(10, 0)}
-	state.Messages[9] = []domain.Message{original}
-	state.EditTarget = &EditTarget{ChatID: 9, MessageID: 2, Original: "original", Buffer: "original"}
-	unchanged, commands := updateState(state, ActionReceived{Action: ComposerSubmit})
-	if len(commands) != 0 || unchanged.EditTarget == nil {
+	newEdit := func(buffer string) State {
+		state := InitialState()
+		state.Focus = FocusComposer
+		state.Chats = []domain.Chat{{ID: 9, CanSend: true}}
+		state.Drafts[9] = "ordinary"
+		state.Messages[9] = []domain.Message{original}
+		state.EditTarget = &EditTarget{ChatID: 9, MessageID: 2, Original: "original", Buffer: buffer}
+		return state
+	}
+	state := newEdit("original")
+	commands := updateState(&state, ActionReceived{Action: ComposerSubmit})
+	if len(commands) != 0 || state.EditTarget == nil {
 		t.Fatal("unchanged reached transport")
 	}
-	unchanged.EditTarget.Buffer = "  \n"
-	empty, commands := updateState(unchanged, ActionReceived{Action: ComposerSubmit})
-	if len(commands) != 0 || empty.EditTarget == nil {
+	state.EditTarget.Buffer = "  \n"
+	commands = updateState(&state, ActionReceived{Action: ComposerSubmit})
+	if len(commands) != 0 || state.EditTarget == nil {
 		t.Fatal("empty reached transport")
 	}
-	canceled, _ := updateState(empty, ActionReceived{Action: Close})
-	if canceled.EditTarget != nil || canceled.Drafts[9] != "ordinary" || canceled.Focus != FocusComposer {
+	updateState(&state, ActionReceived{Action: Close})
+	if state.EditTarget != nil || state.Drafts[9] != "ordinary" || state.Focus != FocusComposer {
 		t.Fatal("Escape did not cancel edit")
 	}
-	state.EditTarget.Buffer = "changed"
-	submitting, commands := updateState(state, ActionReceived{Action: ComposerSubmit})
+
+	state = newEdit("changed")
+	commands = updateState(&state, ActionReceived{Action: ComposerSubmit})
+	if len(commands) != 1 {
+		t.Fatalf("edit command = %#v", commands)
+	}
 	request := commands[0].(EditText)
-	success, _ := updateState(submitting, TextEdited{RequestID: request.RequestID, ChatID: 9, MessageID: 2, Message: domain.Message{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "changed", EditedAt: time.Unix(20, 0)}})
-	got := success.Messages[9][0]
-	if success.EditTarget != nil || got.Text != "changed" || got.SenderName != "sender" || !got.Outgoing || got.SentAt != original.SentAt || got.EditedAt.IsZero() || success.Drafts[9] != "ordinary" {
+	updateState(&state, TextEdited{RequestID: request.RequestID, ChatID: 9, MessageID: 2, Message: domain.Message{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "changed", EditedAt: time.Unix(20, 0)}})
+	got := state.Messages[9][0]
+	if state.EditTarget != nil || got.Text != "changed" || got.SenderName != "sender" || !got.Outgoing || got.SentAt != original.SentAt || got.EditedAt.IsZero() || state.Drafts[9] != "ordinary" {
 		t.Fatal("success did not preserve metadata")
 	}
 }
@@ -1087,11 +1197,13 @@ func TestMessageEditCancelsOnChatSwitchExternalChangeAndDisappearance(t *testing
 	base.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "opaque-original"}}
 	base.EditTarget = &EditTarget{ChatID: 9, MessageID: 2, Original: "opaque-original", Buffer: "opaque-buffer"}
 
-	switched, _ := updateState(base, ActionReceived{Action: SelectChat, ChatID: 10})
+	updateState(&base, ActionReceived{Action: SelectChat, ChatID: 10})
+	switched := base
 	if switched.EditTarget != nil {
 		t.Fatal("chat switch retained edit target")
 	}
-	externallyChanged, _ := updateState(base, TelegramEvent{Value: telegram.MessageContentUpdated{ChatID: 9, MessageID: 2, Kind: domain.MessageText, Text: "opaque-external"}})
+	updateState(&base, TelegramEvent{Value: telegram.MessageContentUpdated{ChatID: 9, MessageID: 2, Kind: domain.MessageText, Text: "opaque-external"}})
+	externallyChanged := base
 	if externallyChanged.EditTarget != nil {
 		t.Fatal("external content update retained edit target")
 	}
@@ -1101,28 +1213,32 @@ func TestMessageEditCancelsOnChatSwitchExternalChangeAndDisappearance(t *testing
 		base.Messages[9] = append(base.Messages[9], domain.Message{ID: domain.MessageID(index), ChatID: 9, Kind: domain.MessageText, SentAt: time.Unix(int64(index), 0)})
 	}
 	base.EditTarget = &EditTarget{ChatID: 9, MessageID: 1, Original: "opaque-original", Buffer: "opaque-buffer"}
-	evicted, _ := updateState(base, TelegramEvent{Value: telegram.MessageUpserted{Message: domain.Message{ID: 999, ChatID: 9, Kind: domain.MessageText, SentAt: time.Unix(999, 0)}}})
+	updateState(&base, TelegramEvent{Value: telegram.MessageUpserted{Message: domain.Message{ID: 999, ChatID: 9, Kind: domain.MessageText, SentAt: time.Unix(999, 0)}}})
+	evicted := base
 	if evicted.EditTarget != nil {
 		t.Fatal("disappeared edit target was retained")
 	}
 
 	base.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "opaque-original"}}
 	base.EditTarget = &EditTarget{ChatID: 9, MessageID: 2, Original: "opaque-original", Buffer: "opaque-buffer"}
-	replaced, _ := updateState(base, TelegramEvent{Value: telegram.MessageUpserted{Message: domain.Message{ID: 2, ChatID: 9, Kind: domain.MessagePhoto}}})
+	updateState(&base, TelegramEvent{Value: telegram.MessageUpserted{Message: domain.Message{ID: 2, ChatID: 9, Kind: domain.MessagePhoto}}})
+	replaced := base
 	if replaced.EditTarget != nil {
 		t.Fatal("non-editable replacement retained edit target")
 	}
 
 	base.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "opaque-original"}}
 	base.EditTarget = &EditTarget{ChatID: 9, MessageID: 2, Original: "opaque-original", Buffer: "opaque-buffer"}
-	deleted, _ := updateState(base, TelegramEvent{Value: telegram.MessagesDeleted{ChatID: 9, MessageIDs: []domain.MessageID{2}}})
+	updateState(&base, TelegramEvent{Value: telegram.MessagesDeleted{ChatID: 9, MessageIDs: []domain.MessageID{2}}})
+	deleted := base
 	if deleted.EditTarget != nil || messageIndex(deleted.Messages[9], 2) >= 0 {
 		t.Fatal("external deletion retained edit target or message")
 	}
 
 	base.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "opaque-original"}, {ID: 3, ChatID: 9, Kind: domain.MessageText, Text: "opaque-newest"}}
 	base.EditTarget = &EditTarget{ChatID: 9, MessageID: 2, Original: "opaque-original", Buffer: "opaque-buffer"}
-	evicted, _ = updateState(base, TelegramEvent{Value: telegram.MessagesDeleted{ChatID: 9, MessageIDs: []domain.MessageID{2}, FromCache: true}})
+	updateState(&base, TelegramEvent{Value: telegram.MessagesDeleted{ChatID: 9, MessageIDs: []domain.MessageID{2}, FromCache: true}})
+	evicted = base
 	if evicted.EditTarget == nil || messageIndex(evicted.Messages[9], 2) < 0 || messageIndex(evicted.Messages[9], 3) < 0 {
 		t.Fatal("cache eviction removed valid messages or edit target")
 	}
@@ -1136,7 +1252,8 @@ func TestDeleteMessageActivatesWithinModalUsesSavedIdentityAndRevokeFalse(t *tes
 	state.SelectedMessageChat, state.SelectedMessage = 9, 1 // prove modal identity wins over selection
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, Capabilities: domain.MessageCapabilities{Copy: true, DeleteForSelf: true}}
 
-	deleting, commands := updateState(state, ActionReceived{Action: DeleteMessage})
+	commands := updateState(&state, ActionReceived{Action: DeleteMessage})
+	deleting := state
 	if len(commands) != 1 {
 		t.Fatalf("delete commands = %d", len(commands))
 	}
@@ -1167,9 +1284,11 @@ func TestDeleteMessageSuccessRemovesExactMessageReconcilesSelectionAndClearsTarg
 	state.ReplyTarget = &ReplyTarget{ChatID: 9, MessageID: 2, Sender: "x", Preview: "y"}
 	state.EditTarget = &EditTarget{ChatID: 9, MessageID: 2, Original: "o", Buffer: "b"}
 
-	deleting, commands := updateState(state, ActionReceived{Action: DeleteMessage})
+	commands := updateState(&state, ActionReceived{Action: DeleteMessage})
+	deleting := state
 	request := commands[0].(DeleteMessageCommand).RequestID
-	deleted, _ := updateState(deleting, MessageDeleted{RequestID: request, ChatID: 9, MessageID: 2})
+	updateState(&deleting, MessageDeleted{RequestID: request, ChatID: 9, MessageID: 2})
+	deleted := deleting
 
 	if len(deleted.Messages[9]) != 2 || messageIndex(deleted.Messages[9], 2) >= 0 {
 		t.Fatal("success did not remove exactly the deleted message")
@@ -1192,7 +1311,8 @@ func TestDeleteMessageSuccessWhenMessageAlreadyAbsentIsIdempotent(t *testing.T) 
 	state.Messages[9] = []domain.Message{{ID: 3, ChatID: 9, Kind: domain.MessageText}}
 	state.SelectedMessageChat, state.SelectedMessage = 9, 3
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, Capabilities: domain.MessageCapabilities{DeleteForSelf: true}}
-	deleting, _ := updateState(state, MessageDeleted{RequestID: 77, ChatID: 9, MessageID: 2})
+	updateState(&state, MessageDeleted{RequestID: 77, ChatID: 9, MessageID: 2})
+	deleting := state
 	if deleting.MessageMenu == nil || len(deleting.Messages[9]) != 1 {
 		t.Fatal("stale success applied")
 	}
@@ -1206,9 +1326,11 @@ func TestDeleteMessageFailureRetainsMessageAndShowsConstantToast(t *testing.T) {
 	state.SelectedMessageChat, state.SelectedMessage = 9, 2
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, Capabilities: domain.MessageCapabilities{Copy: true, DeleteForSelf: true}}
 
-	deleting, commands := updateState(state, ActionReceived{Action: DeleteMessage})
+	commands := updateState(&state, ActionReceived{Action: DeleteMessage})
+	deleting := state
 	request := commands[0].(DeleteMessageCommand).RequestID
-	failed, _ := updateState(deleting, MessageDeleteFailed{RequestID: request, ChatID: 9, MessageID: 2, Error: domain.AppError{Message: "raw secret-body 9 2"}})
+	updateState(&deleting, MessageDeleteFailed{RequestID: request, ChatID: 9, MessageID: 2, Error: domain.AppError{Message: "raw secret-body 9 2"}})
+	failed := deleting
 	if messageIndex(failed.Messages[9], 2) < 0 {
 		t.Fatal("failure removed the message")
 	}
@@ -1228,7 +1350,7 @@ func TestDeleteForEveryoneIssuesRevokeDeleteAndRequiresDeleteForAll(t *testing.T
 	state.SelectedMessageChat, state.SelectedMessage = 9, 2
 
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, Capabilities: domain.MessageCapabilities{DeleteForAll: true}}
-	_, commands := updateState(state, ActionReceived{Action: DeleteForEveryone})
+	commands := updateState(&state, ActionReceived{Action: DeleteForEveryone})
 	if len(commands) != 1 {
 		t.Fatal("revoke delete command missing")
 	}
@@ -1238,7 +1360,8 @@ func TestDeleteForEveryoneIssuesRevokeDeleteAndRequiresDeleteForAll(t *testing.T
 	}
 
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, Capabilities: domain.MessageCapabilities{DeleteForSelf: true}}
-	selfOnly, commands := updateState(state, ActionReceived{Action: DeleteForEveryone})
+	commands = updateState(&state, ActionReceived{Action: DeleteForEveryone})
+	selfOnly := state
 	if len(commands) != 0 {
 		t.Fatal("delete for everyone issued without DeleteForAll capability")
 	}
@@ -1247,7 +1370,8 @@ func TestDeleteForEveryoneIssuesRevokeDeleteAndRequiresDeleteForAll(t *testing.T
 	}
 
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, Capabilities: domain.MessageCapabilities{DeleteForAll: true}}
-	forAllOnly, commands := updateState(state, ActionReceived{Action: DeleteMessage})
+	commands = updateState(&state, ActionReceived{Action: DeleteMessage})
+	forAllOnly := state
 	if len(commands) != 0 {
 		t.Fatal("delete for self issued without DeleteForSelf capability")
 	}
@@ -1265,23 +1389,28 @@ func TestDeleteMessageEventsIgnoreStaleAndIdentityMismatch(t *testing.T) {
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, RequestID: 99, Capabilities: domain.MessageCapabilities{Copy: true, DeleteForSelf: true}}
 
 	// Stale success: RequestID does not match the in-flight delete.
-	stale, _ := updateState(state, MessageDeleted{RequestID: 98, ChatID: 9, MessageID: 2})
+	updateState(&state, MessageDeleted{RequestID: 98, ChatID: 9, MessageID: 2})
+	stale := state
 	if stale.MessageMenu == nil || messageIndex(stale.Messages[9], 2) < 0 {
 		t.Fatal("stale success applied")
 	}
 	// Identity mismatch on failure.
-	mismatched, _ := updateState(state, MessageDeleteFailed{RequestID: 99, ChatID: 10, MessageID: 2, Error: domain.AppError{Message: "raw 10 2"}})
+	updateState(&state, MessageDeleteFailed{RequestID: 99, ChatID: 10, MessageID: 2, Error: domain.AppError{Message: "raw 10 2"}})
+	mismatched := state
 	if mismatched.Toast != nil || mismatched.MessageMenu == nil {
 		t.Fatal("identity-mismatched failure applied")
 	}
 	// Identity mismatch on success.
-	wrongMessage, _ := updateState(state, MessageDeleted{RequestID: 99, ChatID: 9, MessageID: 3})
+	updateState(&state, MessageDeleted{RequestID: 99, ChatID: 9, MessageID: 3})
+	wrongMessage := state
 	if wrongMessage.MessageMenu == nil || messageIndex(wrongMessage.Messages[9], 2) < 0 {
 		t.Fatal("identity-mismatched success applied")
 	}
 	// Closed menu ignores a late, otherwise-matching success.
-	closed, _ := updateState(state, ActionReceived{Action: Close})
-	late, _ := updateState(closed, MessageDeleted{RequestID: 99, ChatID: 9, MessageID: 2})
+	updateState(&state, ActionReceived{Action: Close})
+	closed := state
+	updateState(&closed, MessageDeleted{RequestID: 99, ChatID: 9, MessageID: 2})
+	late := closed
 	if late.Toast != nil || messageIndex(late.Messages[9], 2) < 0 || late.SelectedMessage != 2 {
 		t.Fatal("late success applied after menu closed")
 	}
@@ -1297,9 +1426,11 @@ func TestDeleteMessageSelectionReconcilesToPredecessorWhenNewestDeleted(t *testi
 	}
 	state.SelectedMessageChat, state.SelectedMessage = 9, 2
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, Capabilities: domain.MessageCapabilities{DeleteForSelf: true}}
-	deleting, commands := updateState(state, ActionReceived{Action: DeleteMessage})
+	commands := updateState(&state, ActionReceived{Action: DeleteMessage})
+	deleting := state
 	request := commands[0].(DeleteMessageCommand).RequestID
-	deleted, _ := updateState(deleting, MessageDeleted{RequestID: request, ChatID: 9, MessageID: 2})
+	updateState(&deleting, MessageDeleted{RequestID: request, ChatID: 9, MessageID: 2})
+	deleted := deleting
 	if deleted.SelectedMessage != 1 || deleted.SelectedMessageChat != 9 || len(deleted.Messages[9]) != 1 {
 		t.Fatalf("newest deletion did not keep predecessor selected: %#v", deleted.Messages[9])
 	}
@@ -1312,26 +1443,32 @@ func TestDeleteForEveryoneHasSingleRowOrderAndNoOptimisticRemoval(t *testing.T) 
 	state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText}}
 	state.SelectedMessageChat, state.SelectedMessage = 9, 2
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, Capabilities: domain.MessageCapabilities{DeleteForSelf: true, DeleteForAll: true}}
-	deleting, commands := updateState(state, ActionReceived{Action: DeleteForEveryone})
+	commands := updateState(&state, ActionReceived{Action: DeleteForEveryone})
+	deleting := state
 	if len(commands) != 1 || len(deleting.Messages[9]) != 1 {
 		t.Fatal("delete failed to preserve until success")
 	}
 }
 
 func TestMessageActionMenuCapturesPinnedStateFromSelectedMessage(t *testing.T) {
-	state := InitialState()
-	state.Focus = FocusConversation
-	state.Chats = []domain.Chat{{ID: 9}}
-	state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText, Pinned: true}}
-	state.SelectedMessageChat, state.SelectedMessage = 9, 2
-	opened, _ := updateState(state, ActionReceived{Action: OpenMessageActionMenu})
-	if opened.MessageMenu == nil || !opened.MessageMenu.Pinned {
-		t.Fatalf("menu did not capture pinned state: %#v", opened.MessageMenu)
+	fixture := func(pinned bool) State {
+		state := InitialState()
+		state.Focus = FocusConversation
+		state.Chats = []domain.Chat{{ID: 9}}
+		state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText, Pinned: pinned}}
+		state.SelectedMessageChat, state.SelectedMessage = 9, 2
+		return state
 	}
-	state.Messages[9][0].Pinned = false
-	opened, _ = updateState(state, ActionReceived{Action: OpenMessageActionMenu})
-	if opened.MessageMenu == nil || opened.MessageMenu.Pinned {
-		t.Fatalf("menu captured stale pinned state: %#v", opened.MessageMenu)
+	// Each menu open starts from a conversation without an open menu.
+	state := fixture(true)
+	updateState(&state, ActionReceived{Action: OpenMessageActionMenu})
+	if state.MessageMenu == nil || !state.MessageMenu.Pinned {
+		t.Fatalf("menu did not capture pinned state: %#v", state.MessageMenu)
+	}
+	state = fixture(false)
+	updateState(&state, ActionReceived{Action: OpenMessageActionMenu})
+	if state.MessageMenu == nil || state.MessageMenu.Pinned {
+		t.Fatalf("menu captured stale pinned state: %#v", state.MessageMenu)
 	}
 }
 
@@ -1378,7 +1515,8 @@ func TestPinMessageActivationResolvesUnpinFromMenuPinned(t *testing.T) {
 	state.SelectedMessageChat, state.SelectedMessage = 9, 1 // prove menu identity wins
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, Capabilities: domain.MessageCapabilities{Copy: true, Pin: true}}
 
-	pinning, commands := updateState(state, ActionReceived{Action: PinMessage})
+	commands := updateState(&state, ActionReceived{Action: PinMessage})
+	pinning := state
 	if len(commands) != 1 {
 		t.Fatalf("pin commands = %d", len(commands))
 	}
@@ -1394,7 +1532,8 @@ func TestPinMessageActivationResolvesUnpinFromMenuPinned(t *testing.T) {
 	}
 
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, Pinned: true, Capabilities: domain.MessageCapabilities{Copy: true, Pin: true}}
-	unpinning, commands := updateState(state, ActionReceived{Action: PinMessage})
+	commands = updateState(&state, ActionReceived{Action: PinMessage})
+	unpinning := state
 	unpin := commands[0].(PinMessageCommand)
 	if !unpin.Unpin || unpin.ChatID != 9 || unpin.MessageID != 2 || unpinning.Messages[9][0].Pinned {
 		t.Fatalf("unpin command = %#v", commands[0])
@@ -1407,12 +1546,14 @@ func TestPinMessageRequiresCapabilityAndLivingIdentity(t *testing.T) {
 	state.Chats = []domain.Chat{{ID: 9}}
 	state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText}}
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, Capabilities: domain.MessageCapabilities{Copy: true}, PreviousFocus: FocusConversation}
-	gated, commands := updateState(state, ActionReceived{Action: PinMessage})
+	commands := updateState(&state, ActionReceived{Action: PinMessage})
+	gated := state
 	if len(commands) != 0 || gated.MessageMenu == nil {
 		t.Fatal("pin issued without Pin capability")
 	}
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 99, Capabilities: domain.MessageCapabilities{Pin: true}, PreviousFocus: FocusConversation}
-	missing, commands := updateState(state, ActionReceived{Action: PinMessage})
+	commands = updateState(&state, ActionReceived{Action: PinMessage})
+	missing := state
 	if len(commands) != 0 {
 		t.Fatal("pin issued for a missing identity")
 	}
@@ -1429,9 +1570,11 @@ func TestPinMessageSuccessSetsPinnedAndShowsToast(t *testing.T) {
 	state.SelectedMessageChat, state.SelectedMessage = 9, 2
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, Capabilities: domain.MessageCapabilities{Copy: true, Pin: true}}
 
-	pinning, commands := updateState(state, ActionReceived{Action: PinMessage})
+	commands := updateState(&state, ActionReceived{Action: PinMessage})
+	pinning := state
 	request := commands[0].(PinMessageCommand).RequestID
-	changed, _ := updateState(pinning, MessagePinChanged{RequestID: request, ChatID: 9, MessageID: 2, Pinned: true})
+	updateState(&pinning, MessagePinChanged{RequestID: request, ChatID: 9, MessageID: 2, Pinned: true})
+	changed := pinning
 	if !changed.Messages[9][0].Pinned {
 		t.Fatal("success did not set Pinned")
 	}
@@ -1444,9 +1587,11 @@ func TestPinMessageSuccessSetsPinnedAndShowsToast(t *testing.T) {
 
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, Pinned: true, Capabilities: domain.MessageCapabilities{Pin: true}}
 	state.Messages[9][0].Pinned = true
-	unpinning, commands := updateState(state, ActionReceived{Action: PinMessage})
+	commands = updateState(&state, ActionReceived{Action: PinMessage})
+	unpinning := state
 	request = commands[0].(PinMessageCommand).RequestID
-	unpinned, _ := updateState(unpinning, MessagePinChanged{RequestID: request, ChatID: 9, MessageID: 2, Pinned: false})
+	updateState(&unpinning, MessagePinChanged{RequestID: request, ChatID: 9, MessageID: 2, Pinned: false})
+	unpinned := unpinning
 	if unpinned.Messages[9][0].Pinned {
 		t.Fatal("unpin success did not clear Pinned")
 	}
@@ -1463,9 +1608,11 @@ func TestPinMessageFailureShowsConstantToastAndClosesMenu(t *testing.T) {
 	state.SelectedMessageChat, state.SelectedMessage = 9, 2
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, Capabilities: domain.MessageCapabilities{Copy: true, Pin: true}}
 
-	pinning, commands := updateState(state, ActionReceived{Action: PinMessage})
+	commands := updateState(&state, ActionReceived{Action: PinMessage})
+	pinning := state
 	request := commands[0].(PinMessageCommand).RequestID
-	failed, _ := updateState(pinning, MessagePinFailed{RequestID: request, ChatID: 9, MessageID: 2, Error: domain.AppError{Message: "raw secret-body 9 2"}})
+	updateState(&pinning, MessagePinFailed{RequestID: request, ChatID: 9, MessageID: 2, Error: domain.AppError{Message: "raw secret-body 9 2"}})
+	failed := pinning
 	if messageIndex(failed.Messages[9], 2) < 0 || failed.Messages[9][0].Pinned {
 		t.Fatal("failure mutated the message")
 	}
@@ -1477,9 +1624,11 @@ func TestPinMessageFailureShowsConstantToastAndClosesMenu(t *testing.T) {
 	}
 
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, Pinned: true, Capabilities: domain.MessageCapabilities{Pin: true}}
-	unpinning, commands := updateState(state, ActionReceived{Action: PinMessage})
+	commands = updateState(&state, ActionReceived{Action: PinMessage})
+	unpinning := state
 	request = commands[0].(PinMessageCommand).RequestID
-	unpinFailed, _ := updateState(unpinning, MessagePinFailed{RequestID: request, ChatID: 9, MessageID: 2, Error: domain.AppError{Message: "raw"}})
+	updateState(&unpinning, MessagePinFailed{RequestID: request, ChatID: 9, MessageID: 2, Error: domain.AppError{Message: "raw"}})
+	unpinFailed := unpinning
 	if unpinFailed.Toast == nil || unpinFailed.Toast.Message != "Unpin failed" || unpinFailed.Focus != FocusConversation {
 		t.Fatalf("unpin failure toast/focus = %#v / %v", unpinFailed.Toast, unpinFailed.Focus)
 	}
@@ -1493,43 +1642,54 @@ func TestPinMessageEventsIgnoreStaleAndIdentityMismatch(t *testing.T) {
 	state.SelectedMessageChat, state.SelectedMessage = 9, 2
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, RequestID: 99, Capabilities: domain.MessageCapabilities{Copy: true, Pin: true}}
 
-	stale, _ := updateState(state, MessagePinChanged{RequestID: 98, ChatID: 9, MessageID: 2, Pinned: true})
+	updateState(&state, MessagePinChanged{RequestID: 98, ChatID: 9, MessageID: 2, Pinned: true})
+	stale := state
 	if stale.MessageMenu == nil || stale.Messages[9][0].Pinned {
 		t.Fatal("stale success applied")
 	}
-	mismatched, _ := updateState(state, MessagePinFailed{RequestID: 99, ChatID: 10, MessageID: 2, Error: domain.AppError{Message: "raw 10 2"}})
+	updateState(&state, MessagePinFailed{RequestID: 99, ChatID: 10, MessageID: 2, Error: domain.AppError{Message: "raw 10 2"}})
+	mismatched := state
 	if mismatched.Toast != nil || mismatched.MessageMenu == nil {
 		t.Fatal("identity-mismatched failure applied")
 	}
-	wrongMessage, _ := updateState(state, MessagePinChanged{RequestID: 99, ChatID: 9, MessageID: 3, Pinned: true})
+	updateState(&state, MessagePinChanged{RequestID: 99, ChatID: 9, MessageID: 3, Pinned: true})
+	wrongMessage := state
 	if wrongMessage.MessageMenu == nil || wrongMessage.Messages[9][0].Pinned {
 		t.Fatal("identity-mismatched success applied")
 	}
-	closed, _ := updateState(state, ActionReceived{Action: Close})
-	late, _ := updateState(closed, MessagePinChanged{RequestID: 99, ChatID: 9, MessageID: 2, Pinned: true})
+	updateState(&state, ActionReceived{Action: Close})
+	closed := state
+	updateState(&closed, MessagePinChanged{RequestID: 99, ChatID: 9, MessageID: 2, Pinned: true})
+	late := closed
 	if late.Toast != nil || late.Messages[9][0].Pinned {
 		t.Fatal("late success applied after menu closed")
 	}
 }
 
 func TestMessagePinnedUpdatedReconcilesInPlace(t *testing.T) {
-	state := InitialState()
-	state.Chats = []domain.Chat{{ID: 9}}
-	state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText}}
-	got, _ := updateState(state, TelegramEvent{Value: telegram.MessagePinnedUpdated{ChatID: 9, MessageID: 2, Pinned: true}})
+	fixture := func() State {
+		state := InitialState()
+		state.Chats = []domain.Chat{{ID: 9}}
+		state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText}}
+		return state
+	}
+	got := fixture()
+	updateState(&got, TelegramEvent{Value: telegram.MessagePinnedUpdated{ChatID: 9, MessageID: 2, Pinned: true}})
 	if !got.Messages[9][0].Pinned {
 		t.Fatal("external pin update not applied in place")
 	}
-	got, _ = updateState(got, TelegramEvent{Value: telegram.MessagePinnedUpdated{ChatID: 9, MessageID: 2, Pinned: false}})
+	updateState(&got, TelegramEvent{Value: telegram.MessagePinnedUpdated{ChatID: 9, MessageID: 2, Pinned: false}})
 	if got.Messages[9][0].Pinned {
 		t.Fatal("external unpin update not applied in place")
 	}
-	got, _ = updateState(state, TelegramEvent{Value: &telegram.MessagePinnedUpdated{ChatID: 9, MessageID: 2, Pinned: true}})
-	if !got.Messages[9][0].Pinned {
+	pointer := fixture()
+	updateState(&pointer, TelegramEvent{Value: &telegram.MessagePinnedUpdated{ChatID: 9, MessageID: 2, Pinned: true}})
+	if !pointer.Messages[9][0].Pinned {
 		t.Fatal("pointer external pin update not normalized")
 	}
-	got, _ = updateState(state, TelegramEvent{Value: telegram.MessagePinnedUpdated{ChatID: 9, MessageID: 99, Pinned: true}})
-	if got.Messages[9][0].Pinned {
+	unknown := fixture()
+	updateState(&unknown, TelegramEvent{Value: telegram.MessagePinnedUpdated{ChatID: 9, MessageID: 99, Pinned: true}})
+	if unknown.Messages[9][0].Pinned {
 		t.Fatal("unknown identity pin applied")
 	}
 }
@@ -1577,7 +1737,8 @@ func TestForwardMenuActivationVerifiesIdentityAndOpensPicker(t *testing.T) {
 	state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "opaque-body"}}
 	state.SelectedMessageChat, state.SelectedMessage = 9, 1 // prove menu identity wins
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, Capabilities: domain.MessageCapabilities{Copy: true, Forward: true}, PreviousFocus: FocusConversation}
-	opened, commands := updateState(state, ActionReceived{Action: ForwardMessageSource})
+	commands := updateState(&state, ActionReceived{Action: ForwardMessageSource})
+	opened := state
 	if len(commands) != 0 {
 		t.Fatalf("picker open commands = %d, want 0", len(commands))
 	}
@@ -1598,12 +1759,14 @@ func TestForwardMenuActivationRequiresCapabilityAndLivingIdentity(t *testing.T) 
 	state.Chats = []domain.Chat{{ID: 9, Title: "Source"}}
 	state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText}}
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, Capabilities: domain.MessageCapabilities{Copy: true}, PreviousFocus: FocusConversation}
-	gated, _ := updateState(state, ActionReceived{Action: ForwardMessageSource})
+	updateState(&state, ActionReceived{Action: ForwardMessageSource})
+	gated := state
 	if gated.ForwardPicker != nil {
 		t.Fatal("picker opened without Forward capability")
 	}
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 99, Capabilities: domain.MessageCapabilities{Forward: true}, PreviousFocus: FocusConversation}
-	missing, _ := updateState(state, ActionReceived{Action: ForwardMessageSource})
+	updateState(&state, ActionReceived{Action: ForwardMessageSource})
+	missing := state
 	if missing.ForwardPicker != nil {
 		t.Fatal("picker opened for a missing source identity")
 	}
@@ -1616,21 +1779,23 @@ func TestForwardPickerNavigationAndConfirmEmitsExactCommand(t *testing.T) {
 	state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText}}
 	state.ForwardPicker = &ForwardPicker{SourceChatID: 9, SourceMessageID: 2, SelectedChat: 0, RequestID: 42}
 
-	next, _ := updateState(state, ActionReceived{Action: SelectNext})
+	updateState(&state, ActionReceived{Action: SelectNext})
+	next := state
 	if next.ForwardPicker == nil || next.ForwardPicker.SelectedChat != 1 {
 		t.Fatalf("SelectNext selected %d", next.ForwardPicker.SelectedChat)
 	}
-	next, _ = updateState(next, ActionReceived{Action: SelectPrevious})
+	updateState(&next, ActionReceived{Action: SelectPrevious})
 	if next.ForwardPicker.SelectedChat != 0 {
 		t.Fatalf("SelectPrevious selected %d", next.ForwardPicker.SelectedChat)
 	}
-	next, _ = updateState(next, ActionReceived{Action: SelectNext})
-	next, _ = updateState(next, ActionReceived{Action: SelectNext})
+	updateState(&next, ActionReceived{Action: SelectNext})
+	updateState(&next, ActionReceived{Action: SelectNext})
 	if next.ForwardPicker.SelectedChat != 2 {
 		t.Fatalf("wrap selection = %d, want 2", next.ForwardPicker.SelectedChat)
 	}
 
-	confirmed, commands := updateState(next, ActionReceived{Action: Activate})
+	commands := updateState(&next, ActionReceived{Action: Activate})
+	confirmed := next
 	if len(commands) != 1 {
 		t.Fatalf("confirm commands = %d, want 1", len(commands))
 	}
@@ -1648,7 +1813,8 @@ func TestForwardPickerCancelRestoresFocusAndClearsPicker(t *testing.T) {
 	state.Focus = FocusForwardPicker
 	state.Chats = []domain.Chat{{ID: 9}}
 	state.ForwardPicker = &ForwardPicker{SourceChatID: 9, SourceMessageID: 2, SelectedChat: 0, RequestID: 7}
-	got, _ := updateState(state, ActionReceived{Action: Close})
+	updateState(&state, ActionReceived{Action: Close})
+	got := state
 	if got.ForwardPicker != nil || got.Focus != FocusConversation {
 		t.Fatalf("cancel result = picker:%#v focus:%v", got.ForwardPicker, got.Focus)
 	}
@@ -1660,7 +1826,8 @@ func TestForwardSuccessClosesPickerShowsToastAndDoesNotOptimisticallyInsert(t *t
 	state.Chats = []domain.Chat{{ID: 9, Title: "Source"}, {ID: 10, Title: "Dest"}}
 	state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "opaque-body"}}
 	state.ForwardPicker = &ForwardPicker{SourceChatID: 9, SourceMessageID: 2, SelectedChat: 1, RequestID: 42}
-	got, _ := updateState(state, MessageForwarded{RequestID: 42, DestinationChatID: 10})
+	updateState(&state, MessageForwarded{RequestID: 42, DestinationChatID: 10})
+	got := state
 	if got.ForwardPicker != nil || got.Focus != FocusConversation {
 		t.Fatalf("success focus = picker:%#v focus:%v", got.ForwardPicker, got.Focus)
 	}
@@ -1678,7 +1845,8 @@ func TestForwardFailureClosesPickerAndShowsConstantToast(t *testing.T) {
 	state.Chats = []domain.Chat{{ID: 9, Title: "Source"}, {ID: 10, Title: "Dest"}}
 	state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "secret-body"}}
 	state.ForwardPicker = &ForwardPicker{SourceChatID: 9, SourceMessageID: 2, SelectedChat: 1, RequestID: 42}
-	got, _ := updateState(state, MessageForwardFailed{RequestID: 42, DestinationChatID: 10, Error: domain.AppError{Message: "raw secret-body 9 10 42"}})
+	updateState(&state, MessageForwardFailed{RequestID: 42, DestinationChatID: 10, Error: domain.AppError{Message: "raw secret-body 9 10 42"}})
+	got := state
 	if got.ForwardPicker != nil || got.Focus != FocusConversation {
 		t.Fatalf("failure focus = picker:%#v focus:%v", got.ForwardPicker, got.Focus)
 	}
@@ -1697,16 +1865,19 @@ func TestForwardPickerEventsIgnoreStaleAndIdentityMismatch(t *testing.T) {
 	state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9}}
 	state.ForwardPicker = &ForwardPicker{SourceChatID: 9, SourceMessageID: 2, SelectedChat: 1, RequestID: 42}
 
-	stale, _ := updateState(state, MessageForwarded{RequestID: 41, DestinationChatID: 10})
+	updateState(&state, MessageForwarded{RequestID: 41, DestinationChatID: 10})
+	stale := state
 	if stale.ForwardPicker == nil || stale.Toast != nil {
 		t.Fatal("stale success applied")
 	}
-	wrongDestination, _ := updateState(state, MessageForwardFailed{RequestID: 42, DestinationChatID: 9, Error: domain.AppError{Message: "raw"}})
+	updateState(&state, MessageForwardFailed{RequestID: 42, DestinationChatID: 9, Error: domain.AppError{Message: "raw"}})
+	wrongDestination := state
 	if wrongDestination.ForwardPicker == nil || wrongDestination.Toast != nil {
 		t.Fatal("identity-mismatched failure applied")
 	}
-	late, _ := updateState(state, ActionReceived{Action: Close})
-	late, _ = updateState(late, MessageForwarded{RequestID: 42, DestinationChatID: 10})
+	updateState(&state, ActionReceived{Action: Close})
+	late := state
+	updateState(&late, MessageForwarded{RequestID: 42, DestinationChatID: 10})
 	if late.Toast != nil {
 		t.Fatal("late success applied after picker closed")
 	}
@@ -1718,13 +1889,15 @@ func TestForwardPickerClearedOnChatSwitchAndSourceDisappearance(t *testing.T) {
 	state.Chats = []domain.Chat{{ID: 9, Title: "Source"}, {ID: 10, Title: "Dest"}}
 	state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText, SentAt: time.Unix(1, 0)}}
 	state.ForwardPicker = &ForwardPicker{SourceChatID: 9, SourceMessageID: 2, SelectedChat: 0, RequestID: 42}
-	switched, _ := updateState(state, ActionReceived{Action: SelectChat, ChatID: 10})
+	updateState(&state, ActionReceived{Action: SelectChat, ChatID: 10})
+	switched := state
 	if switched.ForwardPicker != nil {
 		t.Fatal("chat switch retained picker")
 	}
 
 	state.ForwardPicker = &ForwardPicker{SourceChatID: 9, SourceMessageID: 2, SelectedChat: 0, RequestID: 42}
-	deleted, _ := updateState(state, TelegramEvent{Value: telegram.MessagesDeleted{ChatID: 9, MessageIDs: []domain.MessageID{2}}})
+	updateState(&state, TelegramEvent{Value: telegram.MessagesDeleted{ChatID: 9, MessageIDs: []domain.MessageID{2}}})
+	deleted := state
 	if deleted.ForwardPicker != nil || deleted.Focus != FocusConversation {
 		t.Fatalf("deleted source retained picker: %#v focus:%v", deleted.ForwardPicker, deleted.Focus)
 	}
@@ -1734,7 +1907,8 @@ func TestForwardPickerClearedOnChatSwitchAndSourceDisappearance(t *testing.T) {
 		state.Messages[9] = append(state.Messages[9], domain.Message{ID: domain.MessageID(index), ChatID: 9, Kind: domain.MessageText, SentAt: time.Unix(int64(index), 0)})
 	}
 	state.ForwardPicker = &ForwardPicker{SourceChatID: 9, SourceMessageID: 1, SelectedChat: 0, RequestID: 43}
-	evicted, _ := updateState(state, TelegramEvent{Value: telegram.MessageUpserted{Message: domain.Message{ID: 999, ChatID: 9, Kind: domain.MessageText, SentAt: time.Unix(999, 0)}}})
+	updateState(&state, TelegramEvent{Value: telegram.MessageUpserted{Message: domain.Message{ID: 999, ChatID: 9, Kind: domain.MessageText, SentAt: time.Unix(999, 0)}}})
+	evicted := state
 	if evicted.ForwardPicker != nil {
 		t.Fatal("evicted source message retained picker")
 	}
@@ -1751,7 +1925,8 @@ func TestReactLocalCapabilityGatingAtMenuOpen(t *testing.T) {
 	}
 
 	open := func(state State) bool {
-		opened, _ := updateState(state, ActionReceived{Action: OpenMessageActionMenu})
+		updateState(&state, ActionReceived{Action: OpenMessageActionMenu})
+		opened := state
 		return opened.MessageMenu != nil && opened.MessageMenu.CanReact
 	}
 
@@ -1776,13 +1951,18 @@ func TestReactLocalCapabilityGatingAtMenuOpen(t *testing.T) {
 }
 
 func TestReactMenuActivationVerifiesIdentityAndOpensPicker(t *testing.T) {
-	state := InitialState()
-	state.Focus = FocusModal
-	state.Chats = []domain.Chat{{ID: 9, CanReact: true}}
-	state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "opaque-body"}}
-	state.SelectedMessageChat, state.SelectedMessage = 9, 1 // prove menu identity wins
-	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, CanReact: true, Capabilities: domain.MessageCapabilities{Copy: true}, PreviousFocus: FocusConversation}
-	opened, commands := updateState(state, ActionReceived{Action: ReactMessage})
+	base := func() State {
+		state := InitialState()
+		state.Focus = FocusModal
+		state.Chats = []domain.Chat{{ID: 9, CanReact: true}}
+		state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "opaque-body"}}
+		state.SelectedMessageChat, state.SelectedMessage = 9, 1 // prove menu identity wins
+		state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, CanReact: true, Capabilities: domain.MessageCapabilities{Copy: true}, PreviousFocus: FocusConversation}
+		return state
+	}
+	// updateState mutates in place, so each gating branch rebuilds the base.
+	opened := base()
+	commands := updateState(&opened, ActionReceived{Action: ReactMessage})
 	if len(commands) != 0 {
 		t.Fatalf("picker open commands = %d, want 0", len(commands))
 	}
@@ -1796,21 +1976,21 @@ func TestReactMenuActivationVerifiesIdentityAndOpensPicker(t *testing.T) {
 		t.Fatalf("picker = %#v", opened.ReactionPicker)
 	}
 
-	gated := state
+	gated := base()
 	gated.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, CanReact: false, Capabilities: domain.MessageCapabilities{Copy: true}, PreviousFocus: FocusConversation}
-	gated, _ = updateState(gated, ActionReceived{Action: ReactMessage})
+	updateState(&gated, ActionReceived{Action: ReactMessage})
 	if gated.ReactionPicker != nil {
 		t.Fatal("picker opened without local React capability")
 	}
-	loading := state
+	loading := base()
 	loading.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, CanReact: true, Loading: true, Capabilities: domain.MessageCapabilities{Copy: true}}
-	loading, _ = updateState(loading, ActionReceived{Action: ReactMessage})
+	updateState(&loading, ActionReceived{Action: ReactMessage})
 	if loading.ReactionPicker != nil {
 		t.Fatal("picker opened while menu loading")
 	}
-	missing := state
+	missing := base()
 	missing.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 99, CanReact: true, Capabilities: domain.MessageCapabilities{Copy: true}}
-	missing, _ = updateState(missing, ActionReceived{Action: ReactMessage})
+	updateState(&missing, ActionReceived{Action: ReactMessage})
 	if missing.ReactionPicker != nil {
 		t.Fatal("picker opened for a missing source identity")
 	}
@@ -1823,22 +2003,24 @@ func TestReactionPickerNavigationConfirmAndCancel(t *testing.T) {
 	state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText}}
 	state.ReactionPicker = &ReactionPicker{ChatID: 9, MessageID: 2, Selected: 0, RequestID: 42}
 
-	next, _ := updateState(state, ActionReceived{Action: SelectNext})
+	updateState(&state, ActionReceived{Action: SelectNext})
+	next := state
 	if next.ReactionPicker == nil || next.ReactionPicker.Selected != 1 {
 		t.Fatalf("SelectNext selected %d", next.ReactionPicker.Selected)
 	}
-	next, _ = updateState(next, ActionReceived{Action: SelectPrevious})
+	updateState(&next, ActionReceived{Action: SelectPrevious})
 	if next.ReactionPicker.Selected != 0 {
 		t.Fatalf("SelectPrevious selected %d", next.ReactionPicker.Selected)
 	}
 	for index := 0; index < len(ReactionPalette); index++ {
-		next, _ = updateState(next, ActionReceived{Action: SelectNext})
+		updateState(&next, ActionReceived{Action: SelectNext})
 	}
 	if next.ReactionPicker.Selected != 0 {
 		t.Fatalf("wrap-around selection = %d, want 0", next.ReactionPicker.Selected)
 	}
 
-	confirmed, commands := updateState(next, ActionReceived{Action: Activate})
+	commands := updateState(&next, ActionReceived{Action: Activate})
+	confirmed := next
 	if len(commands) != 1 {
 		t.Fatalf("confirm commands = %d, want 1", len(commands))
 	}
@@ -1853,7 +2035,8 @@ func TestReactionPickerNavigationConfirmAndCancel(t *testing.T) {
 		t.Fatal("picker closed before the result arrived")
 	}
 
-	cancelled, _ := updateState(state, ActionReceived{Action: Close})
+	updateState(&state, ActionReceived{Action: Close})
+	cancelled := state
 	if cancelled.ReactionPicker != nil || cancelled.Focus != FocusConversation {
 		t.Fatalf("cancel result = picker:%#v focus:%v", cancelled.ReactionPicker, cancelled.Focus)
 	}
@@ -1868,7 +2051,7 @@ func TestReactionPickerToggleAddVsRemoveFromChosen(t *testing.T) {
 	// Selected index 0 (👍) is already chosen -> removal.
 	state := base
 	state.ReactionPicker = &ReactionPicker{ChatID: 9, MessageID: 2, RequestID: 42, Selected: 0}
-	_, commands := updateState(state, ActionReceived{Action: Activate})
+	commands := updateState(&state, ActionReceived{Action: Activate})
 	removeCommand, ok := commands[0].(ReactToMessage)
 	if !ok {
 		t.Fatalf("command type = %T", commands[0])
@@ -1880,7 +2063,7 @@ func TestReactionPickerToggleAddVsRemoveFromChosen(t *testing.T) {
 	// different emoji (index 1) not chosen -> addition.
 	state = base
 	state.ReactionPicker = &ReactionPicker{ChatID: 9, MessageID: 2, RequestID: 43, Selected: 1}
-	_, commands = updateState(state, ActionReceived{Action: Activate})
+	commands = updateState(&state, ActionReceived{Action: Activate})
 	addCommand := commands[0].(ReactToMessage)
 	if addCommand.Remove || addCommand.Emoji != ReactionPalette[1] {
 		t.Fatalf("unchosen command = %#v (want add %q)", addCommand, ReactionPalette[1])
@@ -1890,7 +2073,7 @@ func TestReactionPickerToggleAddVsRemoveFromChosen(t *testing.T) {
 	chosenOther := base
 	chosenOther.Messages[9][0].Reactions = []domain.MessageReaction{{Emoji: ReactionPalette[2], Count: 1, Chosen: true}}
 	chosenOther.ReactionPicker = &ReactionPicker{ChatID: 9, MessageID: 2, RequestID: 44, Selected: 1}
-	_, commands = updateState(chosenOther, ActionReceived{Action: Activate})
+	commands = updateState(&chosenOther, ActionReceived{Action: Activate})
 	otherAdd := commands[0].(ReactToMessage)
 	if otherAdd.Remove || otherAdd.Emoji != ReactionPalette[1] {
 		t.Fatalf("unselected chosen emoji made add into remove: %#v", otherAdd)
@@ -1900,7 +2083,7 @@ func TestReactionPickerToggleAddVsRemoveFromChosen(t *testing.T) {
 	chosenFalse := base
 	chosenFalse.Messages[9][0].Reactions = []domain.MessageReaction{{Emoji: ReactionPalette[0], Count: 1, Chosen: false}}
 	chosenFalse.ReactionPicker = &ReactionPicker{ChatID: 9, MessageID: 2, RequestID: 45, Selected: 0}
-	_, commands = updateState(chosenFalse, ActionReceived{Action: Activate})
+	commands = updateState(&chosenFalse, ActionReceived{Action: Activate})
 	falseAdd := commands[0].(ReactToMessage)
 	if falseAdd.Remove || falseAdd.Emoji != ReactionPalette[0] {
 		t.Fatalf("unchosen present emoji made add into remove: %#v", falseAdd)
@@ -1914,7 +2097,8 @@ func TestReactionPickerIdentityIsExactAndCommandUsesSavedIdentity(t *testing.T) 
 	state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText}}
 	state.ReactionPicker = &ReactionPicker{ChatID: 9, MessageID: 2, RequestID: 42}
 
-	confirmed, commands := updateState(state, ActionReceived{Action: Activate})
+	commands := updateState(&state, ActionReceived{Action: Activate})
+	confirmed := state
 	command := commands[0].(ReactToMessage)
 	if len(confirmed.Messages[9]) != 1 || command.ChatID != 9 || command.MessageID != 2 || command.RequestID != 42 {
 		t.Fatalf("picker identity not preserved: %#v", commands[0])
@@ -1929,7 +2113,8 @@ func TestReactionSuccessClosesPickerShowsConstantToastWithoutOptimisticMutation(
 	state.Messages[9] = append([]domain.Message(nil), base...)
 	state.ReactionPicker = &ReactionPicker{ChatID: 9, MessageID: 2, RequestID: 5}
 
-	added, _ := updateState(state, ReactionChanged{RequestID: 5, ChatID: 9, MessageID: 2, Emoji: "👍", Removed: false})
+	updateState(&state, ReactionChanged{RequestID: 5, ChatID: 9, MessageID: 2, Emoji: "👍", Removed: false})
+	added := state
 	if added.ReactionPicker != nil || added.Focus != FocusConversation {
 		t.Fatalf("success focus = picker:%#v focus:%v", added.ReactionPicker, added.Focus)
 	}
@@ -1942,7 +2127,8 @@ func TestReactionSuccessClosesPickerShowsConstantToastWithoutOptimisticMutation(
 
 	removedState := state
 	removedState.ReactionPicker = &ReactionPicker{ChatID: 9, MessageID: 2, RequestID: 6}
-	removed, _ := updateState(removedState, ReactionChanged{RequestID: 6, ChatID: 9, MessageID: 2, Emoji: "👍", Removed: true})
+	updateState(&removedState, ReactionChanged{RequestID: 6, ChatID: 9, MessageID: 2, Emoji: "👍", Removed: true})
+	removed := removedState
 	if removed.Toast == nil || removed.Toast.Message != "Reaction removed" {
 		t.Fatalf("remove toast = %#v", removed.Toast)
 	}
@@ -1954,7 +2140,8 @@ func TestReactionFailureShowsConstantToastNoCauseAndClosesPicker(t *testing.T) {
 	state.Chats = []domain.Chat{{ID: 9}}
 	state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "secret-body"}}
 	state.ReactionPicker = &ReactionPicker{ChatID: 9, MessageID: 2, RequestID: 5}
-	failed, _ := updateState(state, ReactionFailed{RequestID: 5, ChatID: 9, MessageID: 2, Error: domain.AppError{Message: "secret-body 9 2"}})
+	updateState(&state, ReactionFailed{RequestID: 5, ChatID: 9, MessageID: 2, Error: domain.AppError{Message: "secret-body 9 2"}})
+	failed := state
 	if failed.ReactionPicker != nil || failed.Focus != FocusConversation {
 		t.Fatalf("failure focus = picker:%#v focus:%v", failed.ReactionPicker, failed.Focus)
 	}
@@ -1973,40 +2160,51 @@ func TestReactionEventsIgnoreStaleAndIdentityMismatch(t *testing.T) {
 	state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText}}
 	state.ReactionPicker = &ReactionPicker{ChatID: 9, MessageID: 2, RequestID: 42}
 
-	stale, _ := updateState(state, ReactionChanged{RequestID: 41, ChatID: 9, MessageID: 2, Emoji: "👍"})
+	updateState(&state, ReactionChanged{RequestID: 41, ChatID: 9, MessageID: 2, Emoji: "👍"})
+	stale := state
 	if stale.ReactionPicker == nil || stale.Toast != nil {
 		t.Fatal("stale success applied")
 	}
-	wrongChat, _ := updateState(state, ReactionFailed{RequestID: 42, ChatID: 10, MessageID: 2, Error: domain.AppError{Message: "raw"}})
+	updateState(&state, ReactionFailed{RequestID: 42, ChatID: 10, MessageID: 2, Error: domain.AppError{Message: "raw"}})
+	wrongChat := state
 	if wrongChat.ReactionPicker == nil || wrongChat.Toast != nil {
 		t.Fatal("identity-mismatched failure applied")
 	}
-	wrongMessage, _ := updateState(state, ReactionChanged{RequestID: 42, ChatID: 9, MessageID: 3, Emoji: "👍"})
+	updateState(&state, ReactionChanged{RequestID: 42, ChatID: 9, MessageID: 3, Emoji: "👍"})
+	wrongMessage := state
 	if wrongMessage.ReactionPicker == nil || wrongMessage.Toast != nil {
 		t.Fatal("identity-mismatched success applied")
 	}
-	closed, _ := updateState(state, ActionReceived{Action: Close})
-	late, _ := updateState(closed, ReactionChanged{RequestID: 42, ChatID: 9, MessageID: 2, Emoji: "👍"})
+	updateState(&state, ActionReceived{Action: Close})
+	closed := state
+	updateState(&closed, ReactionChanged{RequestID: 42, ChatID: 9, MessageID: 2, Emoji: "👍"})
+	late := closed
 	if late.Toast != nil {
 		t.Fatal("late success applied after picker closed")
 	}
 }
 
 func TestUpdateMessageReactionsReconcilesInPlaceAndIgnoresUnknownIdentity(t *testing.T) {
-	state := InitialState()
-	state.Chats = []domain.Chat{{ID: 9}}
-	state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText}}
+	fixture := func() State {
+		state := InitialState()
+		state.Chats = []domain.Chat{{ID: 9}}
+		state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText}}
+		return state
+	}
 	reactions := []domain.MessageReaction{{Emoji: "👍", Count: 3, Chosen: true}, {Emoji: "❤️", Count: 1, Chosen: false}}
-	got, _ := updateState(state, TelegramEvent{Value: telegram.MessageReactionsUpdated{ChatID: 9, MessageID: 2, Reactions: reactions}})
+	got := fixture()
+	updateState(&got, TelegramEvent{Value: telegram.MessageReactionsUpdated{ChatID: 9, MessageID: 2, Reactions: reactions}})
 	if !reflect.DeepEqual(got.Messages[9][0].Reactions, reactions) {
 		t.Fatalf("reactions = %#v, want %#v", got.Messages[9][0].Reactions, reactions)
 	}
-	got, _ = updateState(state, TelegramEvent{Value: &telegram.MessageReactionsUpdated{ChatID: 9, MessageID: 2, Reactions: reactions}})
-	if !reflect.DeepEqual(got.Messages[9][0].Reactions, reactions) {
+	pointer := fixture()
+	updateState(&pointer, TelegramEvent{Value: &telegram.MessageReactionsUpdated{ChatID: 9, MessageID: 2, Reactions: reactions}})
+	if !reflect.DeepEqual(pointer.Messages[9][0].Reactions, reactions) {
 		t.Fatal("pointer reactions update not normalized")
 	}
-	got, _ = updateState(state, TelegramEvent{Value: telegram.MessageReactionsUpdated{ChatID: 9, MessageID: 99, Reactions: reactions}})
-	if len(got.Messages[9][0].Reactions) != 0 {
+	unknown := fixture()
+	updateState(&unknown, TelegramEvent{Value: telegram.MessageReactionsUpdated{ChatID: 9, MessageID: 99, Reactions: reactions}})
+	if len(unknown.Messages[9][0].Reactions) != 0 {
 		t.Fatal("unknown identity reactions applied")
 	}
 }
@@ -2016,18 +2214,20 @@ func TestMessageReactionsSurviveReUpsertWithEmptySnapshot(t *testing.T) {
 	state.Chats = []domain.Chat{{ID: 9}}
 	state.Messages[9] = []domain.Message{{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "opaque-body"}}
 
-	live, _ := updateState(state, TelegramEvent{Value: telegram.MessageReactionsUpdated{
+	updateState(&state, TelegramEvent{Value: telegram.MessageReactionsUpdated{
 		ChatID:    9,
 		MessageID: 2,
 		Reactions: []domain.MessageReaction{{Emoji: "👍", Count: 3, Chosen: true}},
 	}})
+	live := state
 	if len(live.Messages[9][0].Reactions) != 1 {
 		t.Fatalf("live reaction count = %d, want 1", len(live.Messages[9][0].Reactions))
 	}
 
-	reupserted, _ := updateState(live, TelegramEvent{Value: telegram.MessageUpserted{
+	updateState(&live, TelegramEvent{Value: telegram.MessageUpserted{
 		Message: domain.Message{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "opaque-body"},
 	}})
+	reupserted := live
 	if len(reupserted.Messages[9][0].Reactions) != 1 {
 		t.Fatal("same-ID re-upsert dropped live-updated reactions")
 	}
@@ -2079,7 +2279,7 @@ func TestReducerReplacesAndClearsMessageMediaOnContentUpdate(t *testing.T) {
 
 	// Apply document content update.
 	var commands []Effect
-	state, commands = updateState(state, TelegramEvent{Value: telegram.MessageContentUpdated{
+	commands = updateState(&state, TelegramEvent{Value: telegram.MessageContentUpdated{
 		ChatID:    9,
 		MessageID: 10,
 		Kind:      domain.MessageDocument,
@@ -2171,7 +2371,7 @@ func TestReducerReplacesAndClearsMessageMediaOnContentUpdate(t *testing.T) {
 	}
 
 	// Apply text replacement — should clear FileName and Media.
-	state, commands = updateState(state, TelegramEvent{Value: telegram.MessageContentUpdated{
+	commands = updateState(&state, TelegramEvent{Value: telegram.MessageContentUpdated{
 		ChatID:    9,
 		MessageID: 10,
 		Kind:      domain.MessageText,
@@ -2286,7 +2486,8 @@ func TestMediaModalOpensWithDownloadCommandAndSelectionReset(t *testing.T) {
 		MediaFile:     domain.MediaFileRef{ID: 101, CanDownload: true},
 		PreviousFocus: FocusConversation,
 	}
-	open, commands := updateState(state, ActionReceived{Action: ViewMessageMedia})
+	commands := updateState(&state, ActionReceived{Action: ViewMessageMedia})
+	open := state
 	if open.MessageMenu != nil {
 		t.Fatal("action-menu was not cleared")
 	}
@@ -2319,7 +2520,8 @@ func TestMediaModalOpensImmediatelyWhenAlreadyDownloaded(t *testing.T) {
 		PreviousFocus: FocusDetails,
 	}
 	state.Modal = nil
-	open, commands := updateState(state, ActionReceived{Action: ViewMessageMedia})
+	commands := updateState(&state, ActionReceived{Action: ViewMessageMedia})
+	open := state
 	if open.MessageMenu != nil {
 		t.Fatal("action-menu was not cleared")
 	}
@@ -2349,11 +2551,13 @@ func TestMediaModalRetryReusesDownloadMediaCommand(t *testing.T) {
 		PreviousFocus: FocusConversation,
 	}
 	failure := domain.AppError{Kind: domain.ErrorNetwork, Message: "offline"}
-	failed, _ := updateState(state, MessageMediaOpenFailed{RequestID: 20, ChatID: 9, MessageID: 2, Error: failure})
+	updateState(&state, MessageMediaOpenFailed{RequestID: 20, ChatID: 9, MessageID: 2, Error: failure})
+	failed := state
 	if failed.Modal.Loading || failed.Modal.Error == nil {
 		t.Fatalf("failed modal = %#v", failed.Modal)
 	}
-	retried, commands := updateState(failed, ActionReceived{Action: Retry})
+	commands := updateState(&failed, ActionReceived{Action: Retry})
+	retried := failed
 	if retried.Modal.RequestID != 21 || !retried.Modal.Loading || retried.Modal.Error != nil {
 		t.Fatalf("retried modal = %#v", retried.Modal)
 	}
@@ -2370,7 +2574,8 @@ func TestMediaModalClosesAndRestoresFocus(t *testing.T) {
 	state := InitialState()
 	state.Focus = FocusModal
 	state.Modal = &ModalState{PreviousFocus: FocusDetails}
-	closed, _ := updateState(state, ActionReceived{Action: Close})
+	updateState(&state, ActionReceived{Action: Close})
+	closed := state
 	if closed.Modal != nil || closed.Focus != FocusDetails {
 		t.Fatalf("close result = focus:%v modal:%v", closed.Focus, closed.Modal)
 	}
@@ -2386,7 +2591,8 @@ func TestMediaModalIdentityMatchesAndRejectsStaleEvents(t *testing.T) {
 		MediaFile: domain.MediaFileRef{ID: 101},
 		Loading:   true, PreviousFocus: FocusConversation,
 	}
-	matched, _ := updateState(state, MessageMediaOpened{RequestID: 30, ChatID: 9, MessageID: 2, Title: "Photo", File: domain.MediaFileRef{ID: 101, Downloaded: true, LocalPath: "/tmp/101.jpg"}})
+	updateState(&state, MessageMediaOpened{RequestID: 30, ChatID: 9, MessageID: 2, Title: "Photo", File: domain.MediaFileRef{ID: 101, Downloaded: true, LocalPath: "/tmp/101.jpg"}})
+	matched := state
 	if matched.Modal.Loading || matched.Modal.Path != "/tmp/101.jpg" {
 		t.Fatalf("matched modal = %#v", matched.Modal)
 	}
@@ -2398,15 +2604,18 @@ func TestMediaModalIdentityMatchesAndRejectsStaleEvents(t *testing.T) {
 		MediaFile: domain.MediaFileRef{ID: 101},
 		Loading:   true, PreviousFocus: FocusConversation,
 	}
-	stale, _ := updateState(fresh, MessageMediaOpened{RequestID: 29, ChatID: 9, MessageID: 2, Title: "Photo", File: domain.MediaFileRef{ID: 101}})
+	updateState(&fresh, MessageMediaOpened{RequestID: 29, ChatID: 9, MessageID: 2, Title: "Photo", File: domain.MediaFileRef{ID: 101}})
+	stale := fresh
 	if !stale.Modal.Loading {
 		t.Fatal("stale event should not have matched")
 	}
-	wrongChat, _ := updateState(fresh, MessageMediaOpened{RequestID: 30, ChatID: 8, MessageID: 2, Title: "Photo", File: domain.MediaFileRef{ID: 101}})
+	updateState(&fresh, MessageMediaOpened{RequestID: 30, ChatID: 8, MessageID: 2, Title: "Photo", File: domain.MediaFileRef{ID: 101}})
+	wrongChat := fresh
 	if !wrongChat.Modal.Loading {
 		t.Fatal("wrong chat ID should not have matched")
 	}
-	wrongMessage, _ := updateState(fresh, MessageMediaOpened{RequestID: 30, ChatID: 9, MessageID: 3, Title: "Photo", File: domain.MediaFileRef{ID: 101}})
+	updateState(&fresh, MessageMediaOpened{RequestID: 30, ChatID: 9, MessageID: 3, Title: "Photo", File: domain.MediaFileRef{ID: 101}})
+	wrongMessage := fresh
 	if !wrongMessage.Modal.Loading {
 		t.Fatal("wrong message ID should not have matched")
 	}
@@ -2426,7 +2635,8 @@ func TestMediaModalSuccessUpdatesLocalMessagePath(t *testing.T) {
 		MediaFile: domain.MediaFileRef{ID: 101},
 		Loading:   true, PreviousFocus: FocusConversation,
 	}
-	updated, _ := updateState(state, MessageMediaOpened{RequestID: 40, ChatID: 9, MessageID: 2, Title: "Photo", File: domain.MediaFileRef{ID: 101, Downloaded: true, LocalPath: "/tmp/101.jpg"}})
+	updateState(&state, MessageMediaOpened{RequestID: 40, ChatID: 9, MessageID: 2, Title: "Photo", File: domain.MediaFileRef{ID: 101, Downloaded: true, LocalPath: "/tmp/101.jpg"}})
+	updated := state
 	if updated.Modal.Loading || updated.Modal.Path != "/tmp/101.jpg" {
 		t.Fatalf("modal = %#v", updated.Modal)
 	}
@@ -2451,7 +2661,8 @@ func TestMediaModalFailureDoesNotClearMessageMediaRef(t *testing.T) {
 		Loading:   true, PreviousFocus: FocusConversation,
 	}
 	failure := domain.AppError{Kind: domain.ErrorMedia, Message: "Could not open image"}
-	failed, _ := updateState(state, MessageMediaOpenFailed{RequestID: 50, ChatID: 9, MessageID: 2, Error: failure})
+	updateState(&state, MessageMediaOpenFailed{RequestID: 50, ChatID: 9, MessageID: 2, Error: failure})
+	failed := state
 	if failed.Modal.Loading || failed.Modal.Error == nil {
 		t.Fatalf("failed modal = %#v", failed.Modal)
 	}
@@ -2462,20 +2673,25 @@ func TestMediaModalFailureDoesNotClearMessageMediaRef(t *testing.T) {
 }
 
 func TestMediaModalMatchesOnUniqueIDWhenIDIsZero(t *testing.T) {
-	state := InitialState()
-	state.NextRequestID = 60
-	state.Focus = FocusModal
-	state.Modal = &ModalState{
-		RequestID: 60, Title: "Photo",
-		MediaChatID: 9, MediaMessageID: 2,
-		MediaFile: domain.MediaFileRef{ID: 0, UniqueID: "unique-101"},
-		Loading:   true, PreviousFocus: FocusConversation,
+	fixture := func() State {
+		state := InitialState()
+		state.NextRequestID = 60
+		state.Focus = FocusModal
+		state.Modal = &ModalState{
+			RequestID: 60, Title: "Photo",
+			MediaChatID: 9, MediaMessageID: 2,
+			MediaFile: domain.MediaFileRef{ID: 0, UniqueID: "unique-101"},
+			Loading:   true, PreviousFocus: FocusConversation,
+		}
+		return state
 	}
-	matched, _ := updateState(state, MessageMediaOpened{RequestID: 60, ChatID: 9, MessageID: 2, Title: "Photo", File: domain.MediaFileRef{ID: 0, UniqueID: "unique-101", Downloaded: true, LocalPath: "/tmp/101.jpg"}})
+	matched := fixture()
+	updateState(&matched, MessageMediaOpened{RequestID: 60, ChatID: 9, MessageID: 2, Title: "Photo", File: domain.MediaFileRef{ID: 0, UniqueID: "unique-101", Downloaded: true, LocalPath: "/tmp/101.jpg"}})
 	if matched.Modal.Loading || matched.Modal.Path != "/tmp/101.jpg" {
 		t.Fatalf("matched modal = %#v", matched.Modal)
 	}
-	stale, _ := updateState(state, MessageMediaOpened{RequestID: 60, ChatID: 9, MessageID: 2, Title: "Photo", File: domain.MediaFileRef{ID: 0, UniqueID: "unique-202"}})
+	stale := fixture()
+	updateState(&stale, MessageMediaOpened{RequestID: 60, ChatID: 9, MessageID: 2, Title: "Photo", File: domain.MediaFileRef{ID: 0, UniqueID: "unique-202"}})
 	if !stale.Modal.Loading {
 		t.Fatal("different unique ID cleared loading state")
 	}
@@ -2492,8 +2708,10 @@ func TestMediaModalRetryPreservesIdentityMatchOnUniqueID(t *testing.T) {
 		Loading:   true, Error: nil, PreviousFocus: FocusConversation,
 	}
 	failure := domain.AppError{Kind: domain.ErrorMedia, Message: "try again"}
-	failed, _ := updateState(state, MessageMediaOpenFailed{RequestID: 70, ChatID: 9, MessageID: 2, Error: failure})
-	retried, commands := updateState(failed, ActionReceived{Action: Retry})
+	updateState(&state, MessageMediaOpenFailed{RequestID: 70, ChatID: 9, MessageID: 2, Error: failure})
+	failed := state
+	commands := updateState(&failed, ActionReceived{Action: Retry})
+	retried := failed
 	if retried.Modal.RequestID != 71 || retried.Modal.Error != nil {
 		t.Fatalf("retried modal = %#v", retried.Modal)
 	}
@@ -2509,7 +2727,8 @@ func TestMediaModalRetryPreservesIdentityMatchOnUniqueID(t *testing.T) {
 func TestMediaModalSelectionResetsWhenMenuIsClosedViaClose(t *testing.T) {
 	state := InitialState()
 	state.MessageMenu = &MessageActionMenu{Selected: 1, MediaFile: domain.MediaFileRef{ID: 101}}
-	closed, _ := updateState(state, ActionReceived{Action: Close})
+	updateState(&state, ActionReceived{Action: Close})
+	closed := state
 	if closed.MessageMenu != nil {
 		t.Fatal("menu was not closed")
 	}
@@ -2520,7 +2739,8 @@ func TestMediaModalSelectionResetsWhenMenuIsClosedViaClose(t *testing.T) {
 	}}
 	state.MessageMenu = &MessageActionMenu{ChatID: 9, MessageID: 2, Selected: 0, MediaFile: domain.MediaFileRef{ID: 101, CanDownload: true}, PreviousFocus: FocusConversation}
 	state.NextRequestID = 80
-	open, commands := updateState(state, ActionReceived{Action: ViewMessageMedia})
+	commands := updateState(&state, ActionReceived{Action: ViewMessageMedia})
+	open := state
 	if open.MessageMenu != nil || len(commands) != 1 {
 		t.Fatalf("open result = menu:%v commands:%d", open.MessageMenu, len(commands))
 	}
@@ -2545,7 +2765,8 @@ func TestMediaModalMatchesRejectsWhenModalIsNil(t *testing.T) {
 	state := InitialState()
 	state.Focus = FocusModal
 	state.Modal = nil
-	matched, _ := updateState(state, MessageMediaOpened{RequestID: 90, ChatID: 9, MessageID: 2, Title: "Photo", File: domain.MediaFileRef{ID: 101}})
+	updateState(&state, MessageMediaOpened{RequestID: 90, ChatID: 9, MessageID: 2, Title: "Photo", File: domain.MediaFileRef{ID: 101}})
+	matched := state
 	if matched.Modal != nil {
 		t.Fatal("nil modal should not have changed")
 	}
@@ -2561,7 +2782,8 @@ func TestMediaModalIdentityMatchesRejectsWrongRequestID(t *testing.T) {
 		MediaFile: domain.MediaFileRef{ID: 101},
 		Loading:   true, PreviousFocus: FocusConversation,
 	}
-	result, _ := updateState(state, MessageMediaOpened{RequestID: 99, ChatID: 9, MessageID: 2, Title: "Photo", File: domain.MediaFileRef{ID: 101, Downloaded: true}})
+	updateState(&state, MessageMediaOpened{RequestID: 99, ChatID: 9, MessageID: 2, Title: "Photo", File: domain.MediaFileRef{ID: 101, Downloaded: true}})
+	result := state
 	if !result.Modal.Loading {
 		t.Fatal("wrong request ID should not match")
 	}
@@ -2621,7 +2843,8 @@ func TestMessagePhotoActionOpensReadyModalFromCompletedLocalFile(t *testing.T) {
 	}
 
 	state := buildReadyState()
-	opened, commands := updateState(state, ActionReceived{Action: ViewMessageMedia})
+	commands := updateState(&state, ActionReceived{Action: ViewMessageMedia})
+	opened := state
 
 	// A1: full-state no-op against independently built expected.
 	want := buildExpectedReady()
@@ -2706,7 +2929,8 @@ func TestMessagePhotoActionDownloadsAndUsesMenuOwnedIdentity(t *testing.T) {
 	}
 
 	state := buildDownloadMenuState()
-	opened, commands := updateState(state, ActionReceived{Action: ViewMessageMedia})
+	commands := updateState(&state, ActionReceived{Action: ViewMessageMedia})
+	opened := state
 	want := buildExpectedOpened()
 	if !reflect.DeepEqual(opened, want) {
 		t.Fatalf("opened = %#v, want %#v", opened, want)
@@ -2735,10 +2959,11 @@ func TestMessagePhotoActionDownloadsAndUsesMenuOwnedIdentity(t *testing.T) {
 	}
 
 	// A2 continued: Simulate success — proves menu identity, not mutable selection.
-	result, commands2 := updateState(opened, MessageMediaOpened{
+	commands2 := updateState(&opened, MessageMediaOpened{
 		RequestID: 10, ChatID: 9, MessageID: 2, Title: "Photo",
 		File: domain.MediaFileRef{ID: 101, Downloaded: true, LocalPath: "/tmp/photo.jpg"},
 	})
+	result := opened
 	if len(commands2) != 0 {
 		t.Fatalf("success should not emit commands, got %d", len(commands2))
 	}
@@ -2818,7 +3043,8 @@ func TestMessagePhotoActionDownloadsAndUsesMenuOwnedIdentity(t *testing.T) {
 		}
 		return state
 	}
-	no1, cmds1 := updateState(buildIdentityMismatchState(), ActionReceived{Action: ViewMessageMedia})
+	no1 := buildIdentityMismatchState()
+	cmds1 := updateState(&no1, ActionReceived{Action: ViewMessageMedia})
 	want1 := buildExpectedIdentityMismatch()
 	if !reflect.DeepEqual(no1, want1) {
 		t.Fatalf("identity mismatch = %#v, want %#v (no-op)", no1, want1)
@@ -2859,7 +3085,8 @@ func TestMessagePhotoActionDownloadsAndUsesMenuOwnedIdentity(t *testing.T) {
 		}
 		return state
 	}
-	no2, cmds2 := updateState(buildMissingState(), ActionReceived{Action: ViewMessageMedia})
+	no2 := buildMissingState()
+	cmds2 := updateState(&no2, ActionReceived{Action: ViewMessageMedia})
 	want2 := buildExpectedMissing()
 	if !reflect.DeepEqual(no2, want2) {
 		t.Fatalf("missing target = %#v, want %#v (no-op)", no2, want2)
@@ -2900,7 +3127,8 @@ func TestMessagePhotoActionDownloadsAndUsesMenuOwnedIdentity(t *testing.T) {
 		}
 		return state
 	}
-	no3, cmds3 := updateState(buildPhotoTextState(), ActionReceived{Action: ViewMessageMedia})
+	no3 := buildPhotoTextState()
+	cmds3 := updateState(&no3, ActionReceived{Action: ViewMessageMedia})
 	want3 := buildExpectedPhotoText()
 	if !reflect.DeepEqual(no3, want3) {
 		t.Fatalf("photo→text = %#v, want %#v (no-op)", no3, want3)
@@ -2961,7 +3189,8 @@ func TestMessagePhotoActionDownloadsAndUsesMenuOwnedIdentity(t *testing.T) {
 		}
 		return state
 	}
-	successResult, successCmds := updateState(buildSuccessState(), MessageMediaOpened{
+	successResult := buildSuccessState()
+	successCmds := updateState(&successResult, MessageMediaOpened{
 		RequestID: 400, ChatID: 9, MessageID: 2, Title: "Photo",
 		File: domain.MediaFileRef{ID: 101, Downloaded: true, LocalPath: "/tmp/photo.jpg"},
 	})
@@ -3009,7 +3238,8 @@ func TestMessagePhotoActionDownloadsAndUsesMenuOwnedIdentity(t *testing.T) {
 		}
 		return state
 	}
-	noInv1, invCmds1 := updateState(buildInvSuccess1(), MessageMediaOpened{
+	noInv1 := buildInvSuccess1()
+	invCmds1 := updateState(&noInv1, MessageMediaOpened{
 		RequestID: 500, ChatID: 9, MessageID: 2, Title: "Photo",
 		File: domain.MediaFileRef{ID: 101, Downloaded: false, LocalPath: "/tmp/not-complete.jpg"},
 	})
@@ -3054,7 +3284,8 @@ func TestMessagePhotoActionDownloadsAndUsesMenuOwnedIdentity(t *testing.T) {
 		}
 		return state
 	}
-	noInv2, invCmds2 := updateState(buildInvSuccess2(), MessageMediaOpened{
+	noInv2 := buildInvSuccess2()
+	invCmds2 := updateState(&noInv2, MessageMediaOpened{
 		RequestID: 501, ChatID: 9, MessageID: 2, Title: "Photo",
 		File: domain.MediaFileRef{ID: 101, Downloaded: true, LocalPath: ""},
 	})
@@ -3113,10 +3344,11 @@ func TestMessageMediaDownloadSuccessUpdatesOnlyMatchingAvailability(t *testing.T
 	}
 
 	state := buildSuccessState()
-	result, cmds := updateState(state, MessageMediaOpened{
+	cmds := updateState(&state, MessageMediaOpened{
 		RequestID: 110, ChatID: 9, MessageID: 2, Title: "Photo",
 		File: domain.MediaFileRef{ID: 101, Downloaded: true, LocalPath: "/tmp/photo.jpg"},
 	})
+	result := state
 	want := buildExpectedSuccess()
 	if !reflect.DeepEqual(result, want) {
 		t.Fatalf("result = %#v, want %#v", result, want)
@@ -3197,9 +3429,10 @@ func TestMessageMediaDownloadFailureRetryAndStaleResults(t *testing.T) {
 
 	state := buildFailureState()
 	failure := domain.AppError{Kind: domain.ErrorMedia, Message: "unavailable"}
-	failed, cmds := updateState(state, MessageMediaOpenFailed{
+	cmds := updateState(&state, MessageMediaOpenFailed{
 		RequestID: 120, ChatID: 9, MessageID: 2, Error: failure,
 	})
+	failed := state
 	want := buildExpectedFailure()
 	if !reflect.DeepEqual(failed, want) {
 		t.Fatalf("failure result = %#v, want %#v", failed, want)
@@ -3241,7 +3474,8 @@ func TestMessageMediaDownloadFailureRetryAndStaleResults(t *testing.T) {
 		return state
 	}
 
-	retried, retryCmds := updateState(buildRetryState(), ActionReceived{Action: Retry})
+	retried := buildRetryState()
+	retryCmds := updateState(&retried, ActionReceived{Action: Retry})
 	wantRetried := buildExpectedRetried()
 	if !reflect.DeepEqual(retried, wantRetried) {
 		t.Fatalf("retried = %#v, want %#v", retried, wantRetried)
@@ -3288,16 +3522,16 @@ func TestMessageMediaDownloadFailureRetryAndStaleResults(t *testing.T) {
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			want := cloneReducerState(retried)
-			got, cmds := updateState(retried, tc.event)
+			// Each stale success starts from a freshly built retried fixture;
+			// updateState mutates the state it is given.
+			got := buildExpectedRetried()
+			want := buildExpectedRetried()
+			cmds := updateState(&got, tc.event)
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("%s stale success = %#v, want unchanged retried %#v", tc.name, got, want)
 			}
 			if len(cmds) != 0 {
 				t.Fatalf("%s stale success commands = %#v, want none", tc.name, cmds)
-			}
-			if !reflect.DeepEqual(retried, want) {
-				t.Fatalf("%s stale success mutated input state = %#v, want %#v", tc.name, retried, want)
 			}
 		})
 	}
@@ -3339,17 +3573,14 @@ func TestMessageMediaDownloadFailureRetryAndStaleResults(t *testing.T) {
 		{name: "stale failure/wrong message", event: MessageMediaOpenFailed{RequestID: 120, ChatID: 9, MessageID: 3, Error: failureErr}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			input := buildStaleFailureState()
-			want := cloneReducerState(input)
-			got, cmds := updateState(input, tc.event)
+			got := buildStaleFailureState()
+			want := buildStaleFailureState()
+			cmds := updateState(&got, tc.event)
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("%s stale failure = %#v, want no-op %#v", tc.name, got, want)
 			}
 			if len(cmds) != 0 {
 				t.Fatalf("%s stale failure commands = %#v, want none", tc.name, cmds)
-			}
-			if !reflect.DeepEqual(input, want) {
-				t.Fatalf("%s stale failure mutated input state = %#v, want %#v", tc.name, input, want)
 			}
 		})
 	}
@@ -3391,7 +3622,8 @@ func TestPhotoSendOpenGuards(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			state := InitialState()
 			tc.configure(&state)
-			result, _ := updateState(state, ActionReceived{Action: OpenPhotoSend})
+			updateState(&state, ActionReceived{Action: OpenPhotoSend})
+			result := state
 			if tc.name == "valid" {
 				if result.PhotoSend == nil {
 					t.Fatal("open did not establish PhotoSend")
@@ -3420,18 +3652,21 @@ func TestPhotoSendInputCancelPreservesDraftReplyAndPendingLedger(t *testing.T) {
 	state.Drafts[9] = "draft content"
 	state.ReplyTarget = &ReplyTarget{ChatID: 9, MessageID: 5}
 	state.PhotoSendRequests = map[domain.MessageID]uint64{domain.MessageID(-7): 100}
-	state, _ = updateState(state, ActionReceived{Action: OpenPhotoSend})
-	entered, _ := updateState(state, ActionReceived{Action: NoAction, Rune: '界'})
-	entered, _ = updateState(entered, ActionReceived{Action: NoAction, Rune: '\r'})
-	entered, _ = updateState(entered, ActionReceived{Action: NoAction, Rune: '\n'})
+	updateState(&state, ActionReceived{Action: OpenPhotoSend})
+	updateState(&state, ActionReceived{Action: NoAction, Rune: '界'})
+	entered := state
+	updateState(&entered, ActionReceived{Action: NoAction, Rune: '\r'})
+	updateState(&entered, ActionReceived{Action: NoAction, Rune: '\n'})
 	if len(entered.PhotoSend.Input) != 1 || entered.PhotoSend.Input[0] != '界' {
 		t.Fatalf("input after unicode+CR/LF = %q", string(entered.PhotoSend.Input))
 	}
-	backed, _ := updateState(entered, ActionReceived{Action: ComposerBackspace})
+	updateState(&entered, ActionReceived{Action: ComposerBackspace})
+	backed := entered
 	if len(backed.PhotoSend.Input) != 0 {
 		t.Fatalf("backspace input = %q", string(backed.PhotoSend.Input))
 	}
-	closed, _ := updateState(backed, ActionReceived{Action: Close})
+	updateState(&backed, ActionReceived{Action: Close})
+	closed := backed
 	if closed.PhotoSend != nil {
 		t.Fatal("cancel did not close PhotoSend")
 	}
@@ -3459,9 +3694,10 @@ func TestPhotoSendSubmitExactOptimisticCommand(t *testing.T) {
 	state.ReplyTarget = &ReplyTarget{ChatID: 9, MessageID: 42}
 	state.Messages[9] = []domain.Message{{ID: 10, ChatID: 9, Kind: domain.MessageText}}
 	state.PhotoSendRequests = map[domain.MessageID]uint64{domain.MessageID(-99): 999}
-	state, _ = updateState(state, ActionReceived{Action: OpenPhotoSend})
+	updateState(&state, ActionReceived{Action: OpenPhotoSend})
 	state.PhotoSend.Input = []rune{' ', '/', 'p', 'a', 't', 'h', '/', 'p', 'i', 'c', '.', 'j', 'p', 'g'}
-	submitted, cmds := updateState(state, ActionReceived{Action: PhotoSendSubmit, At: now})
+	cmds := updateState(&state, ActionReceived{Action: PhotoSendSubmit, At: now})
+	submitted := state
 	if submitted.PhotoSend != nil {
 		t.Fatal("submit should close PhotoSend")
 	}
@@ -3514,10 +3750,10 @@ func TestPhotoSendSubmitExactOptimisticCommand(t *testing.T) {
 	stateNil.Connection = domain.ConnectionOnline
 	stateNil.Chats = []domain.Chat{{ID: 9, CanSend: true}}
 	stateNil.SelectedChat = 0
-	stateNil, _ = updateState(stateNil, ActionReceived{Action: OpenPhotoSend})
+	updateState(&stateNil, ActionReceived{Action: OpenPhotoSend})
 	stateNil.PhotoSend.Input = []rune{'/'}
 	stateNil.PhotoSendRequests = nil
-	_, _ = updateState(stateNil, ActionReceived{Action: PhotoSendSubmit})
+	updateState(&stateNil, ActionReceived{Action: PhotoSendSubmit})
 }
 
 func TestPhotoSendInvalidSubmitFullStateNoOp(t *testing.T) {
@@ -3529,21 +3765,19 @@ func TestPhotoSendInvalidSubmitFullStateNoOp(t *testing.T) {
 			s.Connection = domain.ConnectionOnline
 			s.Chats = []domain.Chat{{ID: 9, CanSend: true}}
 			s.SelectedChat = 0
-			updateState(*s, ActionReceived{Action: OpenPhotoSend})
+			updateState(s, ActionReceived{Action: OpenPhotoSend})
 		}},
 		{name: "active chat mismatch", configure: func(s *State) {
 			s.Connection = domain.ConnectionOnline
 			s.Chats = []domain.Chat{{ID: 9, CanSend: true}, {ID: 10, CanSend: true}}
 			s.SelectedChat = 1
-			result, _ := updateState(*s, ActionReceived{Action: OpenPhotoSend})
-			*s = result
+			updateState(s, ActionReceived{Action: OpenPhotoSend})
 		}},
 		{name: "offline", configure: func(s *State) {
 			s.Connection = domain.ConnectionOnline
 			s.Chats = []domain.Chat{{ID: 9, CanSend: true}}
 			s.SelectedChat = 0
-			result, _ := updateState(*s, ActionReceived{Action: OpenPhotoSend})
-			*s = result
+			updateState(s, ActionReceived{Action: OpenPhotoSend})
 			s.PhotoSend.Input = []rune{'/'}
 			s.Connection = domain.ConnectionOffline
 		}},
@@ -3551,8 +3785,7 @@ func TestPhotoSendInvalidSubmitFullStateNoOp(t *testing.T) {
 			s.Connection = domain.ConnectionOnline
 			s.Chats = []domain.Chat{{ID: 9, CanSend: true}}
 			s.SelectedChat = 0
-			result, _ := updateState(*s, ActionReceived{Action: OpenPhotoSend})
-			*s = result
+			updateState(s, ActionReceived{Action: OpenPhotoSend})
 			s.PhotoSend.Input = []rune{'/'}
 			s.Chats[0].CanSend = false
 		}},
@@ -3560,8 +3793,7 @@ func TestPhotoSendInvalidSubmitFullStateNoOp(t *testing.T) {
 			s.Connection = domain.ConnectionOnline
 			s.Chats = []domain.Chat{{ID: 9, CanSend: true}}
 			s.SelectedChat = 0
-			result, _ := updateState(*s, ActionReceived{Action: OpenPhotoSend})
-			*s = result
+			updateState(s, ActionReceived{Action: OpenPhotoSend})
 			s.PhotoSend.Input = []rune{'/'}
 			s.EditTarget = &EditTarget{ChatID: 9, MessageID: 1, Original: "o", Buffer: "b"}
 		}},
@@ -3571,10 +3803,11 @@ func TestPhotoSendInvalidSubmitFullStateNoOp(t *testing.T) {
 			state := InitialState()
 			state.PhotoSendRequests = map[domain.MessageID]uint64{domain.MessageID(-7): 100}
 			tc.configure(&state)
-			before := reflect.DeepEqual(state.PhotoSend, state.PhotoSend)
-			_ = before
-			result, cmds := updateState(state, ActionReceived{Action: PhotoSendSubmit})
-			if !reflect.DeepEqual(result, state) || len(cmds) != 0 {
+			unchanged := InitialState()
+			unchanged.PhotoSendRequests = map[domain.MessageID]uint64{domain.MessageID(-7): 100}
+			tc.configure(&unchanged)
+			cmds := updateState(&state, ActionReceived{Action: PhotoSendSubmit})
+			if !reflect.DeepEqual(state, unchanged) || len(cmds) != 0 {
 				t.Fatalf("invalid submit mutated state")
 			}
 		})
@@ -3603,7 +3836,8 @@ func TestPhotoSendQueuedCorrelationAndSourceFallback(t *testing.T) {
 		ID: 500, ChatID: 9, Kind: domain.MessagePhoto, Outgoing: true,
 		SendState: domain.SendSucceeded, Text: "",
 	}
-	got, _ := updateState(state, PhotoQueued{RequestID: 100, LocalID: localID, ChatID: 9, Message: queued})
+	updateState(&state, PhotoQueued{RequestID: 100, LocalID: localID, ChatID: 9, Message: queued})
+	got := state
 	if got.PhotoSend != nil || got.PhotoSendRequests == nil {
 		t.Fatal("PhotoSend should be nil")
 	}
@@ -3641,7 +3875,8 @@ func TestPhotoSendQueuedCorrelationAndSourceFallback(t *testing.T) {
 		ID: 600, ChatID: 9, Kind: domain.MessagePhoto,
 		Media: domain.MessageMedia{File: domain.MediaFileRef{LocalPath: "/tdlib/photo.jpg", Downloaded: true}},
 	}
-	got2, _ := updateState(state2, PhotoQueued{RequestID: 1, LocalID: localID, ChatID: 9, Message: queued2})
+	updateState(&state2, PhotoQueued{RequestID: 1, LocalID: localID, ChatID: 9, Message: queued2})
+	got2 := state2
 	msg2 := got2.Messages[9][0]
 	if msg2.Media.File.LocalPath != "/tdlib/photo.jpg" {
 		t.Fatalf("path not preserved: %q", msg2.Media.File.LocalPath)
@@ -3673,9 +3908,12 @@ func TestPhotoSendQueuedInvalidEventsFullStateNoOp(t *testing.T) {
 			if tc.setup != nil {
 				tc.setup(&state)
 			}
-			result, cmds := updateState(state, tc.event)
-			if !reflect.DeepEqual(result, state) || len(cmds) != 0 {
-				t.Fatalf("invalid event mutated state")
+			ledger := state.PhotoSendRequests[localID]
+			ledgerCount := len(state.PhotoSendRequests)
+			messages := append([]domain.Message(nil), state.Messages[9]...)
+			cmds := updateState(&state, tc.event)
+			if len(cmds) != 0 || len(state.PhotoSendRequests) != ledgerCount || state.PhotoSendRequests[localID] != ledger || !reflect.DeepEqual(state.Messages[9], messages) || state.NextRequestID != 1 {
+				t.Fatalf("%s accepted invalid queue result: messages=%#v ledger=%#v effects=%#v", tc.name, state.Messages[9], state.PhotoSendRequests, cmds)
 			}
 		})
 	}
@@ -3688,7 +3926,8 @@ func TestPhotoSendQueueFailureCorrelation(t *testing.T) {
 	state.Messages[9] = []domain.Message{{ID: localID, Kind: domain.MessagePhoto, SendState: domain.SendPending}}
 	state.PhotoSendRequests = map[domain.MessageID]uint64{localID: 100}
 	failure := domain.AppError{Kind: domain.ErrorNetwork, Message: "network", RetryAfter: 10 * time.Second}
-	failed, _ := updateState(state, PhotoQueueFailed{RequestID: 100, LocalID: localID, ChatID: 9, Error: failure, FailedAt: now})
+	updateState(&state, PhotoQueueFailed{RequestID: 100, LocalID: localID, ChatID: 9, Error: failure, FailedAt: now})
+	failed := state
 	msg := failed.Messages[9][0]
 	if msg.SendState != domain.SendFailed || msg.Failure == nil || msg.Failure.Kind != domain.ErrorNetwork {
 		t.Fatalf("failure state = %#v", msg.Failure)
@@ -3703,9 +3942,9 @@ func TestPhotoSendQueueFailureCorrelation(t *testing.T) {
 	state2 := InitialState()
 	state2.Messages[9] = []domain.Message{{ID: 1, Kind: domain.MessagePhoto}}
 	state2.PhotoSendRequests = map[domain.MessageID]uint64{domain.MessageID(-7): 100}
-	stale, _ := updateState(state2, PhotoQueueFailed{RequestID: 99, LocalID: domain.MessageID(-8), ChatID: 9, Error: failure, FailedAt: now})
-	if !reflect.DeepEqual(stale, state2) {
-		t.Fatal("stale failure mutated state")
+	staleCommands := updateState(&state2, PhotoQueueFailed{RequestID: 99, LocalID: domain.MessageID(-8), ChatID: 9, Error: failure, FailedAt: now})
+	if len(staleCommands) != 0 || state2.Messages[9][0].SendState != 0 || state2.Messages[9][0].Failure != nil || state2.PhotoSendRequests[-7] != 100 {
+		t.Fatalf("stale failure changed queued state: messages=%#v ledger=%#v effects=%#v", state2.Messages[9], state2.PhotoSendRequests, staleCommands)
 	}
 }
 
@@ -3725,7 +3964,8 @@ func TestRetryMessagePhotoExactAndInvalidFullStateNoOp(t *testing.T) {
 		RetryAt: now.Add(-1 * time.Hour),
 	}}
 	state.PhotoSendRequests = map[domain.MessageID]uint64{}
-	got, cmds := updateState(state, ActionReceived{Action: Retry, MessageID: -5, At: now})
+	cmds := updateState(&state, ActionReceived{Action: Retry, MessageID: -5, At: now})
+	got := state
 	if len(cmds) != 1 {
 		t.Fatalf("cmds = %d", len(cmds))
 	}
@@ -3759,9 +3999,9 @@ func TestRetryMessagePhotoExactAndInvalidFullStateNoOp(t *testing.T) {
 		RetryAt: now.Add(-1 * time.Hour),
 	}}
 	state2.PhotoSendRequests = map[domain.MessageID]uint64{}
-	result, cmds2 := updateState(state2, ActionReceived{Action: Retry, MessageID: -5, At: now})
-	if !reflect.DeepEqual(result, state2) || len(cmds2) != 0 {
-		t.Fatal("missing path retry mutated state")
+	cmds2 := updateState(&state2, ActionReceived{Action: Retry, MessageID: -5, At: now})
+	if len(cmds2) != 0 || state2.Messages[9][0].SendState != domain.SendFailed || !state2.Messages[9][0].RetryAt.Equal(now.Add(-time.Hour)) || len(state2.PhotoSendRequests) != 0 || state2.NextRequestID != 1 {
+		t.Fatalf("missing path retry changed message or ledger: message=%#v ledger=%#v effects=%#v", state2.Messages[9][0], state2.PhotoSendRequests, cmds2)
 	}
 }
 
@@ -3779,7 +4019,8 @@ func TestTextRetryRegressionAfterPhotoSupport(t *testing.T) {
 		RetryAt: now.Add(-1 * time.Hour),
 	}}
 	state.PhotoSendRequests = map[domain.MessageID]uint64{domain.MessageID(-99): 999}
-	got, cmds := updateState(state, ActionReceived{Action: Retry, MessageID: -1, At: now})
+	cmds := updateState(&state, ActionReceived{Action: Retry, MessageID: -1, At: now})
+	got := state
 	if len(cmds) != 1 {
 		t.Fatalf("cmds = %d", len(cmds))
 	}
@@ -3808,10 +4049,11 @@ func TestPhotoSendTerminalReconciliationPreservesCaptionReplyAndSource(t *testin
 		SentAt: now,
 		Media:  domain.MessageMedia{File: domain.MediaFileRef{LocalPath: "/local/photo.jpg", Downloaded: true}},
 	}}
-	result, _ := updateState(state, TelegramEvent{Value: telegram.MessageSendSucceeded{
+	updateState(&state, TelegramEvent{Value: telegram.MessageSendSucceeded{
 		OldID:   -3,
 		Message: domain.Message{ID: 100, ChatID: 9, Kind: domain.MessagePhoto, SendState: domain.SendSucceeded},
 	}})
+	result := state
 	msg := result.Messages[9][0]
 	if msg.Text != "original-caption" {
 		t.Fatalf("caption lost: %q", msg.Text)
@@ -3826,11 +4068,12 @@ func TestPhotoSendTerminalReconciliationPreservesCaptionReplyAndSource(t *testin
 		Outgoing: true, SendState: domain.SendFailed,
 		Media: domain.MessageMedia{File: domain.MediaFileRef{LocalPath: "", Downloaded: false}},
 	}}
-	result2, _ := updateState(state2, TelegramEvent{Value: telegram.MessageSendSucceeded{
+	updateState(&state2, TelegramEvent{Value: telegram.MessageSendSucceeded{
 		OldID: -4,
 		Message: domain.Message{ID: 101, ChatID: 9, Kind: domain.MessagePhoto,
 			Media: domain.MessageMedia{File: domain.MediaFileRef{LocalPath: "/tdlib/photo.jpg", Downloaded: true}},
 		}}})
+	result2 := state2
 	msg2 := result2.Messages[9][0]
 	if msg2.Media.File.LocalPath != "/tdlib/photo.jpg" {
 		t.Fatalf("TDLib path not preserved: %q", msg2.Media.File.LocalPath)
@@ -3846,44 +4089,18 @@ func TestPhotoSendTerminalReconciliationPreservesCaptionReplyAndSource(t *testin
 		Media: domain.MessageMedia{File: domain.MediaFileRef{LocalPath: "/local/fail.jpg", Downloaded: true}},
 	}}
 	failure := domain.AppError{Kind: domain.ErrorNetwork, Message: "timeout", RetryAfter: 30 * time.Second}
-	result3, _ := updateState(state3, TelegramEvent{Value: telegram.MessageSendFailed{
+	updateState(&state3, TelegramEvent{Value: telegram.MessageSendFailed{
 		OldID:   -5,
 		Message: domain.Message{Kind: domain.MessagePhoto},
 		Error:   failure,
 	}})
+	result3 := state3
 	msg3 := result3.Messages[9][0]
 	if msg3.Text != "fail-caption" {
 		t.Fatalf("caption lost on fail: %q", msg3.Text)
 	}
 	if msg3.Media.File.LocalPath != "/local/fail.jpg" || !msg3.Media.File.Downloaded {
 		t.Fatalf("source media lost on fail: %#v", msg3.Media.File)
-	}
-}
-
-func TestPhotoSendCloneDoesNotAliasInputOrLedger(t *testing.T) {
-	state := InitialState()
-	state.Connection = domain.ConnectionOnline
-	state.Chats = []domain.Chat{{ID: 9, CanSend: true}}
-	state.SelectedChat = 0
-	state.Messages[9] = []domain.Message{{ID: -1, ChatID: 9, Kind: domain.MessagePhoto}}
-	state.PhotoSendRequests = map[domain.MessageID]uint64{domain.MessageID(-7): 100}
-	state, _ = updateState(state, ActionReceived{Action: OpenPhotoSend})
-	state.PhotoSend.Input = []rune{'a', 'b', 'c'}
-	state.PhotoSendRequests[domain.MessageID(-8)] = 200
-	clone := cloneReducerState(state)
-	// Mutate original.
-	state.PhotoSend.Input[0] = 'X'
-	state.PhotoSendRequests[domain.MessageID(-7)] = 999
-	state.PhotoSendRequests[domain.MessageID(-9)] = 300
-	// Clone should be unchanged.
-	if clone.PhotoSend.Input[0] != 'a' {
-		t.Fatalf("input aliased: %q", string(clone.PhotoSend.Input))
-	}
-	if clone.PhotoSendRequests[domain.MessageID(-7)] != 100 {
-		t.Fatalf("ledger aliased: %v", clone.PhotoSendRequests)
-	}
-	if len(clone.PhotoSendRequests) != 2 {
-		t.Fatalf("ledger count = %d", len(clone.PhotoSendRequests))
 	}
 }
 
@@ -3897,7 +4114,8 @@ func TestThumbnailAutoDownloadTrigger(t *testing.T) {
 		SentAt: time.Unix(200, 0),
 		Media:  domain.MessageMedia{Thumbnail: domain.MediaFileRef{ID: 7, UniqueID: "thumb", CanDownload: true, Downloaded: false}},
 	}
-	got, commands := updateState(state, TelegramEvent{Value: telegram.MessageUpserted{Message: message}, ReceivedAt: time.Unix(300, 0)})
+	commands := updateState(&state, TelegramEvent{Value: telegram.MessageUpserted{Message: message}, ReceivedAt: time.Unix(300, 0)})
+	got := state
 	assertCommands(t, commands, []Effect{DownloadThumbnail{RequestID: 1, ChatID: 9, MessageID: 2, File: domain.MediaFileRef{ID: 7, UniqueID: "thumb", CanDownload: true, Downloaded: false}}})
 	msg := got.Messages[9][0]
 	if msg.Kind != domain.MessagePhoto {
@@ -3918,7 +4136,8 @@ func TestThumbnailDispatchWhenAlreadyDownloadedNotRendered(t *testing.T) {
 		SentAt: time.Unix(200, 0),
 		Media:  domain.MessageMedia{Thumbnail: domain.MediaFileRef{ID: 7, CanDownload: true, Downloaded: true, LocalPath: "/tmp/thumb.jpg"}},
 	}
-	got, commands := updateState(state, TelegramEvent{Value: telegram.MessageUpserted{Message: message}, ReceivedAt: time.Unix(300, 0)})
+	commands := updateState(&state, TelegramEvent{Value: telegram.MessageUpserted{Message: message}, ReceivedAt: time.Unix(300, 0)})
+	got := state
 	// A pre-downloaded thumbnail still needs to be rendered; the handler
 	// short-circuits the download and renders the cached file.
 	assertCommands(t, commands, []Effect{DownloadThumbnail{RequestID: 1, ChatID: 9, MessageID: 2, File: domain.MediaFileRef{ID: 7, CanDownload: true, Downloaded: true, LocalPath: "/tmp/thumb.jpg"}}})
@@ -3941,7 +4160,7 @@ func TestThumbnailNoDispatchWhenAlreadyRendered(t *testing.T) {
 		SentAt: time.Unix(200, 0),
 		Media:  domain.MessageMedia{Thumbnail: domain.MediaFileRef{ID: 7, CanDownload: true, Downloaded: false}},
 	}
-	_, commands := updateState(state, TelegramEvent{Value: telegram.MessageUpserted{Message: message}, ReceivedAt: time.Unix(300, 0)})
+	commands := updateState(&state, TelegramEvent{Value: telegram.MessageUpserted{Message: message}, ReceivedAt: time.Unix(300, 0)})
 	assertCommands(t, commands, []Effect{})
 }
 
@@ -3959,7 +4178,7 @@ func TestThumbnailDownloadForAttachments(t *testing.T) {
 			SentAt: time.Unix(200, 0),
 			Media:  domain.MessageMedia{Thumbnail: thumb},
 		}
-		_, commands := updateState(state, TelegramEvent{Value: telegram.MessageUpserted{Message: message}, ReceivedAt: time.Unix(300, 0)})
+		commands := updateState(&state, TelegramEvent{Value: telegram.MessageUpserted{Message: message}, ReceivedAt: time.Unix(300, 0)})
 		if len(commands) != want {
 			t.Fatalf("kind=%v commands = %#v, want %d", kind, commands, want)
 		}
@@ -3987,7 +4206,8 @@ func TestThumbnailDownloadedUpdatesMessage(t *testing.T) {
 		ID: 2, ChatID: 9, Kind: domain.MessagePhoto, SentAt: time.Unix(200, 0),
 		Media: domain.MessageMedia{Thumbnail: domain.MediaFileRef{ID: 7, CanDownload: true, Downloaded: false}},
 	}}
-	updated, commands := updateState(state, ThumbnailDownloaded{RequestID: 1, ChatID: 9, MessageID: 2, File: domain.MediaFileRef{ID: 7, CanDownload: true, Downloaded: true, LocalPath: "/tmp/thumb-dl.jpg"}})
+	commands := updateState(&state, ThumbnailDownloaded{RequestID: 1, ChatID: 9, MessageID: 2, File: domain.MediaFileRef{ID: 7, CanDownload: true, Downloaded: true, LocalPath: "/tmp/thumb-dl.jpg"}})
+	updated := state
 	if len(commands) != 0 {
 		t.Fatalf("commands = %#v, want none", commands)
 	}
@@ -4006,7 +4226,8 @@ func TestThumbnailDownloadFailedIsSilent(t *testing.T) {
 		ID: 2, ChatID: 9, Kind: domain.MessagePhoto, SentAt: time.Unix(200, 0),
 		Media: domain.MessageMedia{Thumbnail: domain.MediaFileRef{ID: 7, CanDownload: true, Downloaded: false}},
 	}}
-	updated, commands := updateState(state, ThumbnailDownloadFailed{RequestID: 1, ChatID: 9, MessageID: 2, Error: domain.AppError{Kind: domain.ErrorInternal, Op: "download thumbnail", Message: "failed"}})
+	commands := updateState(&state, ThumbnailDownloadFailed{RequestID: 1, ChatID: 9, MessageID: 2, Error: domain.AppError{Kind: domain.ErrorInternal, Op: "download thumbnail", Message: "failed"}})
+	updated := state
 	if len(commands) != 0 {
 		t.Fatalf("commands = %#v, want none", commands)
 	}
@@ -4025,11 +4246,12 @@ func TestMessageContentUpdatedPreservesDownloadedThumbnailState(t *testing.T) {
 		ID: 2, ChatID: 9, Kind: domain.MessagePhoto, SentAt: time.Unix(200, 0),
 		Media: domain.MessageMedia{Thumbnail: domain.MediaFileRef{ID: 7, Downloaded: true, LocalPath: "/tmp/thumb.jpg"}},
 	}}
-	updated, _ := updateState(state, TelegramEvent{Value: telegram.MessageContentUpdated{
+	updateState(&state, TelegramEvent{Value: telegram.MessageContentUpdated{
 		ChatID: 9, MessageID: 2, Kind: domain.MessagePhoto,
 		// TDLib re-emits a pre-download Media with the same thumbnail identity.
 		Media: domain.MessageMedia{Thumbnail: domain.MediaFileRef{ID: 7, CanDownload: true, Downloaded: false}},
 	}})
+	updated := state
 	thumb := updated.Messages[9][0].Media.Thumbnail
 	if !thumb.Downloaded || thumb.LocalPath != "/tmp/thumb.jpg" {
 		t.Fatalf("downloaded thumbnail state not preserved across content update: %#v", thumb)
@@ -4050,7 +4272,7 @@ func TestMessageContentUpdatedRequestsMaterializedThumbnail(t *testing.T) {
 		Media: domain.MessageMedia{Thumbnail: domain.MediaFileRef{}},
 	}
 
-	_, commands := updateState(state, TelegramEvent{Value: telegram.MessageContentUpdated{
+	commands := updateState(&state, TelegramEvent{Value: telegram.MessageContentUpdated{
 		ChatID: 9, MessageID: 2, Kind: domain.MessagePhoto,
 		Media: domain.MessageMedia{Thumbnail: domain.MediaFileRef{ID: 42, CanDownload: true}},
 	}})
@@ -4081,7 +4303,7 @@ func TestMessageContentUpdatedSkipsAlreadyRenderedThumbnail(t *testing.T) {
 	// Block already rendered for this message.
 	state.Thumbnails[9][2] = thumbnail.Block{Text: "kitty", Width: 20, Height: 8}
 
-	_, commands := updateState(state, TelegramEvent{Value: telegram.MessageContentUpdated{
+	commands := updateState(&state, TelegramEvent{Value: telegram.MessageContentUpdated{
 		ChatID: 9, MessageID: 2, Kind: domain.MessagePhoto,
 		Media: domain.MessageMedia{Thumbnail: domain.MediaFileRef{ID: 42, CanDownload: true}},
 	}})
@@ -4108,7 +4330,8 @@ func TestThumbnailRenderedStoresBlock(t *testing.T) {
 	block := thumbnail.Block{Text: "\u2584\u2580", Width: 20, Height: 8}
 	chatID := domain.ChatID(42)
 	msgID := domain.MessageID(7)
-	updated, _ := updateState(state, ThumbnailRendered{RequestID: 1, ChatID: chatID, MessageID: msgID, Block: block})
+	updateState(&state, ThumbnailRendered{RequestID: 1, ChatID: chatID, MessageID: msgID, Block: block})
+	updated := state
 	got, ok := updated.Thumbnails[chatID][msgID]
 	if !ok {
 		t.Fatalf("missing block for chat %d msg %d", chatID, msgID)
@@ -4124,7 +4347,8 @@ func TestThumbnailRenderedNilMapInitialized(t *testing.T) {
 	chatID := domain.ChatID(10)
 	msgID := domain.MessageID(20)
 	block := thumbnail.Block{Text: "x", Width: 20, Height: 8}
-	updated, _ := updateState(state, ThumbnailRendered{RequestID: 2, ChatID: chatID, MessageID: msgID, Block: block})
+	updateState(&state, ThumbnailRendered{RequestID: 2, ChatID: chatID, MessageID: msgID, Block: block})
+	updated := state
 	if updated.Thumbnails == nil {
 		t.Fatal("Thumbnails map is nil after reducing ThumbnailRendered")
 	}
@@ -4161,11 +4385,13 @@ func TestAttachmentOpenAcceptance_CorrelationToastsAndStaleGuards(t *testing.T) 
 			}}
 			state.SelectedMessageChat, state.SelectedMessage = 9, 77
 
-			menuState, _ := updateState(state, ActionReceived{Action: OpenMessageActionMenu})
+			updateState(&state, ActionReceived{Action: OpenMessageActionMenu})
+			menuState := state
 			if menuState.MessageMenu == nil || !reflect.DeepEqual(menuState.MessageMenu.MediaFile, file) || menuState.MessageMenu.MediaKind != tc.kind {
 				t.Fatalf("menu = %#v, want eligible main file with kind %v", menuState.MessageMenu, tc.kind)
 			}
-			started, commands := updateState(menuState, ActionReceived{Action: ViewMessageMedia})
+			commands := updateState(&menuState, ActionReceived{Action: ViewMessageMedia})
+			started := menuState
 			if len(commands) != 1 {
 				t.Fatalf("commands = %#v, want one OpenMessageMediaFile", commands)
 			}
@@ -4182,9 +4408,9 @@ func TestAttachmentOpenAcceptance_CorrelationToastsAndStaleGuards(t *testing.T) 
 				t.Fatalf("opening toast = %#v", started.Toast)
 			}
 
-			duplicate, duplicateCommands := updateState(started, ActionReceived{Action: ViewMessageMedia})
-			if len(duplicateCommands) != 0 || !reflect.DeepEqual(duplicate, started) {
-				t.Fatalf("duplicate activation dispatched or changed state: commands=%#v", duplicateCommands)
+			duplicateCommands := updateState(&started, ActionReceived{Action: ViewMessageMedia})
+			if len(duplicateCommands) != 0 || started.AttachmentOpenPending[pendingKey].RequestID != 41 || started.MessageMenu != nil || started.Toast == nil || started.Toast.Message != "Opening "+strings.ToLower(tc.title)+"…" {
+				t.Fatalf("duplicate activation changed pending open: state=%#v effects=%#v", started, duplicateCommands)
 			}
 
 			openedFile := domain.MediaFileRef{ID: 801, UniqueID: "attachment-main", Downloaded: true, LocalPath: "/tmp/attachment.bin"}
@@ -4197,13 +4423,14 @@ func TestAttachmentOpenAcceptance_CorrelationToastsAndStaleGuards(t *testing.T) 
 				MessageMediaOpenFailed{RequestID: 40, ChatID: 9, MessageID: 77, Error: domain.AppError{Kind: domain.ErrorMedia, Message: "Could not open file"}},
 			}
 			for _, stale := range staleEvents {
-				got, staleCommands := updateState(started, stale)
-				if len(staleCommands) != 0 || !reflect.DeepEqual(got, started) {
-					t.Fatalf("stale %T changed state: commands=%#v", stale, staleCommands)
+				staleCommands := updateState(&started, stale)
+				if len(staleCommands) != 0 || started.AttachmentOpenPending[pendingKey].RequestID != 41 || started.Messages[9][0].Media.File != file || started.Toast == nil || started.Toast.Message != "Opening "+strings.ToLower(tc.title)+"…" {
+					t.Fatalf("stale %T changed pending open: state=%#v effects=%#v", stale, started, staleCommands)
 				}
 			}
 
-			succeeded, successCommands := updateState(started, MessageMediaOpened{RequestID: 41, ChatID: 9, MessageID: 77, Title: tc.title, File: openedFile})
+			successCommands := updateState(&started, MessageMediaOpened{RequestID: 41, ChatID: 9, MessageID: 77, Title: tc.title, File: openedFile})
+			succeeded := started
 			_, successPending := succeeded.AttachmentOpenPending[pendingKey]
 			if len(successCommands) != 0 || !reflect.DeepEqual(succeeded.Messages[9][0].Media.File, openedFile) || successPending {
 				t.Fatalf("success = file:%#v pending:%#v commands:%#v", succeeded.Messages[9][0].Media.File, succeeded.AttachmentOpenPending, successCommands)
@@ -4212,12 +4439,15 @@ func TestAttachmentOpenAcceptance_CorrelationToastsAndStaleGuards(t *testing.T) 
 				t.Fatalf("success toast = %#v", succeeded.Toast)
 			}
 
-			retryMenu, _ := updateState(succeeded, ActionReceived{Action: OpenMessageActionMenu})
-			reopened, reopenedCommands := updateState(retryMenu, ActionReceived{Action: ViewMessageMedia})
+			updateState(&succeeded, ActionReceived{Action: OpenMessageActionMenu})
+			retryMenu := succeeded
+			reopenedCommands := updateState(&retryMenu, ActionReceived{Action: ViewMessageMedia})
+			reopened := retryMenu
 			if len(reopenedCommands) != 1 {
 				t.Fatalf("reopen commands = %#v, want one", reopenedCommands)
 			}
-			failed, failedCommands := updateState(reopened, MessageMediaOpenFailed{RequestID: 43, ChatID: 9, MessageID: 77, Error: domain.AppError{Kind: domain.ErrorInternal, Message: "private /tmp/path raw failure", Cause: errors.New("private cause")}})
+			failedCommands := updateState(&reopened, MessageMediaOpenFailed{RequestID: 43, ChatID: 9, MessageID: 77, Error: domain.AppError{Kind: domain.ErrorInternal, Message: "private /tmp/path raw failure", Cause: errors.New("private cause")}})
+			failed := reopened
 			_, failurePending := failed.AttachmentOpenPending[pendingKey]
 			if len(failedCommands) != 0 || failurePending {
 				t.Fatalf("failure = commands:%#v pending:%#v", failedCommands, failed.AttachmentOpenPending)
@@ -4225,7 +4455,8 @@ func TestAttachmentOpenAcceptance_CorrelationToastsAndStaleGuards(t *testing.T) 
 			if failed.Toast == nil || failed.Toast.Kind != domain.ErrorMedia || failed.Toast.Message != "Could not open "+strings.ToLower(tc.title) || failed.Toast.Cause != nil {
 				t.Fatalf("failure toast = %#v", failed.Toast)
 			}
-			retryMenu2, _ := updateState(failed, ActionReceived{Action: OpenMessageActionMenu})
+			updateState(&failed, ActionReceived{Action: OpenMessageActionMenu})
+			retryMenu2 := failed
 			if retryMenu2.MessageMenu == nil || !reflect.DeepEqual(retryMenu2.MessageMenu.MediaFile, openedFile) {
 				t.Fatalf("failure did not restore open action: %#v", retryMenu2.MessageMenu)
 			}

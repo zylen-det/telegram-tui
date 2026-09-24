@@ -13,27 +13,27 @@ type AdministrationMenuItem struct {
 	Header bool
 }
 
-func openGroupPermissions(state State) (State, []Effect) {
-	chat, ok := detailsChat(state)
+func openGroupPermissions(state *State) []Effect {
+	chat, ok := detailsChat(*state)
 	if state.Focus != FocusDetails || !ok {
-		return state, nil
+		return nil
 	}
 	if (chat.Kind != domain.ChatBasicGroup && chat.Kind != domain.ChatSupergroup) || !chat.CanRestrictMembers {
-		return state, nil
+		return nil
 	}
-	id := allocateRequestID(&state)
+	id := allocateRequestID(state)
 	state.Administration = &AdministrationState{RequestID: id, ChatID: chat.ID, PreviousFocus: FocusDetails, Mode: AdministrationDefaultPermissions, IsForum: chat.IsForum, Loading: true}
 	state.Focus = FocusAdministration
-	return state, []Effect{LoadAdministrationCommand{RequestID: id, ChatID: chat.ID}}
+	return []Effect{LoadAdministrationCommand{RequestID: id, ChatID: chat.ID}}
 }
 
-func openMemberAdministration(state State) (State, []Effect) {
+func openMemberAdministration(state *State) []Effect {
 	if state.Members == nil || state.Members.Detail == nil || !state.Members.Detail.CanManageInChat || state.Focus != FocusMembers {
-		return state, nil
+		return nil
 	}
 	chatID := state.Members.ChatID
 	userID := state.Members.Detail.UserID
-	id := allocateRequestID(&state)
+	id := allocateRequestID(state)
 	isForum := false
 	if index := chatIndex(state.Chats, chatID); index >= 0 {
 		isForum = state.Chats[index].IsForum
@@ -41,7 +41,7 @@ func openMemberAdministration(state State) (State, []Effect) {
 	state.Administration = &AdministrationState{RequestID: id, ChatID: chatID, UserID: userID, PreviousFocus: FocusMembers, ReturnMembers: state.Members, Mode: AdministrationMemberMenu, IsForum: isForum, Loading: true, MemberLoading: true}
 	state.Members = nil
 	state.Focus = FocusAdministration
-	return state, []Effect{LoadAdministrationCommand{RequestID: id, ChatID: chatID}, LoadMemberAdministrationCommand{RequestID: id, ChatID: chatID, UserID: userID}}
+	return []Effect{LoadAdministrationCommand{RequestID: id, ChatID: chatID}, LoadMemberAdministrationCommand{RequestID: id, ChatID: chatID, UserID: userID}}
 }
 
 func AdministrationMenuItems(s *AdministrationState) []AdministrationMenuItem {
@@ -164,31 +164,31 @@ func rightsApplicable(s *AdministrationState, i int) bool {
 	return true
 }
 
-func reduceAdministrationAction(state State, e ActionReceived) (State, []Effect) {
+func reduceAdministrationAction(state *State, e ActionReceived) []Effect {
 	s := state.Administration
 	if s == nil || state.Focus != FocusAdministration {
-		return state, nil
+		return nil
 	}
 	if (e.ChatID != 0 && e.ChatID != s.ChatID) || (e.UserID != 0 && e.UserID != s.UserID) {
-		return state, nil
+		return nil
 	}
 	if e.Action == Close || (e.Action == CancelAdministrationAction && s.Error == nil && !s.Loading && !s.MemberLoading) {
 		if s.Mode == AdministrationConfirmation {
 			s.Mode = AdministrationMemberMenu
 			s.Selected = 0
 			s.PendingAction = 0
-			return state, nil
+			return nil
 		}
 		if s.Mode == AdministrationDefaultPermissions {
 			state.Focus = s.PreviousFocus
 			state.Administration = nil
-			return state, nil
+			return nil
 		}
 		if s.Mode != AdministrationMemberMenu {
 			s.Mode = AdministrationMemberMenu
 			s.Selected = 0
 			s.PendingAction = 0
-			return state, nil
+			return nil
 		}
 		state.Focus = s.PreviousFocus
 		state.Administration = nil
@@ -196,18 +196,18 @@ func reduceAdministrationAction(state State, e ActionReceived) (State, []Effect)
 			state.Members = s.ReturnMembers
 			state.Focus = FocusMembers
 		}
-		return state, nil
+		return nil
 	}
 	if s.Loading || s.MemberLoading || s.Working {
-		return state, nil
+		return nil
 	}
 	if s.Error != nil {
 		if e.Action != Retry && e.Action != Activate {
-			return state, nil
+			return nil
 		}
 	}
 	if e.Action == Retry && s.Error != nil {
-		requestID := allocateRequestID(&state)
+		requestID := allocateRequestID(state)
 		s.RequestID = requestID
 		s.Loading = true
 		s.MemberLoading = s.UserID != 0
@@ -219,7 +219,7 @@ func reduceAdministrationAction(state State, e ActionReceived) (State, []Effect)
 		if s.UserID != 0 {
 			commands = append(commands, LoadMemberAdministrationCommand{RequestID: requestID, ChatID: s.ChatID, UserID: s.UserID})
 		}
-		return state, commands
+		return commands
 	}
 	items := AdministrationMenuItems(s)
 	if e.Action == SelectNext || e.Action == SelectPrevious {
@@ -236,7 +236,7 @@ func reduceAdministrationAction(state State, e ActionReceived) (State, []Effect)
 				s.Selected = (s.Selected + n - 1) % n
 			}
 		}
-		return state, nil
+		return nil
 	}
 	if e.Action == Activate {
 		n := -1
@@ -249,12 +249,12 @@ func reduceAdministrationAction(state State, e ActionReceived) (State, []Effect)
 				return reduceAdministrationAction(state, v.Action)
 			}
 		}
-		return state, nil
+		return nil
 	}
 	switch e.Action {
 	case ToggleAdministrationItem:
 		if s.Mode == AdministrationAdminRightsEditor && !rightsApplicable(s, e.AdminIndex) {
-			return state, nil
+			return nil
 		}
 		toggleAdministration(s, e.AdminIndex)
 	case SelectAdministrationAction:
@@ -267,7 +267,7 @@ func reduceAdministrationAction(state State, e ActionReceived) (State, []Effect)
 				}
 			}
 			if !allowed {
-				return state, nil
+				return nil
 			}
 			switch e.AdminIndex {
 			case 1:
@@ -291,30 +291,30 @@ func reduceAdministrationAction(state State, e ActionReceived) (State, []Effect)
 		}
 	case SaveAdministration:
 		if s.Mode != AdministrationDefaultPermissions && s.Mode != AdministrationAdminRightsEditor && s.Mode != AdministrationRestrictionsEditor {
-			return state, nil
+			return nil
 		}
-		id := allocateRequestID(&state)
+		id := allocateRequestID(state)
 		s.RequestID = id
 		s.Working = true
 		if s.Mode == AdministrationDefaultPermissions {
-			return state, []Effect{SetDefaultChatPermissionsCommand{RequestID: id, ChatID: s.ChatID, Permissions: s.EditedPermissions}}
+			return []Effect{SetDefaultChatPermissionsCommand{RequestID: id, ChatID: s.ChatID, Permissions: s.EditedPermissions}}
 		}
 		action := telegram.MemberAdministrationPromote
 		if s.Mode == AdministrationRestrictionsEditor {
 			action = telegram.MemberAdministrationRestrict
 		}
 		s.PendingAction = action
-		return state, []Effect{ApplyMemberAdministrationCommand{RequestID: id, Request: telegram.MemberAdministrationRequest{ChatID: s.ChatID, UserID: s.UserID, Action: action, Rights: s.EditedRights, Permissions: s.EditedPermissions}}}
+		return []Effect{ApplyMemberAdministrationCommand{RequestID: id, Request: telegram.MemberAdministrationRequest{ChatID: s.ChatID, UserID: s.UserID, Action: action, Rights: s.EditedRights, Permissions: s.EditedPermissions}}}
 	case ConfirmAdministrationAction:
 		if s.Mode != AdministrationConfirmation || s.PendingAction == 0 {
-			return state, nil
+			return nil
 		}
-		id := allocateRequestID(&state)
+		id := allocateRequestID(state)
 		s.RequestID = id
 		s.Working = true
-		return state, []Effect{ApplyMemberAdministrationCommand{RequestID: id, Request: telegram.MemberAdministrationRequest{ChatID: s.ChatID, UserID: s.UserID, Action: s.PendingAction}}}
+		return []Effect{ApplyMemberAdministrationCommand{RequestID: id, Request: telegram.MemberAdministrationRequest{ChatID: s.ChatID, UserID: s.UserID, Action: s.PendingAction}}}
 	}
-	return state, nil
+	return nil
 }
 func toggleAdministration(s *AdministrationState, i int) {
 	if s.Mode == AdministrationDefaultPermissions || s.Mode == AdministrationRestrictionsEditor {
@@ -347,10 +347,10 @@ func rightOwn(s *telegram.AdministrationSnapshot, i int) bool {
 	v := []bool{s.OwnRights.CanManageChat, s.OwnRights.CanChangeInfo, s.OwnRights.CanPostMessages, s.OwnRights.CanEditMessages, s.OwnRights.CanDeleteMessages, s.OwnRights.CanInviteUsers, s.OwnRights.CanRestrictMembers, s.OwnRights.CanPinMessages, s.OwnRights.CanManageTopics, s.OwnRights.CanPromoteMembers, s.OwnRights.CanManageVideoChats, s.OwnRights.CanPostStories, s.OwnRights.CanEditStories, s.OwnRights.CanDeleteStories, s.OwnRights.CanManageDirectMessages, s.OwnRights.CanManageTags, s.OwnRights.IsAnonymous}
 	return i >= 0 && i < len(v) && v[i]
 }
-func reduceAdministrationLoaded(state State, e AdministrationLoaded) (State, []Effect) {
+func reduceAdministrationLoaded(state *State, e AdministrationLoaded) []Effect {
 	s := state.Administration
-	if s == nil || s.RequestID != e.RequestID || s.ChatID != e.ChatID || !s.Loading || !administrationChatActive(state, e.ChatID) {
-		return state, nil
+	if s == nil || s.RequestID != e.RequestID || s.ChatID != e.ChatID || !s.Loading || !administrationChatActive(*state, e.ChatID) {
+		return nil
 	}
 	s.Snapshot = &e.Snapshot
 	s.Loading = false
@@ -358,12 +358,12 @@ func reduceAdministrationLoaded(state State, e AdministrationLoaded) (State, []E
 	if s.Mode == AdministrationDefaultPermissions && (e.Snapshot.Kind == domain.ChatChannel || !e.Snapshot.CanRestrictMembers) {
 		s.Error = &domain.AppError{Kind: domain.ErrorInternal, Op: "load administration", Message: "Group permissions are unavailable"}
 	}
-	return state, nil
+	return nil
 }
-func reduceMemberAdministrationLoaded(state State, e MemberAdministrationLoaded) (State, []Effect) {
+func reduceMemberAdministrationLoaded(state *State, e MemberAdministrationLoaded) []Effect {
 	s := state.Administration
-	if s == nil || s.RequestID != e.RequestID || s.ChatID != e.ChatID || s.UserID != e.UserID || !s.MemberLoading || !administrationChatActive(state, e.ChatID) {
-		return state, nil
+	if s == nil || s.RequestID != e.RequestID || s.ChatID != e.ChatID || s.UserID != e.UserID || !s.MemberLoading || !administrationChatActive(*state, e.ChatID) {
+		return nil
 	}
 	v := e.Status
 	s.MemberStatus = &v
@@ -371,7 +371,7 @@ func reduceMemberAdministrationLoaded(state State, e MemberAdministrationLoaded)
 	if s.Mode == AdministrationRestrictionsEditor && v.Role == domain.ChatMemberRoleRestricted {
 		s.EditedPermissions = v.Permissions
 	}
-	return state, nil
+	return nil
 }
 func adminToast(state *State, msg string) {
 	setToast(state, domain.AppError{Message: msg}, 2*time.Second)

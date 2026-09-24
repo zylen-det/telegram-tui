@@ -56,7 +56,7 @@ func TestTopicMessageNavigationSkipsMessagesHiddenByTheConversation(t *testing.T
 		{SelectNextMessage, 3, 1},
 		{SelectNextMessage, 5, 0},
 	} {
-		state, _ = updateState(state, ActionReceived{Action: want.action})
+		updateState(&state, ActionReceived{Action: want.action})
 		if state.SelectedMessageChat != 7 || state.SelectedMessage != want.id {
 			t.Fatalf("selection = %d/%d after %v, want 7/%d", state.SelectedMessageChat, state.SelectedMessage, want.action, want.id)
 		}
@@ -72,15 +72,16 @@ func TestTopicMessageNavigationSkipsMessagesHiddenByTheConversation(t *testing.T
 		t.Fatal("topic navigation changed chat-level history")
 	}
 
-	all, _ := activateAllTopics(state, 7)
-	all, _ = updateState(all, ActionReceived{Action: SelectPreviousMessage})
-	if all.SelectedMessage != 4 || !all.History[7].FollowSelection || all.History[7].ViewOffset != 1 {
-		t.Fatalf("ALL navigation = message %d history %#v, want message 4 and chat offset 1", all.SelectedMessage, all.History[7])
+	activateAllTopics(&state, 7)
+	updateState(&state, ActionReceived{Action: SelectPreviousMessage})
+	if state.SelectedMessage != 4 || !state.History[7].FollowSelection || state.History[7].ViewOffset != 1 {
+		t.Fatalf("ALL navigation = message %d history %#v, want message 4 and chat offset 1", state.SelectedMessage, state.History[7])
 	}
 }
 
 func TestOpenTopicsGating(t *testing.T) {
-	opened, commands := updateState(topicsBaseState(t), ActionReceived{Action: OpenTopics})
+	opened := topicsBaseState(t)
+	commands := updateState(&opened, ActionReceived{Action: OpenTopics})
 	if opened.Topics == nil || opened.Topics.ChatID != 7 || opened.Topics.RequestID != 10 || !opened.Topics.Loading {
 		t.Fatalf("open = %#v", opened.Topics)
 	}
@@ -96,23 +97,21 @@ func TestOpenTopicsGating(t *testing.T) {
 
 	nonForum := topicsBaseState(t)
 	nonForum.Chats[0].IsForum = false
-	unchanged, cmds := updateState(nonForum, ActionReceived{Action: OpenTopics})
-	if unchanged.Topics != nil || len(cmds) != 0 {
-		t.Fatalf("non-forum open = %#v commands=%#v", unchanged.Topics, cmds)
+	if cmds := updateState(&nonForum, ActionReceived{Action: OpenTopics}); nonForum.Topics != nil || len(cmds) != 0 {
+		t.Fatalf("non-forum open = %#v commands=%#v", nonForum.Topics, cmds)
 	}
 
 	wrongFocus := topicsBaseState(t)
 	wrongFocus.Focus = FocusComposer
-	unchanged, cmds = updateState(wrongFocus, ActionReceived{Action: OpenTopics})
-	if unchanged.Topics != nil || len(cmds) != 0 {
-		t.Fatalf("non-chat focus open = %#v commands=%#v", unchanged.Topics, cmds)
+	if cmds := updateState(&wrongFocus, ActionReceived{Action: OpenTopics}); wrongFocus.Topics != nil || len(cmds) != 0 {
+		t.Fatalf("non-chat focus open = %#v commands=%#v", wrongFocus.Topics, cmds)
 	}
 
 	conversation := topicsBaseState(t)
 	conversation.Focus = FocusConversation
-	opened, commands = updateState(conversation, ActionReceived{Action: OpenTopics})
-	if opened.Topics == nil || len(commands) != 1 {
-		t.Fatalf("conversation open = %#v commands=%#v", opened.Topics, commands)
+	commands = updateState(&conversation, ActionReceived{Action: OpenTopics})
+	if conversation.Topics == nil || len(commands) != 1 {
+		t.Fatalf("conversation open = %#v commands=%#v", conversation.Topics, commands)
 	}
 }
 
@@ -121,15 +120,15 @@ func TestTopicsCloseRestoresPreviousFocusAndKeepsSelectedTopics(t *testing.T) {
 	state.Focus = FocusTopics
 	state.Topics = &TopicListState{RequestID: 10, ChatID: 7, PreviousFocus: FocusChats, Results: []domain.ForumTopic{testTopic(101, "A")}}
 	state.SelectedTopics[7] = 101
-	reduced, commands := updateState(state, ActionReceived{Action: Close})
-	if reduced.Topics != nil {
-		t.Fatalf("topics = %#v", reduced.Topics)
+	commands := updateState(&state, ActionReceived{Action: Close})
+	if state.Topics != nil {
+		t.Fatalf("topics = %#v", state.Topics)
 	}
-	if reduced.Focus != FocusChats {
-		t.Fatalf("focus = %v", reduced.Focus)
+	if state.Focus != FocusChats {
+		t.Fatalf("focus = %v", state.Focus)
 	}
-	if reduced.SelectedTopics[7] != 101 {
-		t.Fatalf("selected topics = %#v", reduced.SelectedTopics)
+	if state.SelectedTopics[7] != 101 {
+		t.Fatalf("selected topics = %#v", state.SelectedTopics)
 	}
 	if len(commands) != 0 {
 		t.Fatalf("commands = %#v", commands)
@@ -150,16 +149,16 @@ func TestTopicsSelectionClampsWithoutWrap(t *testing.T) {
 	last := topicsBaseState(t)
 	last.Focus = FocusTopics
 	last.Topics = topics(3)
-	reduced, commands := updateState(last, ActionReceived{Action: SelectNext})
-	if reduced.Topics.Selected != 3 || len(commands) != 0 {
-		t.Fatalf("next at last: selected=%d commands=%#v", reduced.Topics.Selected, commands)
+	commands := updateState(&last, ActionReceived{Action: SelectNext})
+	if last.Topics.Selected != 3 || len(commands) != 0 {
+		t.Fatalf("next at last: selected=%d commands=%#v", last.Topics.Selected, commands)
 	}
 	first := topicsBaseState(t)
 	first.Focus = FocusTopics
 	first.Topics = topics(0)
-	reduced, commands = updateState(first, ActionReceived{Action: SelectPrevious})
-	if reduced.Topics.Selected != 0 || len(commands) != 0 {
-		t.Fatalf("previous at first: selected=%d commands=%#v", reduced.Topics.Selected, commands)
+	commands = updateState(&first, ActionReceived{Action: SelectPrevious})
+	if first.Topics.Selected != 0 || len(commands) != 0 {
+		t.Fatalf("previous at first: selected=%d commands=%#v", first.Topics.Selected, commands)
 	}
 }
 
@@ -174,9 +173,9 @@ func TestTopicsSelectNextOnLastEmitsNextPage(t *testing.T) {
 		Selected:   3,
 	}
 	state.NextRequestID = 20
-	reduced, commands := updateState(state, ActionReceived{Action: SelectNext})
-	if reduced.Topics.Selected != 3 || !reduced.Topics.Loading || reduced.Topics.RequestID != 20 {
-		t.Fatalf("topics = %#v", reduced.Topics)
+	commands := updateState(&state, ActionReceived{Action: SelectNext})
+	if state.Topics.Selected != 3 || !state.Topics.Loading || state.Topics.RequestID != 20 {
+		t.Fatalf("topics = %#v", state.Topics)
 	}
 	if len(commands) != 1 {
 		t.Fatalf("commands = %#v", commands)
@@ -189,22 +188,22 @@ func TestTopicsSelectNextOnLastEmitsNextPage(t *testing.T) {
 
 func TestTopicsLoadedIgnoresStaleResults(t *testing.T) {
 	state := topicsBaseState(t)
-	reduced, _ := updateState(state, ActionReceived{Action: OpenTopics})
+	updateState(&state, ActionReceived{Action: OpenTopics})
 	page := telegram.TopicPage{Topics: []domain.ForumTopic{testTopic(101, "A")}, TotalCount: 1}
-	reduced, commands := updateState(reduced, TopicsLoaded{RequestID: 99, ChatID: 7, Page: page})
-	if len(reduced.Topics.Results) != 0 || !reduced.Topics.Loading || len(commands) != 0 {
-		t.Fatalf("stale loaded: %#v commands=%#v", reduced.Topics, commands)
+	commands := updateState(&state, TopicsLoaded{RequestID: 99, ChatID: 7, Page: page})
+	if len(state.Topics.Results) != 0 || !state.Topics.Loading || len(commands) != 0 {
+		t.Fatalf("stale loaded: %#v commands=%#v", state.Topics, commands)
 	}
-	reduced, commands = updateState(reduced, TopicsLoaded{RequestID: 10, ChatID: 8, Page: page})
-	if len(reduced.Topics.Results) != 0 || !reduced.Topics.Loading || len(commands) != 0 {
-		t.Fatalf("wrong chat loaded: %#v commands=%#v", reduced.Topics, commands)
+	commands = updateState(&state, TopicsLoaded{RequestID: 10, ChatID: 8, Page: page})
+	if len(state.Topics.Results) != 0 || !state.Topics.Loading || len(commands) != 0 {
+		t.Fatalf("wrong chat loaded: %#v commands=%#v", state.Topics, commands)
 	}
 }
 
 func TestTopicsLoadedDeduplicatesInPlaceAndAppendsNew(t *testing.T) {
 	state := topicsBaseState(t)
-	reduced, _ := updateState(state, ActionReceived{Action: OpenTopics})
-	reduced.Topics.Results = []domain.ForumTopic{testTopic(101, "old A"), testTopic(102, "old B")}
+	updateState(&state, ActionReceived{Action: OpenTopics})
+	state.Topics.Results = []domain.ForumTopic{testTopic(101, "old A"), testTopic(102, "old B")}
 	page := telegram.TopicPage{
 		Topics:              []domain.ForumTopic{testTopic(102, "new B"), testTopic(103, "C"), testTopic(101, "new A"), {ID: 0}},
 		TotalCount:          3,
@@ -213,8 +212,8 @@ func TestTopicsLoadedDeduplicatesInPlaceAndAppendsNew(t *testing.T) {
 		NextOffsetTopicID:   104,
 		Done:                true,
 	}
-	reduced, commands := updateState(reduced, TopicsLoaded{RequestID: 10, ChatID: 7, Page: page})
-	got := reduced.Topics
+	commands := updateState(&state, TopicsLoaded{RequestID: 10, ChatID: 7, Page: page})
+	got := state.Topics
 	if len(got.Results) != 3 {
 		t.Fatalf("results = %#v", got.Results)
 	}
@@ -237,14 +236,14 @@ func TestTopicsLoadedDeduplicatesInPlaceAndAppendsNew(t *testing.T) {
 
 func TestTopicsLoadFailedSetsSanitizedError(t *testing.T) {
 	state := topicsBaseState(t)
-	reduced, _ := updateState(state, ActionReceived{Action: OpenTopics})
-	reduced, commands := updateState(reduced, TopicsLoadFailed{RequestID: 10, ChatID: 7, Error: domain.AppError{Kind: domain.ErrorNetwork, Op: "load topics", Message: "boom"}})
-	if len(commands) != 0 || reduced.Topics.Loading || reduced.Topics.Error == nil || reduced.Topics.Error.Message != "boom" {
-		t.Fatalf("failed = %#v commands=%#v", reduced.Topics, commands)
+	updateState(&state, ActionReceived{Action: OpenTopics})
+	commands := updateState(&state, TopicsLoadFailed{RequestID: 10, ChatID: 7, Error: domain.AppError{Kind: domain.ErrorNetwork, Op: "load topics", Message: "boom"}})
+	if len(commands) != 0 || state.Topics.Loading || state.Topics.Error == nil || state.Topics.Error.Message != "boom" {
+		t.Fatalf("failed = %#v commands=%#v", state.Topics, commands)
 	}
-	stale, _ := updateState(reduced, TopicsLoadFailed{RequestID: 99, ChatID: 7, Error: domain.AppError{Message: "stale"}})
-	if stale.Topics.Error.Message != "boom" {
-		t.Fatalf("stale failure applied: %#v", stale.Topics.Error)
+	updateState(&state, TopicsLoadFailed{RequestID: 99, ChatID: 7, Error: domain.AppError{Message: "stale"}})
+	if state.Topics.Error.Message != "boom" {
+		t.Fatalf("stale failure applied: %#v", state.Topics.Error)
 	}
 }
 
@@ -252,19 +251,19 @@ func TestSelectTopicValidatesChatAndRow(t *testing.T) {
 	state := topicsBaseState(t)
 	state.Focus = FocusTopics
 	state.Topics = &TopicListState{RequestID: 10, ChatID: 7, Results: []domain.ForumTopic{testTopic(101, "A")}}
-	wrongChat, commands := updateState(state, ActionReceived{Action: SelectTopic, ChatID: 8, TopicID: 101})
-	if wrongChat.Topics == nil || len(commands) != 0 {
-		t.Fatalf("wrong chat: topics=%#v commands=%#v", wrongChat.Topics, commands)
+	commands := updateState(&state, ActionReceived{Action: SelectTopic, ChatID: 8, TopicID: 101})
+	if state.Topics == nil || len(commands) != 0 {
+		t.Fatalf("wrong chat: topics=%#v commands=%#v", state.Topics, commands)
 	}
-	unknown, commands := updateState(state, ActionReceived{Action: SelectTopic, ChatID: 7, TopicID: 999})
-	if unknown.Topics == nil || len(commands) != 0 {
-		t.Fatalf("unknown topic: topics=%#v commands=%#v", unknown.Topics, commands)
+	commands = updateState(&state, ActionReceived{Action: SelectTopic, ChatID: 7, TopicID: 999})
+	if state.Topics == nil || len(commands) != 0 {
+		t.Fatalf("unknown topic: topics=%#v commands=%#v", state.Topics, commands)
 	}
 	// SelectTopic with no topic list open is a no-op.
 	plain := topicsBaseState(t)
-	unchanged, commands := updateState(plain, ActionReceived{Action: SelectTopic, ChatID: 7, TopicID: 101})
-	if unchanged.Topics != nil || len(commands) != 0 {
-		t.Fatalf("no list: topics=%#v commands=%#v", unchanged.Topics, commands)
+	commands = updateState(&plain, ActionReceived{Action: SelectTopic, ChatID: 7, TopicID: 101})
+	if plain.Topics != nil || len(commands) != 0 {
+		t.Fatalf("no list: topics=%#v commands=%#v", plain.Topics, commands)
 	}
 }
 
@@ -284,25 +283,25 @@ func TestActivateTopicSeedsDraftsAndRequestsTopicMessages(t *testing.T) {
 		{ID: 3, ChatID: 7, TopicID: 101, Kind: domain.MessageText, Text: "a"},
 		{ID: 4, ChatID: 7, TopicID: 101, Kind: domain.MessageText, Text: "b"},
 	}
-	reduced, commands := updateState(state, ActionReceived{Action: Activate})
-	if reduced.Topics != nil || reduced.Focus != FocusConversation {
-		t.Fatalf("topics=%#v focus=%v", reduced.Topics, reduced.Focus)
+	commands := updateState(&state, ActionReceived{Action: Activate})
+	if state.Topics != nil || state.Focus != FocusConversation {
+		t.Fatalf("topics=%#v focus=%v", state.Topics, state.Focus)
 	}
-	if reduced.ReplyTarget != nil || reduced.EditTarget != nil || reduced.MessageMenu != nil {
-		t.Fatalf("targets = %#v %#v %#v", reduced.ReplyTarget, reduced.EditTarget, reduced.MessageMenu)
+	if state.ReplyTarget != nil || state.EditTarget != nil || state.MessageMenu != nil {
+		t.Fatalf("targets = %#v %#v %#v", state.ReplyTarget, state.EditTarget, state.MessageMenu)
 	}
-	if reduced.SelectedTopics[7] != 101 {
-		t.Fatalf("selected topics = %#v", reduced.SelectedTopics)
+	if state.SelectedTopics[7] != 101 {
+		t.Fatalf("selected topics = %#v", state.SelectedTopics)
 	}
-	if reduced.ForumTopics[7][101].ID != 101 {
-		t.Fatalf("forum topics = %#v", reduced.ForumTopics[7])
+	if state.ForumTopics[7][101].ID != 101 {
+		t.Fatalf("forum topics = %#v", state.ForumTopics[7])
 	}
 	key := topicKey{ChatID: 7, TopicID: 101}
-	if reduced.TopicDrafts[key] != "cloud draft" || reduced.TopicDraftReplies[key] != 5 || reduced.TopicDraftDates[key] != 42 {
-		t.Fatalf("drafts = %q reply=%d date=%d", reduced.TopicDrafts[key], reduced.TopicDraftReplies[key], reduced.TopicDraftDates[key])
+	if state.TopicDrafts[key] != "cloud draft" || state.TopicDraftReplies[key] != 5 || state.TopicDraftDates[key] != 42 {
+		t.Fatalf("drafts = %q reply=%d date=%d", state.TopicDrafts[key], state.TopicDraftReplies[key], state.TopicDraftDates[key])
 	}
-	if reduced.SelectedMessageChat != 7 || reduced.SelectedMessage != 4 {
-		t.Fatalf("selection = %d/%d", reduced.SelectedMessageChat, reduced.SelectedMessage)
+	if state.SelectedMessageChat != 7 || state.SelectedMessage != 4 {
+		t.Fatalf("selection = %d/%d", state.SelectedMessageChat, state.SelectedMessage)
 	}
 	if len(commands) != 1 {
 		t.Fatalf("commands = %#v", commands)
@@ -311,18 +310,18 @@ func TestActivateTopicSeedsDraftsAndRequestsTopicMessages(t *testing.T) {
 	if !ok || command.RequestID != 10 || command.ChatID != 7 || command.TopicID != 101 || command.Cursor != (telegram.MessageCursor{Limit: pageSize}) {
 		t.Fatalf("command = %#v", commands[0])
 	}
-	if history := reduced.TopicHistory[key]; !history.Loading || history.RequestID != 10 {
+	if history := state.TopicHistory[key]; !history.Loading || history.RequestID != 10 {
 		t.Fatalf("topic history = %#v", history)
 	}
-	if _, exists := reduced.History[7]; exists {
-		t.Fatalf("chat history touched: %#v", reduced.History[7])
+	if _, exists := state.History[7]; exists {
+		t.Fatalf("chat history touched: %#v", state.History[7])
 	}
 
 	// Re-activating the same topic does not re-request messages.
-	reduced.Topics = &TopicListState{ChatID: 7, Results: []domain.ForumTopic{testTopic(101, "A")}}
-	reduced, commands = updateState(reduced, ActionReceived{Action: SelectTopic, ChatID: 7, TopicID: 101})
-	if reduced.Topics != nil || len(commands) != 0 {
-		t.Fatalf("re-activate: topics=%#v commands=%#v", reduced.Topics, commands)
+	state.Topics = &TopicListState{ChatID: 7, Results: []domain.ForumTopic{testTopic(101, "A")}}
+	commands = updateState(&state, ActionReceived{Action: SelectTopic, ChatID: 7, TopicID: 101})
+	if state.Topics != nil || len(commands) != 0 {
+		t.Fatalf("re-activate: topics=%#v commands=%#v", state.Topics, commands)
 	}
 }
 
@@ -333,13 +332,12 @@ func TestTopicMessagesLoadedUsesTopicHistoryOnly(t *testing.T) {
 	state.TopicHistory[key] = HistoryState{Loading: true, RequestID: 10}
 	state.Messages[7] = []domain.Message{{ID: 1, ChatID: 7, TopicID: 101, Kind: domain.MessageText, Text: "a"}}
 
-	stale, staleCommands := updateState(state, MessagesLoaded{RequestID: 12, ChatID: 7, TopicID: 101, Page: telegram.MessagePage{Messages: []domain.Message{{ID: 2, ChatID: 7, TopicID: 101, Kind: domain.MessageText, Text: "b"}}}})
-	if !stale.TopicHistory[key].Loading || stale.TopicHistory[key].RequestID != 10 {
-		t.Fatalf("stale request applied: %#v", stale.TopicHistory[key])
+	staleCommands := updateState(&state, MessagesLoaded{RequestID: 12, ChatID: 7, TopicID: 101, Page: telegram.MessagePage{Messages: []domain.Message{{ID: 2, ChatID: 7, TopicID: 101, Kind: domain.MessageText, Text: "b"}}}})
+	if len(staleCommands) != 0 || !state.TopicHistory[key].Loading || state.TopicHistory[key].RequestID != 10 {
+		t.Fatalf("stale request applied: %#v commands=%#v", state.TopicHistory[key], staleCommands)
 	}
-	_ = staleCommands
 
-	reduced, commands := updateState(state, MessagesLoaded{
+	commands := updateState(&state, MessagesLoaded{
 		RequestID: 10,
 		ChatID:    7,
 		TopicID:   101,
@@ -351,18 +349,18 @@ func TestTopicMessagesLoadedUsesTopicHistoryOnly(t *testing.T) {
 			Done: true,
 		},
 	})
-	if len(reduced.Messages[7]) != 3 {
-		t.Fatalf("messages = %#v", reduced.Messages[7])
+	if len(state.Messages[7]) != 3 {
+		t.Fatalf("messages = %#v", state.Messages[7])
 	}
-	if _, exists := reduced.History[7]; exists {
-		t.Fatalf("chat history touched: %#v", reduced.History[7])
+	if _, exists := state.History[7]; exists {
+		t.Fatalf("chat history touched: %#v", state.History[7])
 	}
-	history := reduced.TopicHistory[key]
+	history := state.TopicHistory[key]
 	if history.Loading || !history.Done || history.OldestID != 1 || history.Error != nil {
 		t.Fatalf("topic history = %#v", history)
 	}
-	if reduced.SelectedMessageChat != 7 || reduced.SelectedMessage != 2 {
-		t.Fatalf("selection = %d/%d", reduced.SelectedMessageChat, reduced.SelectedMessage)
+	if state.SelectedMessageChat != 7 || state.SelectedMessage != 2 {
+		t.Fatalf("selection = %d/%d", state.SelectedMessageChat, state.SelectedMessage)
 	}
 	if len(commands) != 0 {
 		t.Fatalf("commands = %#v", commands)
@@ -374,27 +372,27 @@ func TestTopicMessagesLoadFailedUsesTopicHistoryOnly(t *testing.T) {
 	key := topicKey{ChatID: 7, TopicID: 101}
 	state.SelectedTopics[7] = 101
 	state.TopicHistory[key] = HistoryState{Loading: true, RequestID: 10}
-	reduced, _ := updateState(state, MessagesLoadFailed{RequestID: 10, ChatID: 7, TopicID: 101, Error: domain.AppError{Message: "topic boom"}})
-	if _, exists := reduced.History[7]; exists {
-		t.Fatalf("chat history touched: %#v", reduced.History[7])
+	updateState(&state, MessagesLoadFailed{RequestID: 10, ChatID: 7, TopicID: 101, Error: domain.AppError{Message: "topic boom"}})
+	if _, exists := state.History[7]; exists {
+		t.Fatalf("chat history touched: %#v", state.History[7])
 	}
-	history := reduced.TopicHistory[key]
+	history := state.TopicHistory[key]
 	if history.Loading || history.Error == nil || history.Error.Message != "topic boom" {
 		t.Fatalf("topic history = %#v", history)
 	}
-	if reduced.Toast == nil || reduced.Toast.Message != "topic boom" {
-		t.Fatalf("toast = %#v", reduced.Toast)
+	if state.Toast == nil || state.Toast.Message != "topic boom" {
+		t.Fatalf("toast = %#v", state.Toast)
 	}
 
 	// A failed topic load for a non-selected topic toasts nothing.
 	other := topicsBaseState(t)
 	other.TopicHistory[key] = HistoryState{Loading: true, RequestID: 10}
-	reduced, _ = updateState(other, MessagesLoadFailed{RequestID: 10, ChatID: 7, TopicID: 101, Error: domain.AppError{Message: "topic boom"}})
-	if reduced.Toast != nil {
-		t.Fatalf("unexpected toast = %#v", reduced.Toast)
+	updateState(&other, MessagesLoadFailed{RequestID: 10, ChatID: 7, TopicID: 101, Error: domain.AppError{Message: "topic boom"}})
+	if other.Toast != nil {
+		t.Fatalf("unexpected toast = %#v", other.Toast)
 	}
-	if reduced.TopicHistory[key].Error == nil {
-		t.Fatalf("topic history = %#v", reduced.TopicHistory[key])
+	if other.TopicHistory[key].Error == nil {
+		t.Fatalf("topic history = %#v", other.TopicHistory[key])
 	}
 }
 
@@ -411,7 +409,8 @@ func TestForumTopicInfoChangedMergesAllowlist(t *testing.T) {
 	}
 	update := telegram.ForumTopicInfoChanged{Topic: domain.ForumTopic{ID: 101, ChatID: 7, Name: "new", IconColor: 2, IsClosed: true, IsGeneral: true}}
 
-	reduced, _ := updateState(newState(), TelegramEvent{Value: update})
+	reduced := newState()
+	updateState(&reduced, TelegramEvent{Value: update})
 	entry := reduced.ForumTopics[7][101]
 	if entry.Name != "new" || entry.IconColor != 2 || !entry.IsClosed || !entry.IsGeneral {
 		t.Fatalf("merged entry = %#v", entry)
@@ -424,13 +423,15 @@ func TestForumTopicInfoChangedMergesAllowlist(t *testing.T) {
 	}
 
 	ptr := telegram.ForumTopicInfoChanged{Topic: domain.ForumTopic{ID: 101, ChatID: 7, Name: "ptr", IsClosed: true}}
-	reduced, _ = updateState(newState(), TelegramEvent{Value: &ptr})
+	reduced = newState()
+	updateState(&reduced, TelegramEvent{Value: &ptr})
 	if reduced.ForumTopics[7][101].Name != "ptr" {
 		t.Fatalf("pointer form = %#v", reduced.ForumTopics[7][101])
 	}
 
 	// Updates for unknown chats leave state untouched.
-	untouched, _ := updateState(newState(), TelegramEvent{Value: telegram.ForumTopicInfoChanged{Topic: domain.ForumTopic{ID: 555, ChatID: 999, Name: "ghost"}}})
+	untouched := newState()
+	updateState(&untouched, TelegramEvent{Value: telegram.ForumTopicInfoChanged{Topic: domain.ForumTopic{ID: 555, ChatID: 999, Name: "ghost"}}})
 	if _, exists := untouched.ForumTopics[999]; exists {
 		t.Fatalf("unknown chat added: %#v", untouched.ForumTopics)
 	}
@@ -443,32 +444,32 @@ func TestForumTopicStateChangedMergesAllowlistAndGuardsDraft(t *testing.T) {
 	dirty.TopicDrafts[key] = "local"
 	dirty.TopicDraftSync[key] = DraftSyncState{Dirty: true, Draft: domain.Draft{Text: "local"}}
 	update := telegram.ForumTopicStateChanged{ChatID: 7, TopicID: 101, IsPinned: true, UnreadMentionCount: 3, Draft: domain.Draft{Text: "cloud"}}
-	reduced, _ := updateState(dirty, TelegramEvent{Value: update})
-	entry := reduced.ForumTopics[7][101]
+	updateState(&dirty, TelegramEvent{Value: update})
+	entry := dirty.ForumTopics[7][101]
 	if !entry.IsPinned || entry.UnreadMentionCount != 3 {
 		t.Fatalf("merged entry = %#v", entry)
 	}
 	if entry.Draft.Text != "" {
 		t.Fatalf("dirty draft replaced: %#v", entry.Draft)
 	}
-	if reduced.TopicDrafts[key] != "local" || !reduced.TopicDraftSync[key].Dirty {
-		t.Fatalf("dirty topic draft overwritten: %q %#v", reduced.TopicDrafts[key], reduced.TopicDraftSync[key])
+	if dirty.TopicDrafts[key] != "local" || !dirty.TopicDraftSync[key].Dirty {
+		t.Fatalf("dirty topic draft overwritten: %q %#v", dirty.TopicDrafts[key], dirty.TopicDraftSync[key])
 	}
 
 	clean := topicsBaseState(t)
 	trackTopic(&clean, domain.ForumTopic{ID: 101, ChatID: 7, Name: "A"})
-	reduced, _ = updateState(clean, TelegramEvent{Value: update})
-	if reduced.TopicDrafts[key] != "cloud" || reduced.ForumTopics[7][101].Draft.Text != "cloud" {
-		t.Fatalf("clean draft not merged: %q %#v", reduced.TopicDrafts[key], reduced.ForumTopics[7][101].Draft)
+	updateState(&clean, TelegramEvent{Value: update})
+	if clean.TopicDrafts[key] != "cloud" || clean.ForumTopics[7][101].Draft.Text != "cloud" {
+		t.Fatalf("clean draft not merged: %q %#v", clean.TopicDrafts[key], clean.ForumTopics[7][101].Draft)
 	}
-	if reduced.TopicDraftSync[key].Dirty || reduced.TopicDraftSync[key].Draft.Text != "cloud" {
-		t.Fatalf("sync = %#v", reduced.TopicDraftSync[key])
+	if clean.TopicDraftSync[key].Dirty || clean.TopicDraftSync[key].Draft.Text != "cloud" {
+		t.Fatalf("sync = %#v", clean.TopicDraftSync[key])
 	}
 
 	ptr := telegram.ForumTopicStateChanged{ChatID: 7, TopicID: 101, IsPinned: true}
-	reduced, _ = updateState(clean, TelegramEvent{Value: &ptr})
-	if !reduced.ForumTopics[7][101].IsPinned {
-		t.Fatalf("pointer form = %#v", reduced.ForumTopics[7][101])
+	updateState(&clean, TelegramEvent{Value: &ptr})
+	if !clean.ForumTopics[7][101].IsPinned {
+		t.Fatalf("pointer form = %#v", clean.ForumTopics[7][101])
 	}
 }
 
@@ -484,17 +485,17 @@ func forumComposerState(t *testing.T) State {
 
 func TestClosedTopicBlocksComposeAndSenders(t *testing.T) {
 	state := forumComposerState(t)
-	reduced, commands := updateState(state, ActionReceived{Action: ComposerSubmit})
-	if len(commands) != 0 || reduced.Drafts[7] != "hello" {
-		t.Fatalf("submit: commands=%#v draft=%q", commands, reduced.Drafts[7])
+	commands := updateState(&state, ActionReceived{Action: ComposerSubmit})
+	if len(commands) != 0 || state.Drafts[7] != "hello" {
+		t.Fatalf("submit: commands=%#v draft=%q", commands, state.Drafts[7])
 	}
-	reduced, commands = updateState(state, ActionReceived{Action: OpenPhotoSend})
-	if len(commands) != 0 || reduced.PhotoSend != nil {
-		t.Fatalf("photo send: commands=%#v photo=%#v", commands, reduced.PhotoSend)
+	commands = updateState(&state, ActionReceived{Action: OpenPhotoSend})
+	if len(commands) != 0 || state.PhotoSend != nil {
+		t.Fatalf("photo send: commands=%#v photo=%#v", commands, state.PhotoSend)
 	}
-	reduced, commands = updateState(state, ActionReceived{Action: OpenStickerPicker})
-	if len(commands) != 0 || reduced.StickerPicker != nil {
-		t.Fatalf("sticker picker: commands=%#v picker=%#v", commands, reduced.StickerPicker)
+	commands = updateState(&state, ActionReceived{Action: OpenStickerPicker})
+	if len(commands) != 0 || state.StickerPicker != nil {
+		t.Fatalf("sticker picker: commands=%#v picker=%#v", commands, state.StickerPicker)
 	}
 
 	// Open (non-closed) topic sends its topic draft normally.
@@ -502,7 +503,7 @@ func TestClosedTopicBlocksComposeAndSenders(t *testing.T) {
 	open.IsClosed = false
 	state.ForumTopics[7][101] = open
 	state.TopicDrafts[topicKey{ChatID: 7, TopicID: 101}] = "hello"
-	reduced, commands = updateState(state, ActionReceived{Action: ComposerSubmit})
+	commands = updateState(&state, ActionReceived{Action: ComposerSubmit})
 	if len(commands) == 0 {
 		t.Fatalf("open submit commands = %#v", commands)
 	}
@@ -510,14 +511,14 @@ func TestClosedTopicBlocksComposeAndSenders(t *testing.T) {
 	if !ok || send.TopicID != 101 {
 		t.Fatalf("command = %#v", commands[0])
 	}
-	if reduced.TopicDrafts[topicKey{ChatID: 7, TopicID: 101}] != "" {
-		t.Fatalf("draft = %q", reduced.TopicDrafts[topicKey{ChatID: 7, TopicID: 101}])
+	if state.TopicDrafts[topicKey{ChatID: 7, TopicID: 101}] != "" {
+		t.Fatalf("draft = %q", state.TopicDrafts[topicKey{ChatID: 7, TopicID: 101}])
 	}
 
 	// Unknown (untracked) topic has no topic draft: submit is a no-op.
 	state = forumComposerState(t)
 	state.SelectedTopics[7] = 102
-	reduced, commands = updateState(state, ActionReceived{Action: ComposerSubmit})
+	commands = updateState(&state, ActionReceived{Action: ComposerSubmit})
 	if len(commands) != 0 {
 		t.Fatalf("unknown topic submit commands = %#v", commands)
 	}
@@ -546,14 +547,16 @@ func TestSelectingForumChatDoesNotOpenIt(t *testing.T) {
 		}
 	}
 
-	selected, _ := updateState(base(), ActionReceived{Action: SelectChat, ChatID: 7})
+	selected := base()
+	updateState(&selected, ActionReceived{Action: SelectChat, ChatID: 7})
 	checkSelection(t, "select chat", selected, 0)
 
-	selected, _ = updateState(base(), ActionReceived{Action: SelectPrevious})
+	selected = base()
+	updateState(&selected, ActionReceived{Action: SelectPrevious})
 	checkSelection(t, "chat navigation", selected, 1)
 
-	opened, _ := updateState(selected, ActionReceived{Action: OpenChat})
-	if opened.Focus != FocusConversation || !opened.ShowAll[7] {
-		t.Fatalf("explicit open: focus=%v showAll=%#v", opened.Focus, opened.ShowAll)
+	updateState(&selected, ActionReceived{Action: OpenChat})
+	if selected.Focus != FocusConversation || !selected.ShowAll[7] {
+		t.Fatalf("explicit open: focus=%v showAll=%#v", selected.Focus, selected.ShowAll)
 	}
 }

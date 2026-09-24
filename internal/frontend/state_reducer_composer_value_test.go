@@ -15,9 +15,7 @@ func TestComposerValueChangedUpdatesMatchingDraft(t *testing.T) {
 	value := "hello\nworld 🎉\n你好世界"
 	event := ComposerValueChanged{ChatID: 9, EditMessageID: 0, Value: value}
 
-	inputDraft9 := state.Drafts[9]
-
-	got, commands := updateState(state, event)
+	commands := updateState(&state, event)
 
 	if len(commands) != 1 {
 		t.Fatalf("commands = %d, want 1", len(commands))
@@ -27,17 +25,12 @@ func TestComposerValueChangedUpdatesMatchingDraft(t *testing.T) {
 		t.Fatalf("save command = %#v", commands[0])
 	}
 
-	if got.Drafts[9] != value {
-		t.Fatalf("draft 9 = %q, want %q", got.Drafts[9], value)
+	if state.Drafts[9] != value {
+		t.Fatalf("draft 9 = %q, want %q", state.Drafts[9], value)
 	}
 
-	if got.Drafts[10] != "keep" {
-		t.Fatalf("draft 10 = %q, want %q", got.Drafts[10], "keep")
-	}
-
-	// Input state's draft 9 must remain unchanged (immutability via clone).
-	if state.Drafts[9] != inputDraft9 {
-		t.Fatalf("input state draft 9 mutated: was %q, still %q", inputDraft9, state.Drafts[9])
+	if state.Drafts[10] != "keep" {
+		t.Fatalf("draft 10 = %q, want %q", state.Drafts[10], "keep")
 	}
 }
 
@@ -83,14 +76,13 @@ func TestComposerValueChangedRejectsStaleDraftIdentity(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			input := tc.fn()
-			inputCopy := cloneReducerState(input)
-			event := tc.event
+			state := tc.fn()
+			unchanged := tc.fn()
 
-			got, commands := updateState(input, event)
+			commands := updateState(&state, tc.event)
 
-			if !reflect.DeepEqual(got, inputCopy) {
-				t.Fatalf("result != input (deep-equal failed):\ngot  = %#v\nwant = %#v", got, inputCopy)
+			if !reflect.DeepEqual(state, unchanged) {
+				t.Fatalf("result != input (deep-equal failed):\ngot  = %#v\nwant = %#v", state, unchanged)
 			}
 			if len(commands) != 0 {
 				t.Fatalf("commands = %d, want 0", len(commands))
@@ -126,45 +118,23 @@ func TestComposerValueChangedUpdatesMatchingEdit(t *testing.T) {
 	value := "new editor value 🚀"
 	event := ComposerValueChanged{ChatID: 9, EditMessageID: 22, Value: value}
 
-	// Capture input target state for immutability check.
-	inputBuffer := state.EditTarget.Buffer
-	inputOriginal := state.EditTarget.Original
-	inputRequestID := state.EditTarget.RequestID
-
-	got, commands := updateState(state, event)
+	commands := updateState(&state, event)
 
 	if len(commands) != 0 {
 		t.Fatalf("commands = %d, want 0", len(commands))
 	}
 
-	if got.EditTarget.Buffer != value {
-		t.Fatalf("edit buffer = %q, want %q", got.EditTarget.Buffer, value)
+	if state.EditTarget.Buffer != value {
+		t.Fatalf("edit buffer = %q, want %q", state.EditTarget.Buffer, value)
 	}
-	if got.EditTarget.Original != inputOriginal {
-		t.Fatalf("edit original changed: was %q, got %q", inputOriginal, got.EditTarget.Original)
+	// Only the buffer may change; identity and lifecycle fields stay as configured.
+	if state.EditTarget.RequestID != 5 || state.EditTarget.Original != "original text" ||
+		state.EditTarget.ChatID != 9 || state.EditTarget.MessageID != 22 ||
+		state.EditTarget.Submitting || state.EditTarget.Error != nil {
+		t.Fatalf("edit target = %#v, want only buffer replaced", state.EditTarget)
 	}
-	if got.EditTarget.RequestID != inputRequestID {
-		t.Fatalf("edit request ID changed: was %d, got %d", inputRequestID, got.EditTarget.RequestID)
-	}
-	if got.EditTarget.ChatID != 9 {
-		t.Fatalf("edit chat ID changed: %d", got.EditTarget.ChatID)
-	}
-	if got.EditTarget.MessageID != 22 {
-		t.Fatalf("edit message ID changed: %d", got.EditTarget.MessageID)
-	}
-	if got.EditTarget.Submitting {
-		t.Fatal("edit submitting changed unexpectedly")
-	}
-	if got.EditTarget.Error != nil {
-		t.Fatal("edit error appeared unexpectedly")
-	}
-	if got.Drafts[10] != "draft 10" {
-		t.Fatalf("draft 10 mutated: %q", got.Drafts[10])
-	}
-
-	// Input state target must be unchanged (clone-first immutability).
-	if state.EditTarget.Buffer != inputBuffer {
-		t.Fatalf("input edit buffer mutated: was %q, still %q", inputBuffer, state.EditTarget.Buffer)
+	if state.Drafts[10] != "draft 10" {
+		t.Fatalf("draft 10 mutated: %q", state.Drafts[10])
 	}
 }
 
@@ -262,14 +232,13 @@ func TestComposerValueChangedRejectsStaleOrSubmittingEdit(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			input := tc.fn()
-			inputCopy := cloneReducerState(input)
-			event := tc.event
+			state := tc.fn()
+			unchanged := tc.fn()
 
-			got, commands := updateState(input, event)
+			commands := updateState(&state, tc.event)
 
-			if !reflect.DeepEqual(got, inputCopy) {
-				t.Fatalf("result != input (deep-equal no-op failed):\ngot  = %#v\nwant = %#v", got, inputCopy)
+			if !reflect.DeepEqual(state, unchanged) {
+				t.Fatalf("result != input (deep-equal no-op failed):\ngot  = %#v\nwant = %#v", state, unchanged)
 			}
 			if len(commands) != 0 {
 				t.Fatalf("commands = %d, want 0", len(commands))
