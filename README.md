@@ -91,7 +91,7 @@ Credential lookup order is environment → config file → first-run prompt.
 | Move chat focus / list selection | `j` / `k` or Up / Down | Click a row or use the wheel |
 | Cycle visible panes (not the message input) | `h` / `l` or Left / Right; Shift-Tab / Tab | Click a pane |
 | Open focused conversation | Enter in the chat list | — |
-| Chat actions | `a` in the chat list | Click an action |
+| Chat actions | `a` in the chat list | Click an action once the menu is open |
 | Chat info | `K` or F2 | Click Info |
 | Focus message input | `i` in a conversation | Click the input |
 | Activate a message or modal action | Enter | Click the action |
@@ -100,7 +100,7 @@ Credential lookup order is environment → config file → first-run prompt.
 | Next unread / mentioned chat | `u` / `m` in the chat list | — |
 | View pinned messages | `p` in a conversation | — |
 | Go to a referenced message | Select the reply, press Enter, choose Go to referenced message | Choose Go to referenced message in the reply's actions |
-| Browse forum topics | `t` | Click a topic |
+| Browse forum topics | `t` in a forum conversation | Click a topic once the list is open |
 | Page through history | Ctrl-u / Ctrl-d or Page Up / Page Down | Use the wheel |
 | Send a message | Enter | Click Send |
 | Insert a newline | Shift-Enter | — |
