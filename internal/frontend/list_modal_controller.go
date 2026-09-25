@@ -135,6 +135,48 @@ func (c *listModalController) Sync(model ViewModel, location *time.Location) tea
 	return c.host.Sync(descriptor.identity, descriptor.options, descriptor.authoritative, descriptor.focused, rect.Dx(), rect.Dy())
 }
 
+// NavigateMembers lets Huh own member-list keyboard selection while keeping
+// the modal's visible option window and mouse hit rows aligned. The reducer
+// only receives the resulting member identity for paging and activation.
+func (c *listModalController) NavigateMembers(state State, location *time.Location, msg tea.KeyPressMsg, action Action) (ActionReceived, tea.Cmd) {
+	members := state.Members
+	if members == nil || members.Loading || len(members.Results) == 0 {
+		return ActionReceived{}, nil
+	}
+	index := max(0, min(len(members.Results)-1, members.Selected))
+	next := index - 1
+	if action == SelectNext {
+		next = index + 1
+	}
+	// Huh wraps at the ends; the members list has always clamped there.
+	if next < 0 || next >= len(members.Results) {
+		return ActionReceived{}, nil
+	}
+	current := ActionReceived{Action: OpenMemberDetail, ChatID: members.ChatID, UserID: members.Results[index].User.ID}
+	target := ActionReceived{Action: OpenMemberDetail, ChatID: members.ChatID, UserID: members.Results[next].User.ID}
+	identity := selectorIdentity{Kind: selectorMembers, RequestID: members.RequestID, ChatID: members.ChatID}
+	var cmds []tea.Cmd
+	if c.host.Identity() != identity || c.host.Value() != current {
+		cmds = append(cmds, c.Sync(Select(state, location), location))
+	}
+	if selectorOptionIndex(c.host.options, target) < 0 {
+		// Rebind to the next visible window before giving the key to Huh.
+		model := Select(state, location)
+		model.Members.Selected = next
+		cmds = append(cmds, c.Sync(model, location))
+	}
+	if c.host.Value() == current {
+		key := msg.Key()
+		key.Mod &^= tea.ModCapsLock | tea.ModNumLock | tea.ModScrollLock
+		_, _, cmd := c.host.Update(tea.KeyPressMsg(key))
+		cmds = append(cmds, cmd)
+	}
+	if c.host.Value() != target {
+		return ActionReceived{}, tea.Batch(cmds...)
+	}
+	return ActionReceived{Action: SelectMember, ChatID: members.ChatID, UserID: target.UserID}, tea.Batch(cmds...)
+}
+
 // Reset clears the host to the inactive selector state: no identity, no
 // options, unfocused, and the compact default geometry.
 func (c *listModalController) Reset(bounds image.Rectangle) tea.Cmd {

@@ -79,14 +79,14 @@ func TestMembersLoadedDeduplicatesAndRejectsStaleResults(t *testing.T) {
 	}
 }
 
-func TestMembersNavigationPaginatesWithSourceOffset(t *testing.T) {
+func TestMembersSelectionPaginatesWithSourceOffset(t *testing.T) {
 	opened := openMembersForTest(t, membersBaseState(domain.ChatSupergroup))
 	updateState(&opened, MembersLoaded{RequestID: 10, ChatID: 9, Page: telegram.MemberPage{
 		Members:    []domain.ChatMember{{User: domain.User{ID: 1}}, {User: domain.User{ID: 2}}},
 		TotalCount: 10,
 		NextOffset: 4,
 	}})
-	commands := updateState(&opened, ActionReceived{Action: SelectNext})
+	commands := updateState(&opened, ActionReceived{Action: SelectMember, ChatID: 9, UserID: 2})
 	if opened.Members.Selected != 1 || !opened.Members.Loading || len(commands) != 1 {
 		t.Fatalf("paged = %#v commands=%#v", opened.Members, commands)
 	}

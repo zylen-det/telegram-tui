@@ -75,7 +75,8 @@ func selectorOptionIndex(options []selectorOption, value ActionReceived) int {
 // selectorHost wraps the one persistent Huh Select used by all selector
 // surfaces. It owns the field, its semantic selection, cached identity and
 // options, and its focus state. Enter activation (Submit) is disabled here;
-// the AppModel owns activation. Down/up/j/k remain Huh navigation.
+// the AppModel owns activation. The members list forwards down/up/j/k to
+// Update; other list surfaces still navigate through their reducers.
 type selectorHost struct {
 	field    *huh.Select[ActionReceived]
 	identity selectorIdentity

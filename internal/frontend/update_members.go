@@ -104,16 +104,6 @@ func reduceMembersAction(state *State, event ActionReceived) []Effect {
 		state.Focus = FocusConversation
 		state.Members = nil
 		return reduceAction(state, event)
-	case SelectNext, SelectPrevious:
-		if state.Focus != FocusMembers || members.Loading || len(members.Results) == 0 {
-			return nil
-		}
-		delta := 1
-		if event.Action == SelectPrevious {
-			delta = -1
-		}
-		members.Selected = max(0, min(len(members.Results)-1, members.Selected+delta))
-		return maybePaginateMembers(state)
 	case SelectMember:
 		if state.Focus != FocusMembers || event.ChatID != members.ChatID {
 			return nil

@@ -14,7 +14,14 @@ func huhTheme() huh.Theme {
 
 type telegramHuhTheme struct{}
 
-func (telegramHuhTheme) Theme(_ bool) *huh.Styles {
+// Huh calls Theme for every rendered option, not just once per View. The
+// palette is constant; rebuilding ThemeBase for each member and key repeat
+// allocates megabytes per frame on long lists.
+var telegramHuhStyles = newTelegramHuhStyles()
+
+func (telegramHuhTheme) Theme(_ bool) *huh.Styles { return telegramHuhStyles }
+
+func newTelegramHuhStyles() *huh.Styles {
 	s := huh.ThemeBase(false)
 
 	panel := rgba(panelColor)

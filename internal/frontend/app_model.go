@@ -242,6 +242,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(m.deliver(commands), m.syncComposerTextHost())
 		}
 		if received, ok := mapKeyPress(focus, msg); ok {
+			if focus == FocusMembers && snapshot.Members != nil && snapshot.Members.Detail == nil &&
+				(received.Action == SelectNext || received.Action == SelectPrevious) {
+				selected, cmd := m.listModals.NavigateMembers(snapshot, m.location, msg, received.Action)
+				if selected.Action == NoAction {
+					return m, cmd
+				}
+				return m, tea.Batch(cmd, m.deliver(m.applyMessage(selected)), m.syncListModalController())
+			}
 			if snap := m.Snapshot(); snap.StickerPicker != nil {
 				switch received.Action {
 				case StickerMoveLeft, StickerMoveRight, StickerMoveUp, StickerMoveDown, StickerActivate, Close:
