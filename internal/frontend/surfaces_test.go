@@ -117,13 +117,14 @@ func TestNarrowChatKeysSeparateActionsFromMessages(t *testing.T) {
 	model = mainSurfaceModel(t, 70, 22)
 	state = model.Snapshot()
 	state.Focus = FocusChats
+	state.FocusedChat = 0
 	model.state = &state
 	opened, _ := updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
-	if state := opened.Snapshot(); state.ChatActions != nil || state.Focus != FocusConversation {
-		t.Fatalf("Enter = focus %v actions %#v", state.Focus, state.ChatActions)
+	if state := opened.Snapshot(); state.ChatActions != nil || state.Focus != FocusChats || state.SelectedChat != 0 {
+		t.Fatalf("Enter = focus %v selected %d actions %#v", state.Focus, state.SelectedChat, state.ChatActions)
 	}
-	if plain := plainAppView(opened); !strings.Contains(plain, "Hello from the group") {
-		t.Fatalf("Enter did not open messages:\n%s", plain)
+	if plain := plainAppView(opened); !strings.Contains(plain, "Mina Chen") || strings.Contains(plain, "Hello from the group") {
+		t.Fatalf("Enter did not stay on the chat list:\n%s", plain)
 	}
 }
 

@@ -592,8 +592,8 @@ func TestChatSearchForumActivationEntersAllDirectly(t *testing.T) {
 	if !state.ShowAll[7] {
 		t.Fatalf("ShowAll = %#v, want ALL mode", state.ShowAll)
 	}
-	if state.Focus != FocusConversation {
-		t.Fatalf("focus = %v, want FocusConversation", state.Focus)
+	if state.Focus != FocusChats {
+		t.Fatalf("focus = %v, want FocusChats", state.Focus)
 	}
 	history, exists := state.History[7]
 	if !exists || !history.Loading {

@@ -761,9 +761,10 @@ func TestSelectionFocusAndCloseActionsRespectLayoutAndDrafts(t *testing.T) {
 	}
 	commands = updateState(&menu, ActionReceived{Action: Activate})
 	activated := menu
-	if activated.Focus != FocusConversation || activated.SelectedChat != 1 || len(commands) == 0 {
+	if activated.Focus != FocusChats || activated.SelectedChat != 1 || len(commands) == 0 {
 		t.Fatalf("wide activate = focus:%v selected:%d commands:%#v", activated.Focus, activated.SelectedChat, commands)
 	}
+	updateState(&activated, ActionReceived{Action: FocusPane, TargetFocus: FocusConversation})
 	updateState(&activated, ActionReceived{Action: FocusPane, TargetFocus: FocusComposer})
 	composer := activated
 	if composer.Focus != FocusComposer {

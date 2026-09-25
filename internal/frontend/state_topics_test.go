@@ -556,7 +556,7 @@ func TestSelectingForumChatDoesNotOpenIt(t *testing.T) {
 	checkSelection(t, "chat navigation", selected, 1)
 
 	updateState(&selected, ActionReceived{Action: OpenChat})
-	if selected.Focus != FocusConversation || !selected.ShowAll[7] {
+	if selected.Focus != FocusChats || !selected.ShowAll[7] {
 		t.Fatalf("explicit open: focus=%v showAll=%#v", selected.Focus, selected.ShowAll)
 	}
 }

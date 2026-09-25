@@ -110,7 +110,7 @@ Credential lookup order is environment → config file → first-run prompt.
 
 In action menus, `j`/`k` move between options and Enter activates the selected one. Direct keys activate the indicated option without moving selection; only keys for visible actions are active. Message actions use `v` view/open media, `r` reply, `g` go to referenced message, `f` forward, `e` edit, `y` copy (yank), `i` user info, `a` react, `p` pin/unpin, `d` delete for self, and `D` delete for everyone. Chat actions use `o` open, `i` info, `a` archive/unarchive, `p` pin/unpin, `m` mute/unmute, `r` mark read/unread, `c` clear history, `d` delete, `l` leave, and `J` join (`j` remains navigation). Confirmation uses `c` cancel or `y` confirm. Esc/`q` goes back; Ctrl-C still quits.
 
-Moving through the chat list changes the focused row without replacing the selected conversation. Press Enter to open the focused conversation; pane navigation wraps among visible Chats, Conversation, and Info panes without opening another chat. Press `a` for actions on the focused chat. Press `i` to focus the message input from a visible conversation.
+Moving through the chat list changes the focused row without replacing the selected conversation. Press Enter to open the focused conversation without moving focus from Chats; pane navigation wraps among visible Chats, Conversation, and Info panes without opening another chat. Press `a` for actions on the focused chat. Press `i` to focus the message input from a visible conversation.
 
 Typing `/` at the beginning of the composer opens bot-command completion where available. Plain `q` never quits the process; it only closes the current modal or page.
 

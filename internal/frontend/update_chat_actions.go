@@ -214,9 +214,11 @@ func openChatFromList(state *State, chatID domain.ChatID) []Effect {
 		return commands
 	}
 	if state.Chats[state.SelectedChat].IsForum {
-		return append(commands, activateAllTopics(state, chatID)...)
+		focus := state.Focus
+		commands = append(commands, activateAllTopics(state, chatID)...)
+		state.Focus = focus
+		return commands
 	}
-	state.Focus = FocusConversation
 	commands = append(commands, requestHistoryIfAbsent(state, chatID)...)
 	commands = append(commands, requestMissingMessageAvatars(state, state.Messages[chatID])...)
 	return commands

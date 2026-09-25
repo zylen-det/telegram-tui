@@ -28,7 +28,7 @@ func TestChatListEnterOpensActionsAndOpenChatIsFirst(t *testing.T) {
 		t.Fatalf("items = %#v", items)
 	}
 	commands = updateState(&state, ActionReceived{Action: Activate})
-	if state.ChatActions != nil || state.Focus != FocusConversation {
+	if state.ChatActions != nil || state.Focus != FocusChats {
 		t.Fatalf("activated = focus %v menu %#v", state.Focus, state.ChatActions)
 	}
 	if len(commands) != 1 {
@@ -87,7 +87,7 @@ func TestChatListActionsTargetFocusedChatWhileConversationStaysSelected(t *testi
 	reopened := fixture()
 	updateState(&reopened, ActionReceived{Action: OpenChatActionMenu})
 	commands = updateState(&reopened, ActionReceived{Action: Activate})
-	if reopened.SelectedChat != 1 || reopened.FocusedChat != 1 || reopened.Focus != FocusConversation || len(commands) == 0 {
+	if reopened.SelectedChat != 1 || reopened.FocusedChat != 1 || reopened.Focus != FocusChats || len(commands) == 0 {
 		t.Fatalf("open focused chat = focused:%d selected:%d focus:%v commands:%#v", reopened.FocusedChat, reopened.SelectedChat, reopened.Focus, commands)
 	}
 	if active := Select(reopened, nil).ActiveChat.ID; active != 2 {
@@ -118,7 +118,7 @@ func TestChatListOpenActionBypassesActions(t *testing.T) {
 	state.Layout = LayoutNarrow
 
 	commands := updateState(&state, ActionReceived{Action: OpenChat})
-	if state.Focus != FocusConversation || state.ChatActions != nil {
+	if state.Focus != FocusChats || state.ChatActions != nil {
 		t.Fatalf("opened = focus %v menu %#v", state.Focus, state.ChatActions)
 	}
 	if len(commands) != 1 {

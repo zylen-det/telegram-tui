@@ -121,7 +121,7 @@ func TestChatSearchActivationAddsSelectsAndOpensChat(t *testing.T) {
 	updateState(&loaded, AllMessagesSearched{RequestID: requestID, Messages: []domain.Message{}})
 	commands := updateState(&loaded, ActionReceived{Action: Activate})
 	activated := loaded
-	if activated.ChatSearch != nil || activated.Focus != FocusConversation {
+	if activated.ChatSearch != nil || activated.Focus != FocusChats {
 		t.Fatalf("activated search/focus = %#v %v", activated.ChatSearch, activated.Focus)
 	}
 	index := chatIndex(activated.Chats, 99)
@@ -162,7 +162,7 @@ func TestChatSearchMouseSelectionRequiresReturnedIdentity(t *testing.T) {
 	}
 	commands = updateState(&loaded, ActionReceived{Action: SelectChat, ChatID: 99})
 	selected := loaded
-	if selected.ChatSearch != nil || selected.Focus != FocusConversation || chatIndex(selected.Chats, 99) < 0 || len(commands) == 0 {
+	if selected.ChatSearch != nil || selected.Focus != FocusChats || chatIndex(selected.Chats, 99) < 0 || len(commands) == 0 {
 		t.Fatalf("selected = %#v focus=%v commands=%#v", selected.ChatSearch, selected.Focus, commands)
 	}
 }
