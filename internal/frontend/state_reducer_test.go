@@ -376,6 +376,37 @@ func TestComposerEscapeCancelsReplyThenDraftThenLeaves(t *testing.T) {
 	}
 }
 
+func TestComposerEscapeKeepsChatInfoOpenUntilComposerExits(t *testing.T) {
+	for _, draft := range []string{"", "draft"} {
+		t.Run("draft="+draft, func(t *testing.T) {
+			state := selectedWritableState()
+			state.Layout = LayoutWide
+			state.Focus = FocusConversation
+			state.Drafts[9] = draft
+			updateState(&state, ActionReceived{Action: ToggleDetails})
+			updateState(&state, ActionReceived{Action: FocusPane, TargetFocus: FocusComposer})
+			if !state.DetailsOpen || state.Focus != FocusComposer {
+				t.Fatalf("setup: details=%t focus=%v", state.DetailsOpen, state.Focus)
+			}
+
+			updateState(&state, ActionReceived{Action: Close})
+			if draft != "" {
+				if !state.DetailsOpen || state.Focus != FocusComposer || state.Drafts[9] != "" {
+					t.Fatalf("draft escape: details=%t focus=%v draft=%q", state.DetailsOpen, state.Focus, state.Drafts[9])
+				}
+				updateState(&state, ActionReceived{Action: Close})
+			}
+			if !state.DetailsOpen || state.Focus != FocusConversation || state.DetailsChatID != 9 {
+				t.Fatalf("composer escape: details=%t focus=%v chat=%d", state.DetailsOpen, state.Focus, state.DetailsChatID)
+			}
+			updateState(&state, ActionReceived{Action: Close})
+			if state.DetailsOpen || state.DetailsChatID != 0 || state.Focus != FocusConversation {
+				t.Fatalf("info escape: details=%t focus=%v chat=%d", state.DetailsOpen, state.Focus, state.DetailsChatID)
+			}
+		})
+	}
+}
+
 func TestReadyRefreshesChatsWithoutDiscardingCache(t *testing.T) {
 	state := InitialState()
 	state.NextRequestID = 10

@@ -1452,7 +1452,7 @@ func reduceAction(state *State, event ActionReceived) []Effect {
 			state.DetailsSelected = 0
 		}
 	case Close:
-		if state.DetailsOpen {
+		if state.DetailsOpen && state.Focus != FocusComposer {
 			state.DetailsOpen = false
 			state.DetailsChatID = 0
 			state.Focus = state.FocusBeforeInfo
