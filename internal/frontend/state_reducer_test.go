@@ -148,7 +148,7 @@ func TestMessageNavigationViewportFollowsSelectionAndStopsAtEndpoints(t *testing
 
 	oldest := newest
 	oldest.SelectedMessage = 1
-	oldest.History = map[domain.ChatID]HistoryState{9: {ViewOffset: 4}}
+	oldest.History = map[domain.ChatID]HistoryState{9: {ViewOffset: 4, Done: true}}
 	commands = updateState(&oldest, ActionReceived{Action: SelectPreviousMessage})
 	if len(commands) != 0 || oldest.SelectedMessage != 1 || oldest.History[9].ViewOffset != 4 {
 		t.Fatalf("oldest endpoint = selected:%d offset:%d commands:%#v", oldest.SelectedMessage, oldest.History[9].ViewOffset, commands)
@@ -158,6 +158,34 @@ func TestMessageNavigationViewportFollowsSelectionAndStopsAtEndpoints(t *testing
 	if len(commands) != 0 || newest.SelectedMessage != 5 || newest.History[9].ViewOffset != 0 {
 		t.Fatalf("newest endpoint = selected:%d offset:%d commands:%#v", newest.SelectedMessage, newest.History[9].ViewOffset, commands)
 	}
+}
+
+func TestMessageNavigationLoadsOlderHistoryAtOldestSelection(t *testing.T) {
+	state := InitialState()
+	state.Focus = FocusConversation
+	state.Chats = []domain.Chat{{ID: 9}}
+	state.Messages[9] = []domain.Message{{ID: 20, ChatID: 9}, {ID: 30, ChatID: 9}}
+	state.SelectedMessageChat, state.SelectedMessage = 9, 30
+	state.History[9] = HistoryState{OldestID: 20}
+	state.NextRequestID = 20
+
+	commands := updateState(&state, ActionReceived{Action: SelectPreviousMessage})
+	assertCommands(t, commands, []Effect{LoadMessages{RequestID: 20, ChatID: 9, Cursor: telegram.MessageCursor{FromMessageID: 20, Limit: pageSize}}})
+	if state.SelectedMessage != 20 || state.History[9].ViewOffset != 1 || !state.History[9].FollowSelection || !state.History[9].Loading {
+		t.Fatalf("older navigation = message %d history %#v", state.SelectedMessage, state.History[9])
+	}
+	if commands := updateState(&state, ActionReceived{Action: SelectPreviousMessage}); len(commands) != 0 {
+		t.Fatalf("duplicate load while pending = %#v", commands)
+	}
+	updateState(&state, MessagesLoaded{RequestID: 20, ChatID: 9, Page: telegram.MessagePage{Messages: []domain.Message{{ID: 10, ChatID: 9}}, Done: false}})
+	if state.SelectedMessage != 20 || state.History[9].Loading || state.History[9].OldestID != 10 {
+		t.Fatalf("loaded history = message %d history %#v", state.SelectedMessage, state.History[9])
+	}
+	commands = updateState(&state, ActionReceived{Action: SelectPreviousMessage})
+	if state.SelectedMessage != 10 || state.History[9].ViewOffset != 2 || !state.History[9].Loading {
+		t.Fatalf("continued navigation = message %d history %#v", state.SelectedMessage, state.History[9])
+	}
+	assertCommands(t, commands, []Effect{LoadMessages{RequestID: 21, ChatID: 9, Cursor: telegram.MessageCursor{FromMessageID: 10, Limit: pageSize}}})
 }
 
 func TestAuthoritativeMessageActionsLoadAndRejectStaleResults(t *testing.T) {

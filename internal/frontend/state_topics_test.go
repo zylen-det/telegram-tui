@@ -44,6 +44,7 @@ func TestTopicMessageNavigationSkipsMessagesHiddenByTheConversation(t *testing.T
 	}
 	state.SelectedMessageChat, state.SelectedMessage = 7, 5
 	key := topicKey{ChatID: 7, TopicID: 101}
+	state.TopicHistory[key] = HistoryState{Done: true}
 
 	for _, want := range []struct {
 		action Action
@@ -76,6 +77,27 @@ func TestTopicMessageNavigationSkipsMessagesHiddenByTheConversation(t *testing.T
 	updateState(&state, ActionReceived{Action: SelectPreviousMessage})
 	if state.SelectedMessage != 4 || !state.History[7].FollowSelection || state.History[7].ViewOffset != 1 {
 		t.Fatalf("ALL navigation = message %d history %#v, want message 4 and chat offset 1", state.SelectedMessage, state.History[7])
+	}
+}
+
+func TestTopicMessageNavigationLoadsOlderTopicHistory(t *testing.T) {
+	state := topicsBaseState(t)
+	state.Focus = FocusConversation
+	trackTopic(&state, testTopic(101, "Selected"))
+	state.SelectedTopics[7] = 101
+	state.Messages[7] = []domain.Message{{ID: 1, ChatID: 7, TopicID: 101}, {ID: 2, ChatID: 7, TopicID: 102}, {ID: 3, ChatID: 7, TopicID: 101}}
+	state.SelectedMessageChat, state.SelectedMessage = 7, 3
+	key := topicKey{ChatID: 7, TopicID: 101}
+	state.TopicHistory[key] = HistoryState{OldestID: 1}
+	state.History[7] = HistoryState{OldestID: 2}
+
+	commands := updateState(&state, ActionReceived{Action: SelectPreviousMessage})
+	assertCommands(t, commands, []Effect{LoadMessages{RequestID: 10, ChatID: 7, TopicID: 101, Cursor: telegram.MessageCursor{FromMessageID: 1, Limit: pageSize}}})
+	if state.SelectedMessage != 1 || !state.TopicHistory[key].Loading || state.TopicHistory[key].ViewOffset != 1 || state.History[7].Loading {
+		t.Fatalf("topic navigation = message %d topic %#v chat %#v", state.SelectedMessage, state.TopicHistory[key], state.History[7])
+	}
+	if commands := updateState(&state, ActionReceived{Action: SelectPreviousMessage}); len(commands) != 0 {
+		t.Fatalf("duplicate topic load = %#v", commands)
 	}
 }
 

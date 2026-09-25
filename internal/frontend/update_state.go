@@ -1396,7 +1396,7 @@ func reduceAction(state *State, event ActionReceived) []Effect {
 		}
 		return commands
 	case SelectNextMessage, SelectPreviousMessage:
-		selectAdjacentMessage(state, event.Action == SelectPreviousMessage)
+		return selectAdjacentMessage(state, event.Action == SelectPreviousMessage)
 	case CopyMessage:
 		if message, ok := selectedMessage(*state); ok && message.Capabilities().Copy {
 			return []Effect{WriteClipboard{Text: message.DisplayText()}}
@@ -2926,14 +2926,14 @@ func messageByIdentity(state State, chatID domain.ChatID, messageID domain.Messa
 	return state.Messages[chatID][index], true
 }
 
-func selectAdjacentMessage(state *State, previous bool) {
+func selectAdjacentMessage(state *State, previous bool) []Effect {
 	chatID, ok := activeChatID(*state)
 	if !ok {
-		return
+		return nil
 	}
 	messages := visibleConversationMessages(*state, chatID)
 	if len(messages) == 0 {
-		return
+		return nil
 	}
 	index := messageIndex(messages, state.SelectedMessage)
 	moved := index < 0
@@ -2950,21 +2950,40 @@ func selectAdjacentMessage(state *State, previous bool) {
 	state.SelectedMessageChat = chatID
 	state.SelectedMessage = messages[index].ID
 	state.MessageMenu = nil
+	key, topicActive := activeTopicKey(*state)
+	if _, known := visibleConversationTopic(*state, chatID); !known {
+		topicActive = false
+	}
+	var history HistoryState
+	var exists bool
+	if topicActive {
+		history, exists = state.TopicHistory[key]
+	} else {
+		history, exists = state.History[chatID]
+	}
 	if moved {
-		if key, active := activeTopicKey(*state); active {
-			if _, known := visibleConversationTopic(*state, chatID); known {
-				history := state.TopicHistory[key]
-				history.ViewOffset = clampOffset(len(messages)-1-index, len(messages))
-				history.FollowSelection = true
-				state.TopicHistory[key] = history
-				return
-			}
-		}
-		history := state.History[chatID]
 		history.ViewOffset = clampOffset(len(messages)-1-index, len(messages))
 		history.FollowSelection = true
-		state.History[chatID] = history
 	}
+	var commands []Effect
+	if previous && index == 0 && exists && !history.Loading && !history.Done {
+		requestID := allocateRequestID(state)
+		history.Loading = true
+		history.RequestID = requestID
+		command := LoadMessages{RequestID: requestID, ChatID: chatID, Cursor: telegram.MessageCursor{FromMessageID: history.OldestID, Limit: pageSize}}
+		if topicActive {
+			command.TopicID = key.TopicID
+		}
+		commands = []Effect{command}
+	}
+	if moved || len(commands) != 0 {
+		if topicActive {
+			state.TopicHistory[key] = history
+		} else {
+			state.History[chatID] = history
+		}
+	}
+	return commands
 }
 
 func openMessageActionMenu(state *State) []Effect {
