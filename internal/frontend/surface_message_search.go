@@ -27,7 +27,7 @@ func messageSearchInputRect(bounds image.Rectangle) image.Rectangle {
 	return image.Rect(frame.Min.X+2, frame.Min.Y+3, frame.Max.X-2, frame.Min.Y+4)
 }
 
-func buildMessageSearchLayer(model ViewModel, location *time.Location, styles renderStyles, searchInputView, selectorView string) surfaceResult {
+func buildMessageSearchLayer(model ViewModel, location *time.Location, styles renderStyles, searchInputView string) surfaceResult {
 	if model.MessageSearch == nil {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
@@ -37,17 +37,14 @@ func buildMessageSearchLayer(model ViewModel, location *time.Location, styles re
 	rows := displayedMessageSearchRows(model, location)
 	bounds := image.Rect(0, 0, model.Width, model.Height)
 	width := messageSearchFrame(bounds).Dx()
-	if selectorView != "" {
-		return buildListModalWidth(bounds, "Search messages", rows, styles, width, selectorView)
-	}
 	return buildListModalWidth(bounds, "Search messages", rows, styles, width)
 }
 
 // displayedMessageSearchRows is the single row source for a submitted message
 // search modal: the result/informational rows built by messageSearchRows
 // reduced to the window that actually reaches the frame. The renderer and the
-// list modal controller both call it, so selector options, geometry, and paint
-// always describe the same displayed rows.
+// keyboard/mouse routing both read these rows, so geometry, interaction, and
+// paint always describe the same displayed rows.
 func displayedMessageSearchRows(model ViewModel, location *time.Location) []modalRowSpec {
 	if model.MessageSearch == nil {
 		return nil

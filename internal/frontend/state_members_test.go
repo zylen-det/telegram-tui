@@ -86,7 +86,7 @@ func TestMembersSelectionPaginatesWithSourceOffset(t *testing.T) {
 		TotalCount: 10,
 		NextOffset: 4,
 	}})
-	commands := updateState(&opened, ActionReceived{Action: SelectMember, ChatID: 9, UserID: 2})
+	commands := updateState(&opened, ActionReceived{Action: SelectNext})
 	if opened.Members.Selected != 1 || !opened.Members.Loading || len(commands) != 1 {
 		t.Fatalf("paged = %#v commands=%#v", opened.Members, commands)
 	}
@@ -120,7 +120,7 @@ func TestMembersSelectionFailureCloseAndClone(t *testing.T) {
 		NextOffset: 2,
 		Done:       true,
 	}})
-	updateState(&opened, ActionReceived{Action: SelectMember, ChatID: 9, UserID: 2})
+	updateState(&opened, ActionReceived{Action: SelectNext})
 	if opened.Members.Selected != 1 {
 		t.Fatalf("selected = %d", opened.Members.Selected)
 	}

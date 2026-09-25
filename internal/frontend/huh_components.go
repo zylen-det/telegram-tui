@@ -14,9 +14,8 @@ func huhTheme() huh.Theme {
 
 type telegramHuhTheme struct{}
 
-// Huh calls Theme for every rendered option, not just once per View. The
-// palette is constant; rebuilding ThemeBase for each member and key repeat
-// allocates megabytes per frame on long lists.
+// Huh may request its Theme repeatedly while fields render. The palette is
+// constant, so keep one immutable style set instead of rebuilding ThemeBase.
 var telegramHuhStyles = newTelegramHuhStyles()
 
 func (telegramHuhTheme) Theme(_ bool) *huh.Styles { return telegramHuhStyles }

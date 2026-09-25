@@ -67,43 +67,43 @@ func topicsViewModel() ViewModel {
 	}
 }
 
-func TestTopicsSelectorOptionsCarryChatTopicIdentity(t *testing.T) {
-	options := selectorOptionsFromRows(topicsRows(topicsViewModel().Topics))
+func TestTopicsRowsCarryChatTopicIdentity(t *testing.T) {
+	options := actionableRows(topicsRows(topicsViewModel().Topics))
 	if len(options) != 3 {
-		t.Fatalf("options = %#v", options)
+		t.Fatalf("rows = %#v", options)
 	}
 	// Row 0 is the ALL pseudo-row matching the reducer's display indexing.
 	if options[0].ID != "topic:all" || options[0].Label != "All messages" {
-		t.Fatalf("option 0 = %#v", options[0])
+		t.Fatalf("row 0 = %#v", options[0])
 	}
-	if options[0].Value != (ActionReceived{Action: SelectTopic, ChatID: 9, TopicID: 0}) {
-		t.Fatalf("option 0 payload = %#v", options[0].Value)
+	if options[0].Action != (ActionReceived{Action: SelectTopic, ChatID: 9, TopicID: 0}) {
+		t.Fatalf("row 0 payload = %#v", options[0].Action)
 	}
 	if options[1].ID != "topic:1" || options[1].Label != "General (unread 3)" {
-		t.Fatalf("option 1 = %#v", options[1])
+		t.Fatalf("row 1 = %#v", options[1])
 	}
-	if options[1].Value != (ActionReceived{Action: SelectTopic, ChatID: 9, TopicID: 1}) {
-		t.Fatalf("option 1 payload = %#v", options[1].Value)
+	if options[1].Action != (ActionReceived{Action: SelectTopic, ChatID: 9, TopicID: 1}) {
+		t.Fatalf("row 1 payload = %#v", options[1].Action)
 	}
 	if options[2].ID != "topic:2" {
-		t.Fatalf("option 2 id = %#v", options[2])
+		t.Fatalf("row 2 id = %#v", options[2])
 	}
 	if !strings.Contains(options[2].Label, "Announcements") || !strings.Contains(options[2].Label, "\U0001F4CC") ||
 		!strings.Contains(options[2].Label, "\U0001F512") || !strings.Contains(options[2].Label, "…") {
-		t.Fatalf("option 2 label = %q", options[2].Label)
+		t.Fatalf("row 2 label = %q", options[2].Label)
 	}
-	if options[2].Value != (ActionReceived{Action: SelectTopic, ChatID: 9, TopicID: 2}) {
-		t.Fatalf("option 2 payload = %#v", options[2].Value)
+	if options[2].Action != (ActionReceived{Action: SelectTopic, ChatID: 9, TopicID: 2}) {
+		t.Fatalf("row 2 payload = %#v", options[2].Action)
 	}
-	if got := selectorOptionsFromRows(topicsRows(nil)); got != nil {
-		t.Fatalf("nil topics options = %#v", got)
+	if got := actionableRows(topicsRows(nil)); got != nil {
+		t.Fatalf("nil topics rows = %#v", got)
 	}
 }
 
 func TestTopicsLayerIsModalAndClosesUnderlyingHits(t *testing.T) {
 	styles := newRenderStyles(true)
 	model := topicsViewModel()
-	layer := buildTopicsLayer(model, styles, "")
+	layer := buildTopicsLayer(model, styles)
 	if layer.Layer == nil || !layer.IsModal || layer.Rect.Empty() {
 		t.Fatalf("layer = nil=%t modal=%t rect=%v", layer.Layer == nil, layer.IsModal, layer.Rect)
 	}
@@ -197,7 +197,7 @@ func TestTopicsRowsWindowCountsALLRow(t *testing.T) {
 func TestTopicsLayerRowClickCarriesTopicIdentity(t *testing.T) {
 	styles := newRenderStyles(true)
 	model := topicsViewModel()
-	layer := buildTopicsLayer(model, styles, "")
+	layer := buildTopicsLayer(model, styles)
 	var foundAll, foundTopic2 bool
 	for _, interaction := range layer.Interactions {
 		switch interaction.ID {
@@ -221,7 +221,7 @@ func TestTopicsLayerRowClickCarriesTopicIdentity(t *testing.T) {
 	}
 }
 
-func TestAppModelSelectorTopicsRouteSync(t *testing.T) {
+func TestAppModelTopicsKeyboardNavigationIsReducerOwned(t *testing.T) {
 	state := InitialState()
 	state.Chats = []domain.Chat{{ID: 9, Kind: domain.ChatSupergroup, IsForum: true, CanSend: true}}
 	state.SelectedChat = 0
@@ -235,20 +235,24 @@ func TestAppModelSelectorTopicsRouteSync(t *testing.T) {
 		Done:     true,
 	}
 	model := newAppModelForTest(t, state, newTestSession(t))
+	model, _ = updateAppModel(t, model, tea.WindowSizeMsg{Width: 100, Height: 24})
 
-	_ = model.syncListModalController()
-	if got := model.listModals.host.Identity(); got != (selectorIdentity{Kind: selectorTopics, RequestID: 7, ChatID: 9}) {
-		t.Fatalf("selector identity = %#v", got)
+	// Selected==1 indexes display rows where row 0 is the ALL pseudo-row.
+	// k moves to the ALL row, j returns, and Enter selects the highlighted
+	// row -- all through the reducer, the sole authority for Selected.
+	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: tea.KeyUp}))
+	if got := model.Snapshot().Topics.Selected; got != 0 {
+		t.Fatalf("after up selected = %d, want 0", got)
 	}
-	// Selected==1 indexes display rows where row 0 is the ALL pseudo-row, so
-	// the synced value is topic 1 (General).
-	if got := model.listModals.host.Value(); got != (ActionReceived{Action: SelectTopic, ChatID: 9, TopicID: 1}) {
-		t.Fatalf("selector value = %#v", got)
+	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: 'j', Text: "j"}))
+	if got := model.Snapshot().Topics.Selected; got != 1 {
+		t.Fatalf("after j selected = %d, want 1", got)
 	}
-	if !model.listModals.host.focused {
-		t.Fatal("selector not focused")
+	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	if got := model.Snapshot(); got.Focus != FocusConversation {
+		t.Fatalf("Enter left focus = %v", got.Focus)
 	}
-	if options := model.listModals.host.Options(); len(options) != 3 || options[0].ID != "topic:all" || options[2].ID != "topic:2" {
-		t.Fatalf("selector options = %#v", options)
+	if got := model.Snapshot().SelectedTopics[9]; got != 1 {
+		t.Fatalf("Enter selected topic = %d, want 1 (General)", got)
 	}
 }

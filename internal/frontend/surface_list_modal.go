@@ -22,17 +22,29 @@ type modalRowSpec struct {
 	Key      string // direct activation key for action menus; empty on other lists
 }
 
+// rowSelectable is the one actionable-row predicate shared by the manual list
+// modal paint and the direct-key shortcut routing: a row participates in the
+// interactive hit list (and in keyboard selection) only when it carries an ID
+// and a real action and is not a structural header. Section headers and
+// informational rows never do, so they stay out of selection while still
+// counting in the modal geometry.
+func rowSelectable(row modalRowSpec) bool {
+	return !row.Header && row.ID != "" && row.Action.Action != NoAction
+}
+
 // buildListModal builds the shared action-list modal surface. Geometry is
 // owned entirely by components.Modal.Layout; close, rows, and content all
 // follow that layout exactly. Actionable rows carry their ID and full-row
-// interaction; informational rows are purely visual.
-func buildListModal(bounds image.Rectangle, title string, rows []modalRowSpec, styles renderStyles, selectorView ...string) surfaceResult {
-	return buildListModalWidth(bounds, title, rows, styles, 0, selectorView...)
+// interaction; informational rows are purely visual. Selection is painted
+// manually from the authoritative modalRowSpec.Selected flag; list modals
+// have no injected editor view.
+func buildListModal(bounds image.Rectangle, title string, rows []modalRowSpec, styles renderStyles) surfaceResult {
+	return buildListModalWidth(bounds, title, rows, styles, 0)
 }
 
 // buildListModalWidth renders the shared list modal with an optional preferred
 // frame width. A nonpositive width preserves the compact shared default.
-func buildListModalWidth(bounds image.Rectangle, title string, rows []modalRowSpec, styles renderStyles, width int, selectorView ...string) surfaceResult {
+func buildListModalWidth(bounds image.Rectangle, title string, rows []modalRowSpec, styles renderStyles, width int) surfaceResult {
 	if bounds.Empty() {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
@@ -68,8 +80,6 @@ func buildListModalWidth(bounds image.Rectangle, title string, rows []modalRowSp
 	root := lipgloss.NewLayer(rootContent).X(frame.Min.X).Y(frame.Min.Y).Z(zModalFrame)
 
 	var interactions []layerInteraction
-	injected := len(selectorView) > 0
-	var selectorRect image.Rectangle
 
 	// Title: intrinsic child local (2,0), clipped strictly before the close
 	// cell so it never overwrites the top-right border/close corner.
@@ -103,7 +113,7 @@ func buildListModalWidth(bounds image.Rectangle, title string, rows []modalRowSp
 		}
 
 		rowStyle := styles.Panel
-		if spec.Selected && !injected {
+		if spec.Selected {
 			rowStyle = styles.Selected
 		}
 		rowLocal := row.Rect.Sub(frame.Min)
@@ -111,21 +121,14 @@ func buildListModalWidth(bounds image.Rectangle, title string, rows []modalRowSp
 			continue
 		}
 
-		interactive := spec.ID != "" && spec.Action.Action != NoAction
-
-		if interactive {
-			// Union of visible actionable row rects; equals the host's modal-row
-			// geometry and hosts the injected Huh Selector View when present.
-			selectorRect = selectorRect.Union(rowLocal)
+		if rowSelectable(spec) {
 			rowContent := renderEmptyBox(rowStyle, rowLocal.Dx(), rowLocal.Dy())
 			interactions = append(interactions, addInteractive(
 				root, frame.Min, rowLocal, spec.ID, zModalRow, rowContent,
 				spec.Action, ActionReceived{}, ActionReceived{},
 			))
-			if !injected {
-				rowLayer := root.GetLayer(spec.ID)
-				addModalRowLabel(rowLayer, row, spec, rowStyle)
-			}
+			rowLayer := root.GetLayer(spec.ID)
+			addModalRowLabel(rowLayer, row, spec, rowStyle)
 		} else {
 			rowContent := renderEmptyBox(rowStyle, rowLocal.Dx(), rowLocal.Dy())
 			rowLayer := lipgloss.NewLayer(rowContent).X(rowLocal.Min.X).Y(rowLocal.Min.Y).Z(zModalRow)
@@ -134,28 +137,13 @@ func buildListModalWidth(bounds image.Rectangle, title string, rows []modalRowSp
 		}
 	}
 
-	// Injected Huh Selector View: replaces the actionable row labels/selection
-	// paint. An empty view adds no content and never falls back to legacy
-	// labels; non-status rows keep their manual rendering.
-	if injected && !selectorRect.Empty() {
-		viewWidth := selectorRect.Dx()
-		if len(rows) > 0 && rows[0].Key != "" && viewWidth > 2 {
-			viewWidth -= 2 // reserve a gap and the right-aligned shortcut cell
-		}
-		view := clipSelectorHuhView(selectorView[0], viewWidth, selectorRect.Dy())
-		if view != "" {
-			root.AddLayers(lipgloss.NewLayer(view).X(selectorRect.Min.X).Y(selectorRect.Min.Y).Z(zModalContent))
-		}
-	}
-
-	// Huh owns the selection/label paint; the shortcut is shared chrome on
-	// top of either paint path, never another selector label.
+	// The shortcut column is shared chrome on top of the manual row paint.
 	for _, row := range layout.Rows {
 		if row.Index < 0 || row.Index >= len(rows) || rows[row.Index].Key == "" || row.Rect.Dx() < 3 {
 			continue
 		}
 		keyStyle := styles.Muted
-		if rows[row.Index].Selected && !injected {
+		if rows[row.Index].Selected {
 			keyStyle = keyStyle.Background(styles.Selected.GetBackground())
 		}
 		local := row.Rect.Sub(frame.Min)
@@ -171,28 +159,26 @@ func buildListModalWidth(bounds image.Rectangle, title string, rows []modalRowSp
 	}
 }
 
-// Both the renderer and the Huh selector host use this width so the reference
-// action fits on one line in normal-sized terminals.
+// Both the renderer and the direct-key shortcut routing use this width so the
+// reference action fits on one line in normal-sized terminals.
 const messageActionModalWidth = 48
 
 // buildActionModalLayer adapts the message action menu into the shared list
 // modal. Selection follows the generated capability-gated row order rather
 // than capability ordinals. View image, Reply, reference navigation, and Copy survive loading/error
-// states; every other actionable row is gated on a settled menu. When a
-// selector Huh View is injected it replaces the actionable row labels and
-// selected-row paint; omitted injection retains the legacy rows.
-func buildActionModalLayer(model ViewModel, styles renderStyles, selectorView ...string) surfaceResult {
+// states; every other actionable row is gated on a settled menu.
+func buildActionModalLayer(model ViewModel, styles renderStyles) surfaceResult {
 	if model.MessageMenu == nil {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
-	return buildListModalWidth(image.Rect(0, 0, model.Width, model.Height), "Message actions", messageActionRows(model.MessageMenu), styles, messageActionModalWidth, selectorView...)
+	return buildListModalWidth(image.Rect(0, 0, model.Width, model.Height), "Message actions", messageActionRows(model.MessageMenu), styles, messageActionModalWidth)
 }
 
 // messageActionRows is the single displayed row source for the message action
 // menu: every actionable row in generated order plus the trailing
 // loading/error informational row. Nothing else may compile this list; the
-// renderer and the list modal controller both call it so row order, gating,
-// labels, semantic payloads, and the selected row stay identical.
+// renderer and the keyboard shortcut routing both call it so row order,
+// gating, labels, semantic payloads, and the selected row stay identical.
 func messageActionRows(menu *MessageActionMenu) []modalRowSpec {
 	if menu == nil {
 		return nil
@@ -320,13 +306,12 @@ func messageActionRows(menu *MessageActionMenu) []modalRowSpec {
 }
 
 // buildReactionPickerLayer adapts the reaction picker into the shared list
-// modal. When a selector Huh View is injected it replaces the palette row
-// labels and selected-row paint; omitted injection retains the legacy rows.
-func buildReactionPickerLayer(model ViewModel, styles renderStyles, selectorView ...string) surfaceResult {
+// modal.
+func buildReactionPickerLayer(model ViewModel, styles renderStyles) surfaceResult {
 	if model.ReactionPicker == nil {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
-	return buildListModal(image.Rect(0, 0, model.Width, model.Height), "React", reactionRows(model.ReactionPicker), styles, selectorView...)
+	return buildListModal(image.Rect(0, 0, model.Width, model.Height), "React", reactionRows(model.ReactionPicker), styles)
 }
 
 // reactionRows is the single displayed row source for the reaction picker: one
@@ -355,13 +340,12 @@ func reactionRows(picker *ReactionPicker) []modalRowSpec {
 }
 
 // buildForwardPickerLayer adapts the forward picker into the shared list
-// modal. When a selector Huh View is injected it replaces the chat row labels
-// and selected-row paint; omitted injection retains the legacy rows.
-func buildForwardPickerLayer(model ViewModel, styles renderStyles, selectorView ...string) surfaceResult {
+// modal.
+func buildForwardPickerLayer(model ViewModel, styles renderStyles) surfaceResult {
 	if model.ForwardPicker == nil {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
-	return buildListModal(image.Rect(0, 0, model.Width, model.Height), "Forward to", forwardRows(model.ForwardPicker, model.Chats), styles, selectorView...)
+	return buildListModal(image.Rect(0, 0, model.Width, model.Height), "Forward to", forwardRows(model.ForwardPicker, model.Chats), styles)
 }
 
 // forwardRows is the single displayed row source for the forward picker: one

@@ -73,23 +73,22 @@ func TestChatSearchKeyMappings(t *testing.T) {
 
 // TestChatSearchRowsCarryChatIdentity documents the manual chat-search row
 // source: section headers and the informational empty/loading/error row stay
-// outside the actionable subset. ChatSearch never consumes the shared list
-// modal controller (the unified layer deliberately keeps its own sectioned
-// rows), so these rows are the renderer's source of truth.
+// outside the actionable subset. These sectioned modalRowSpec rows are the
+// renderer's source of truth for hits, labels, and selection.
 func TestChatSearchRowsCarryChatIdentity(t *testing.T) {
 	model := chatSearchViewModel()
-	options := selectorOptionsFromRows(buildUnifiedChatSearchRows(model, time.UTC))
+	options := actionableRows(buildUnifiedChatSearchRows(model, time.UTC))
 	if len(options) != 1 || options[0].ID != "chat-search:pub:99" {
 		t.Fatalf("options = %#v", options)
 	}
-	if options[0].Value != (ActionReceived{Action: SelectChat, ChatID: 99}) {
-		t.Fatalf("option payload = %#v", options[0].Value)
+	if options[0].Action != (ActionReceived{Action: SelectChat, ChatID: 99}) {
+		t.Fatalf("option payload = %#v", options[0].Action)
 	}
-	if got := selectorOptionsFromRows(buildUnifiedChatSearchRows(ViewModel{}, time.UTC)); got != nil {
+	if got := actionableRows(buildUnifiedChatSearchRows(ViewModel{}, time.UTC)); got != nil {
 		t.Fatalf("nil search options = %#v", got)
 	}
 	zero := ViewModel{ChatSearch: &ChatSearchState{PublicChats: []domain.Chat{{ID: 0}}}}
-	if got := selectorOptionsFromRows(buildUnifiedChatSearchRows(zero, time.UTC)); len(got) != 0 {
+	if got := actionableRows(buildUnifiedChatSearchRows(zero, time.UTC)); len(got) != 0 {
 		t.Fatalf("zero-ID result must not become an option: %#v", got)
 	}
 	// Unified order is local chats, global messages, public chats; message
@@ -99,12 +98,12 @@ func TestChatSearchRowsCarryChatIdentity(t *testing.T) {
 		GlobalMessages: []domain.Message{{ID: 5, ChatID: 7, Kind: domain.MessageText, Text: "hi"}},
 		PublicChats:    []domain.Chat{{ID: 99, Title: "Pub"}},
 	}
-	got := selectorOptionsFromRows(buildUnifiedChatSearchRows(ViewModel{ChatSearch: unified}, time.UTC))
+	got := actionableRows(buildUnifiedChatSearchRows(ViewModel{ChatSearch: unified}, time.UTC))
 	if len(got) != 3 || got[0].ID != "chat-search:local:7" || got[1].ID != "chat-search:msg:7:5" || got[2].ID != "chat-search:pub:99" {
 		t.Fatalf("unified options = %#v", got)
 	}
-	if got[1].Value != (ActionReceived{Action: SelectMessage, ChatID: 7, MessageID: 5}) {
-		t.Fatalf("message option payload = %#v", got[1].Value)
+	if got[1].Action != (ActionReceived{Action: SelectMessage, ChatID: 7, MessageID: 5}) {
+		t.Fatalf("message option payload = %#v", got[1].Action)
 	}
 }
 
@@ -124,7 +123,7 @@ func TestChatSearchResultLabelSanitizes(t *testing.T) {
 func TestChatSearchLayerIsModalAndClosesUnderlyingHits(t *testing.T) {
 	styles := newRenderStyles(true)
 	model := chatSearchViewModel()
-	layer := buildChatSearchLayer(model, time.UTC, styles, "", "")
+	layer := buildChatSearchLayer(model, time.UTC, styles, "")
 	if layer.Layer == nil || !layer.IsModal || layer.Rect.Empty() {
 		t.Fatalf("layer = nil=%t modal=%t rect=%v", layer.Layer == nil, layer.IsModal, layer.Rect)
 	}
@@ -230,7 +229,7 @@ func TestChatSearchRowsOrderLocalMessagesPublic(t *testing.T) {
 		t.Fatalf("public row = %#v", rows[5])
 	}
 	// Unified layer renders the same rows while the input stays focused.
-	layer := buildChatSearchLayer(model, time.UTC, newRenderStyles(true), "", "")
+	layer := buildChatSearchLayer(model, time.UTC, newRenderStyles(true), "")
 	if layer.Layer == nil || !layer.IsModal {
 		t.Fatal("live unified layer must render while typing")
 	}
@@ -247,20 +246,6 @@ func TestChatSearchRowsOrderLocalMessagesPublic(t *testing.T) {
 		}
 	}
 	_ = layer
-}
-
-func TestChatSearchUnifiedLayerIgnoresSelectorOverlay(t *testing.T) {
-	model := chatSearchViewModel()
-	// Even with an injected Huh selector view, manual sectioned rows stay the
-	// source of truth so labels cannot slide under the wrong headers.
-	layer := buildChatSearchLayer(model, time.UTC, newRenderStyles(true), "", "ROUTED_SELECTOR")
-	if layer.Layer == nil || !layer.IsModal {
-		t.Fatal("unified layer must render with selector view present")
-	}
-	rows := buildUnifiedChatSearchRows(model, time.UTC)
-	if len(rows) != 2 || !rows[0].Header {
-		t.Fatalf("rows = %#v", rows)
-	}
 }
 
 func TestWindowUnifiedChatSearchRowsKeepsHeaderAndSelection(t *testing.T) {

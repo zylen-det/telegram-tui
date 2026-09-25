@@ -7,8 +7,14 @@ import (
 	"github.com/zylen-det/telegram-tui/internal/domain"
 )
 
-func selectorRouteMenuState() State {
-	state := selectorSyncState()
+func modalRouteMenuState() State {
+	state := InitialState()
+	state.Width, state.Height = 80, 24
+	state.MessageMenu = &MessageActionMenu{
+		RequestID: 7,
+		ChatID:    9,
+		MessageID: 2,
+	}
 	state.MessageMenu.Loading = false
 	state.MessageMenu.Error = nil
 	state.MessageMenu.Capabilities = domain.MessageCapabilities{
@@ -24,7 +30,7 @@ func selectorRouteMenuState() State {
 	return state
 }
 
-func selectorRouteReactionState() State {
+func modalRouteReactionState() State {
 	state := InitialState()
 	state.Width, state.Height = 80, 24
 	state.Focus = FocusReactionPicker
@@ -35,7 +41,7 @@ func selectorRouteReactionState() State {
 	return state
 }
 
-func selectorRouteForwardState() State {
+func modalRouteForwardState() State {
 	state := InitialState()
 	state.Width, state.Height = 80, 24
 	state.Focus = FocusForwardPicker
@@ -50,8 +56,8 @@ func selectorRouteForwardState() State {
 	return state
 }
 
-func TestAppModelSelectorRouteMenuNextPreviousClose(t *testing.T) {
-	state := selectorRouteMenuState()
+func TestAppModelModalRouteMenuNextPreviousClose(t *testing.T) {
+	state := modalRouteMenuState()
 	// Pre-populate a message so Edit/Forward/Delete are eligible (Loading=false already).
 	state.Messages = map[domain.ChatID][]domain.Message{
 		9: {{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "hi"}},
@@ -85,8 +91,8 @@ func TestAppModelSelectorRouteMenuNextPreviousClose(t *testing.T) {
 	}
 }
 
-func TestAppModelSelectorRouteReactionNextPreviousClose(t *testing.T) {
-	state := selectorRouteReactionState()
+func TestAppModelModalRouteReactionNextPreviousClose(t *testing.T) {
+	state := modalRouteReactionState()
 	model := newAppModelForTest(t, state, newTestSession(t))
 	model, _ = updateAppModel(t, model, tea.WindowSizeMsg{Width: 80, Height: 24})
 
@@ -113,8 +119,8 @@ func TestAppModelSelectorRouteReactionNextPreviousClose(t *testing.T) {
 	}
 }
 
-func TestAppModelSelectorRouteForwardNextPreviousClose(t *testing.T) {
-	state := selectorRouteForwardState()
+func TestAppModelModalRouteForwardNextPreviousClose(t *testing.T) {
+	state := modalRouteForwardState()
 	model := newAppModelForTest(t, state, newTestSession(t))
 	model, _ = updateAppModel(t, model, tea.WindowSizeMsg{Width: 80, Height: 24})
 
@@ -173,7 +179,7 @@ func menuVisibleOptions(menu *MessageActionMenu) int {
 	return count
 }
 
-func TestAppModelSelectorRouteMenuVisibleOptionsParity(t *testing.T) {
+func TestAppModelModalRouteMenuVisibleOptionsParity(t *testing.T) {
 	tests := []struct {
 		name string
 		menu *MessageActionMenu
@@ -197,15 +203,15 @@ func TestAppModelSelectorRouteMenuVisibleOptionsParity(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got, want := menuVisibleOptions(test.menu), len(selectorOptionsFromRows(messageActionRows(test.menu))); got != want {
+			if got, want := menuVisibleOptions(test.menu), len(actionableRows(messageActionRows(test.menu))); got != want {
 				t.Fatalf("visible options = %d, compiler options = %d", got, want)
 			}
 		})
 	}
 }
 
-func TestAppModelSelectorRouteMenuQClose(t *testing.T) {
-	state := selectorRouteMenuState()
+func TestAppModelModalRouteMenuQClose(t *testing.T) {
+	state := modalRouteMenuState()
 	model := newAppModelForTest(t, state, newTestSession(t))
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Text: "q"}))
 	if model.Snapshot().MessageMenu != nil || model.Snapshot().Focus != FocusConversation {
@@ -213,14 +219,14 @@ func TestAppModelSelectorRouteMenuQClose(t *testing.T) {
 	}
 }
 
-// TestAppModelSelectorRouteForwardEnterActivatesHighlightedChat locks the
+// TestAppModelModalRouteForwardEnterActivatesHighlightedChat locks the
 // ForwardPicker Enter contract via a negative oracle: when the source message
 // is missing, the reducer's reduceForwardPicker branch closes the picker
 // synchronously and flips focus to FocusConversation. If Enter fails to
 // dispatch as Activate, the picker stays open and focus remains
 // FocusForwardPicker — that is the failure this oracle catches.
-func TestAppModelSelectorRouteForwardEnterActivatesHighlightedChat(t *testing.T) {
-	state := selectorRouteForwardState()
+func TestAppModelModalRouteForwardEnterActivatesHighlightedChat(t *testing.T) {
+	state := modalRouteForwardState()
 	state.ForwardPicker.SelectedChat = 1
 	model := newAppModelForTest(t, state, newTestSession(t))
 	model, _ = updateAppModel(t, model, tea.WindowSizeMsg{Width: 80, Height: 24})
@@ -234,12 +240,12 @@ func TestAppModelSelectorRouteForwardEnterActivatesHighlightedChat(t *testing.T)
 	}
 }
 
-// TestAppModelSelectorRouteMenuEnterResolvesSelectedAction locks the
+// TestAppModelModalRouteMenuEnterResolvesSelectedAction locks the
 // MessageMenu Enter contract: pressing Enter re-resolves the highlighted row
 // through reducer.selectedMenuAction, so changes to the action table since
 // the menu was opened cannot silently keep the user on a stale action.
-func TestAppModelSelectorRouteMenuEnterResolvesSelectedAction(t *testing.T) {
-	state := selectorRouteMenuState()
+func TestAppModelModalRouteMenuEnterResolvesSelectedAction(t *testing.T) {
+	state := modalRouteMenuState()
 	state.MessageMenu.Capabilities = domain.MessageCapabilities{
 		Copy: true, Reply: true, Forward: true, Edit: true,
 	}
@@ -266,13 +272,13 @@ func TestAppModelSelectorRouteMenuEnterResolvesSelectedAction(t *testing.T) {
 	}
 }
 
-// TestAppModelSelectorRouteReactionEnterResolvesPalette locks the
+// TestAppModelModalRouteReactionEnterResolvesPalette locks the
 // ReactionPicker Enter contract: pressing Enter must dispatch Activate and
 // the reducer's reduceReactionPicker branch accepts whatever event.Rune
 // encodes (zero for the default cursor selection), keeping Selected pinned
 // until the async ReactToMessage result lands.
-func TestAppModelSelectorRouteReactionEnterResolvesPalette(t *testing.T) {
-	state := selectorRouteReactionState()
+func TestAppModelModalRouteReactionEnterResolvesPalette(t *testing.T) {
+	state := modalRouteReactionState()
 	state.ReactionPicker.Selected = 2
 	model := newAppModelForTest(t, state, newTestSession(t))
 	model, _ = updateAppModel(t, model, tea.WindowSizeMsg{Width: 80, Height: 24})
@@ -286,10 +292,10 @@ func TestAppModelSelectorRouteReactionEnterResolvesPalette(t *testing.T) {
 	}
 }
 
-// TestAppModelSelectorRouteMenuEmptyHasZeroRows keeps the helper/reducer
+// TestAppModelModalRouteMenuEmptyHasZeroRows keeps the helper/reducer
 // equivalence explicit: an empty menu has zero actionable rows and navigation
 // is therefore a no-op.
-func TestAppModelSelectorRouteMenuEmptyHasZeroRows(t *testing.T) {
+func TestAppModelModalRouteMenuEmptyHasZeroRows(t *testing.T) {
 	state := InitialState()
 	state.Width, state.Height = 80, 24
 	state.Focus = FocusModal

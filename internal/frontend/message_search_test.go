@@ -56,17 +56,17 @@ func TestMessageSearchKeyMappings(t *testing.T) {
 	}
 }
 
-func TestMessageSearchSelectorOptionsCarryChatMessageIdentity(t *testing.T) {
+func TestMessageSearchRowsCarryChatMessageIdentity(t *testing.T) {
 	model := searchViewModel()
-	options := selectorOptionsFromRows(messageSearchRows(model, time.UTC))
+	options := actionableRows(messageSearchRows(model, time.UTC))
 	if len(options) != 2 || options[0].ID != "search:30" || options[1].ID != "search:20" {
-		t.Fatalf("options = %#v", options)
+		t.Fatalf("rows = %#v", options)
 	}
-	if options[0].Value != (ActionReceived{Action: SelectMessage, ChatID: 9, MessageID: 30}) {
-		t.Fatalf("option payload = %#v", options[0].Value)
+	if options[0].Action != (ActionReceived{Action: SelectMessage, ChatID: 9, MessageID: 30}) {
+		t.Fatalf("row payload = %#v", options[0].Action)
 	}
-	if got := selectorOptionsFromRows(messageSearchRows(ViewModel{}, time.UTC)); got != nil {
-		t.Fatalf("nil search options = %#v", got)
+	if got := actionableRows(messageSearchRows(ViewModel{}, time.UTC)); got != nil {
+		t.Fatalf("nil search rows = %#v", got)
 	}
 }
 
@@ -84,7 +84,7 @@ func TestMessageSearchResultLabelSanitizesAndBounds(t *testing.T) {
 func TestMessageSearchLayerIsModalAndClosesUnderlyingHits(t *testing.T) {
 	styles := newRenderStyles(true)
 	model := searchViewModel()
-	layer := buildMessageSearchLayer(model, time.UTC, styles, "", "")
+	layer := buildMessageSearchLayer(model, time.UTC, styles, "")
 	if layer.Layer == nil || !layer.IsModal || layer.Rect.Empty() {
 		t.Fatalf("layer = nil=%t modal=%t rect=%v", layer.Layer == nil, layer.IsModal, layer.Rect)
 	}
@@ -93,9 +93,17 @@ func TestMessageSearchLayerIsModalAndClosesUnderlyingHits(t *testing.T) {
 	if layer.Rect.Dx() != wantWidth {
 		t.Fatalf("results width = %d, want search frame width %d", layer.Rect.Dx(), wantWidth)
 	}
-	selectorRect := selectorHostRectWidth(bounds, len(model.MessageSearch.Results), len(model.MessageSearch.Results), wantWidth)
-	if selectorRect.Dx() != layer.Rect.Dx()-4 {
-		t.Fatalf("selector width = %d, want results content width %d", selectorRect.Dx(), layer.Rect.Dx()-4)
+	if len(layer.Interactions) == 0 {
+		t.Fatal("results layer has no row interactions")
+	}
+	contentWidth := layer.Rect.Dx() - 4 // rounded border plus row padding
+	for _, interaction := range layer.Interactions {
+		if interaction.ID == "modal:close" {
+			continue
+		}
+		if interaction.Rect.Dx() != contentWidth {
+			t.Fatalf("row %s width = %d, want results content width %d", interaction.ID, interaction.Rect.Dx(), contentWidth)
+		}
 	}
 	for _, interaction := range layer.Interactions {
 		if strings.HasPrefix(interaction.ID, "conversation:") || strings.HasPrefix(interaction.ID, "chat:") {

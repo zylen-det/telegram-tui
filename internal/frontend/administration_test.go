@@ -86,19 +86,25 @@ func TestAdministrationModalHasKeyboardMouseParityAndManualRows(t *testing.T) {
 
 func TestMemberDetailShowsManageActionOnlyWhenEnabled(t *testing.T) {
 	members := &MembersState{ChatID: 9, Detail: &MemberDetail{UserID: 1, Name: "Ada"}}
-	detailOptions := func() []selectorOption {
+	detailOptions := func() []modalRowSpec {
 		rows, _ := memberDetailRows(members, nil)
-		return selectorOptionsFromRows(rows)
+		var out []modalRowSpec
+		for _, row := range rows {
+			if rowSelectable(row) {
+				out = append(out, row)
+			}
+		}
+		return out
 	}
 	for _, option := range detailOptions() {
-		if option.Value.Action == OpenMemberAdministration {
+		if option.Action.Action == OpenMemberAdministration {
 			t.Fatal("management option shown without capability")
 		}
 	}
 	members.Detail.CanManageInChat = true
 	found := false
 	for _, option := range detailOptions() {
-		if option.Value.Action == OpenMemberAdministration && option.Value.UserID == 1 && option.Value.ChatID == 9 {
+		if option.Action == (ActionReceived{Action: OpenMemberAdministration, ChatID: 9, UserID: 1}) {
 			found = true
 		}
 	}

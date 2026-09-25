@@ -284,10 +284,7 @@ func defaultModalStack() modalStack {
 			active:          func(ctx modalContext) bool { return ctx.model.MessageMenu != nil },
 			suppressesToast: true,
 			render: func(ctx modalContext) modalResult {
-				// With a production bundle the injected Huh Selector View (even
-				// when empty) replaces the manual row labels/selection paint;
-				// without one the builder keeps the manual rows compatibility.
-				return hiddenCursorModalResult(buildActionModalLayer(ctx.model, ctx.styles, ctx.injectedView(ctx.views.Selector)...))
+				return hiddenCursorModalResult(buildActionModalLayer(ctx.model, ctx.styles))
 			},
 		},
 		modalSpec{
@@ -296,7 +293,7 @@ func defaultModalStack() modalStack {
 			// The reaction picker deliberately keeps the toast: it only dims the
 			// base, and therefore the toast, through the base dim styles.
 			render: func(ctx modalContext) modalResult {
-				return hiddenCursorModalResult(buildReactionPickerLayer(ctx.model, ctx.styles, ctx.injectedView(ctx.views.Selector)...))
+				return hiddenCursorModalResult(buildReactionPickerLayer(ctx.model, ctx.styles))
 			},
 		},
 		modalSpec{
@@ -304,7 +301,7 @@ func defaultModalStack() modalStack {
 			active:          func(ctx modalContext) bool { return ctx.model.ForwardPicker != nil },
 			suppressesToast: true,
 			render: func(ctx modalContext) modalResult {
-				return hiddenCursorModalResult(buildForwardPickerLayer(ctx.model, ctx.styles, ctx.injectedView(ctx.views.Selector)...))
+				return hiddenCursorModalResult(buildForwardPickerLayer(ctx.model, ctx.styles))
 			},
 		},
 		modalSpec{
@@ -334,7 +331,7 @@ func defaultModalStack() modalStack {
 			render: func(ctx modalContext) modalResult {
 				// Without a production bundle ctx.views is the zero value, which
 				// is exactly the empty injection the direct caller got before.
-				return surfaceCursorModalResult(buildMessageSearchLayer(ctx.model, ctx.location, ctx.styles, ctx.views.MessageSearch, ctx.views.Selector))
+				return surfaceCursorModalResult(buildMessageSearchLayer(ctx.model, ctx.location, ctx.styles, ctx.views.MessageSearch))
 			},
 		},
 		modalSpec{
@@ -342,7 +339,7 @@ func defaultModalStack() modalStack {
 			active:          func(ctx modalContext) bool { return ctx.model.ChatSearch != nil },
 			suppressesToast: true,
 			render: func(ctx modalContext) modalResult {
-				return surfaceCursorModalResult(buildChatSearchLayer(ctx.model, ctx.location, ctx.styles, ctx.views.ChatSearch, ctx.views.Selector))
+				return surfaceCursorModalResult(buildChatSearchLayer(ctx.model, ctx.location, ctx.styles, ctx.views.ChatSearch))
 			},
 		},
 		modalSpec{
@@ -350,7 +347,7 @@ func defaultModalStack() modalStack {
 			active:          func(ctx modalContext) bool { return ctx.model.ChatActions != nil },
 			suppressesToast: true,
 			render: func(ctx modalContext) modalResult {
-				return hiddenCursorModalResult(buildChatActionLayer(ctx.model, ctx.styles, ctx.views.Selector))
+				return hiddenCursorModalResult(buildChatActionLayer(ctx.model, ctx.styles))
 			},
 		},
 		modalSpec{
@@ -358,14 +355,14 @@ func defaultModalStack() modalStack {
 			active:          func(ctx modalContext) bool { return ctx.model.PinnedMessages != nil },
 			suppressesToast: true,
 			render: func(ctx modalContext) modalResult {
-				return surfaceCursorModalResult(buildPinnedMessagesLayer(ctx.model, ctx.location, ctx.styles, ctx.views.Selector))
+				return surfaceCursorModalResult(buildPinnedMessagesLayer(ctx.model, ctx.location, ctx.styles))
 			},
 		},
 		modalSpec{
 			id:     "topics",
 			active: func(ctx modalContext) bool { return ctx.model.Topics != nil },
 			render: func(ctx modalContext) modalResult {
-				return hiddenCursorModalResult(buildTopicsLayer(ctx.model, ctx.styles, ctx.injectedView(ctx.views.Selector)...))
+				return hiddenCursorModalResult(buildTopicsLayer(ctx.model, ctx.styles))
 			},
 		},
 		modalSpec{
@@ -373,7 +370,7 @@ func defaultModalStack() modalStack {
 			active:          func(ctx modalContext) bool { return ctx.model.Members != nil && ctx.model.Modal == nil },
 			suppressesToast: true,
 			render: func(ctx modalContext) modalResult {
-				return surfaceCursorModalResult(buildMembersLayer(ctx.model, ctx.styles, ctx.views.Selector))
+				return surfaceCursorModalResult(buildMembersLayer(ctx.model, ctx.styles))
 			},
 		},
 		modalSpec{

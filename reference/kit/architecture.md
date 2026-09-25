@@ -36,7 +36,7 @@ Kitty image emission and cleanup is a separate overlay lifecycle.
 |---|---|
 | `cmd/telegram-tui` | Bootstrap, dependencies, process ownership, signals, exit code |
 | `internal/domain` | Telegram-independent chat, message, user, media, and error models |
-| `internal/frontend` | Bubble Tea model/state/update, effect adaptation, Huh hosts, render-data selection, grouping/layout/hit maps, Lipgloss surfaces/compositor, cursor, and Kitty coordination |
+| `internal/frontend` | Bubble Tea model/state/update, effect adaptation, Huh text-input hosts, render-data selection, grouping/layout/hit maps, Lipgloss surfaces/compositor, cursor, and Kitty coordination |
 | `internal/frontend/components` | Reusable Lipgloss frontend components |
 | `internal/telegram` | Domain-facing client, TDLib adapter, update normalization, safe errors; only this package imports generated TDLib types |
 | `internal/media/*` | Avatar, thumbnail, pixel, and Kitty rendering/transport |
@@ -56,8 +56,8 @@ Kitty image emission and cleanup is a separate overlay lifecycle.
 - `AppModel.View` takes one `AppModel.Snapshot`, derives render data with `Select`, and composes one full-size Lipgloss frame.
 - Kitty image transport remains outside text composition. The frame describes desired placements; overlay code emits and cleans terminal images.
 - Async request results use request and entity identity. Stale results must not overwrite a newer active operation.
-- Huh components may own transient editing/selection mechanics; `frontend.State` owns durable and business state.
-- List modals use exactly one paint path: the shared Huh selector overlay or manual row paint, never both. `listModalController` derives selector options, authoritative selection, and geometry from the exact displayed/windowed `modalRowSpec` rows; feature-specific parallel option compilers are forbidden. Section headers and other informational rows exist only in manual paint; chat search therefore remains manual.
+- Huh text-input components may own transient editing mechanics; `frontend.State` owns list selection plus durable and business state.
+- List modals use the shared manual `modalRowSpec` paint and hit path. Each feature's row builder is the single source for displayed labels, semantic actions, selected-row paint, and mouse identity; section headers and informational rows remain non-interactive. Do not layer a second selector or viewport over these rows.
 - Modal composition extends through `defaultModalStack` in `internal/frontend/modal_stack.go`. A modal spec owns activation, toast suppression, rendering adaptation, cursor policy, interactions, and Kitty-inline ownership. `composeApplication` must not grow concrete modal branches.
 - Ordinary list keyboard behavior extends through the shared list-focus classification in `internal/frontend/input.go`; do not duplicate close/previous/next/activate switch bodies for each list focus.
 - Media main files download only after an explicit open action. Static thumbnails may use the existing shared thumbnail lifecycle.

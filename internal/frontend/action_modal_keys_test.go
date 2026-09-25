@@ -97,7 +97,7 @@ func TestActionModalKeysMatchVisibleRows(t *testing.T) {
 }
 
 func TestActionModalKeyRoutingAndConfirmation(t *testing.T) {
-	state := selectorRouteMenuState()
+	state := modalRouteMenuState()
 	state.MessageMenu.Capabilities = domain.MessageCapabilities{Reply: true, Forward: true}
 	state.Messages = map[domain.ChatID][]domain.Message{9: {{ID: 2, ChatID: 9, Kind: domain.MessageText, Text: "hi"}}}
 	model := newAppModelForTest(t, state, newTestSession(t))
@@ -131,9 +131,7 @@ func TestActionModalKeyRoutingAndConfirmation(t *testing.T) {
 func TestChatActionShortcutPaintAndWidth(t *testing.T) {
 	chat := domain.Chat{ID: 9, Kind: domain.ChatPrivate, CanDeleteForSelf: true}
 	model := ViewModel{Width: 80, Height: 24, Focus: FocusChatActions, ActiveChat: chat, ChatActions: &ChatActionMenuState{ChatID: 9, Confirming: DeleteConversation}}
-	controller := newListModalController()
-	_ = controller.Sync(model, nil)
-	surface := buildChatActionLayer(model, newRenderStyles(false), controller.View())
+	surface := buildChatActionLayer(model, newRenderStyles(false))
 	if surface.Rect.Dx() != 54 {
 		t.Fatalf("chat modal width = %d", surface.Rect.Dx())
 	}
@@ -152,46 +150,32 @@ func TestChatActionShortcutPaintAndWidth(t *testing.T) {
 func TestActionModalShortcutPaintMatchesHitRows(t *testing.T) {
 	menu := &MessageActionMenu{ChatID: 9, MessageID: 2, ReferencedMessageID: 1, Capabilities: domain.MessageCapabilities{Reply: true, Copy: true}, Selected: 1}
 	model := ViewModel{Width: 80, Height: 24, Focus: FocusModal, MessageMenu: menu}
-	controller := newListModalController()
-	_ = controller.Sync(model, nil)
-	for _, tc := range []struct {
-		name string
-		view []string
-	}{
-		{"manual", nil}, {"selector", []string{controller.View()}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			surface := buildActionModalLayer(model, newRenderStyles(false), tc.view...)
-			_, canvas := listModalCanvas(image.Rect(0, 0, 80, 24), surface)
-			for _, hit := range surface.Interactions[1:] {
-				var row modalRowSpec
-				for _, candidate := range messageActionRows(menu) {
-					if candidate.ID == hit.ID {
-						row = candidate
-					}
-				}
-				if got := canvas.CellAt(hit.Rect.Max.X-1, hit.Rect.Min.Y); got == nil || got.Content != row.Key || colorOf(got.Style.Fg) != rgba(mutedTextColor) {
-					t.Errorf("%s key at right edge: cell=%+v, want %q in secondary color", hit.ID, got, row.Key)
-				} else if tc.name == "manual" && row.Selected && colorOf(got.Style.Bg) != rgba(selectedColor) {
-					t.Errorf("selected shortcut lost row background: %+v", got.Style)
-				}
+	surface := buildActionModalLayer(model, newRenderStyles(false))
+	_, canvas := listModalCanvas(image.Rect(0, 0, 80, 24), surface)
+	for _, hit := range surface.Interactions[1:] {
+		var row modalRowSpec
+		for _, candidate := range messageActionRows(menu) {
+			if candidate.ID == hit.ID {
+				row = candidate
 			}
-		})
+		}
+		if got := canvas.CellAt(hit.Rect.Max.X-1, hit.Rect.Min.Y); got == nil || got.Content != row.Key || colorOf(got.Style.Fg) != rgba(mutedTextColor) {
+			t.Errorf("%s key at right edge: cell=%+v, want %q in secondary color", hit.ID, got, row.Key)
+		} else if row.Selected && colorOf(got.Style.Bg) != rgba(selectedColor) {
+			t.Errorf("selected shortcut lost row background: %+v", got.Style)
+		}
 	}
 	model.Width = 26
-	_ = controller.Sync(model, nil)
-	for _, view := range [][]string{nil, {controller.View()}} {
-		surface := buildActionModalLayer(model, newRenderStyles(false), view...)
-		_, canvas := listModalCanvas(image.Rect(0, 0, 26, 24), surface)
-		if surface.Rect.Dx() != 26 {
-			t.Fatalf("clipped modal escaped viewport: %v", surface.Rect)
-		}
-		for _, hit := range surface.Interactions[1:] {
-			for _, row := range messageActionRows(menu) {
-				if hit.ID == row.ID {
-					if cell := canvas.CellAt(hit.Rect.Max.X-1, hit.Rect.Min.Y); cell == nil || cell.Content != row.Key {
-						t.Errorf("narrow shortcut %s = %+v, want %s", hit.ID, cell, row.Key)
-					}
+	surface = buildActionModalLayer(model, newRenderStyles(false))
+	_, canvas = listModalCanvas(image.Rect(0, 0, 26, 24), surface)
+	if surface.Rect.Dx() != 26 {
+		t.Fatalf("clipped modal escaped viewport: %v", surface.Rect)
+	}
+	for _, hit := range surface.Interactions[1:] {
+		for _, row := range messageActionRows(menu) {
+			if hit.ID == row.ID {
+				if cell := canvas.CellAt(hit.Rect.Max.X-1, hit.Rect.Min.Y); cell == nil || cell.Content != row.Key {
+					t.Errorf("narrow shortcut %s = %+v, want %s", hit.ID, cell, row.Key)
 				}
 			}
 		}

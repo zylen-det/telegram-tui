@@ -20,19 +20,14 @@ func topicsFrame(bounds image.Rectangle) image.Rectangle {
 
 // buildTopicsLayer renders the forum-topic list modal from model.Topics.
 // One actionable row per result; loading/error/empty informational rows are
-// purely visual. When a selector Huh View is injected it replaces the
-// actionable row labels and selected-row paint; omitted injection retains the
-// legacy rows.
-func buildTopicsLayer(model ViewModel, styles renderStyles, selectorView ...string) surfaceResult {
+// purely visual.
+func buildTopicsLayer(model ViewModel, styles renderStyles) surfaceResult {
 	if model.Topics == nil {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
 	bounds := image.Rect(0, 0, model.Width, model.Height)
 	width := topicsFrame(bounds).Dx()
 	rows := displayedTopicsRows(model)
-	if len(selectorView) > 0 {
-		return buildListModalWidth(bounds, "Topics", rows, styles, width, selectorView[0])
-	}
 	return buildListModalWidth(bounds, "Topics", rows, styles, width)
 }
 

@@ -28,7 +28,7 @@ func chatSearchInputRect(bounds image.Rectangle) image.Rectangle {
 	return image.Rect(frame.Min.X+2, frame.Min.Y+3, frame.Max.X-2, frame.Min.Y+4)
 }
 
-func buildChatSearchLayer(model ViewModel, location *time.Location, styles renderStyles, searchInputView, selectorView string) surfaceResult {
+func buildChatSearchLayer(model ViewModel, location *time.Location, styles renderStyles, searchInputView string) surfaceResult {
 	if model.ChatSearch == nil {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
@@ -38,7 +38,7 @@ func buildChatSearchLayer(model ViewModel, location *time.Location, styles rende
 	}
 	// Live preview: input stays focused while typing, results render below in
 	// the same modal regardless of Input/Results focus.
-	return buildChatSearchUnifiedLayer(image.Rect(0, 0, model.Width, model.Height), model, location, styles, searchInputView, selectorView)
+	return buildChatSearchUnifiedLayer(image.Rect(0, 0, model.Width, model.Height), model, location, styles, searchInputView)
 }
 
 func buildChatSearchInputLayer(bounds image.Rectangle, search *ChatSearchState, styles renderStyles, inputView string) surfaceResult {
@@ -90,16 +90,11 @@ func buildChatSearchInputLayer(bounds image.Rectangle, search *ChatSearchState, 
 
 // buildChatSearchUnifiedLayer renders one modal with the live input row on
 // top and the three flattened sections below: local chats, global messages,
-// public chats. Selection is a single flattened index shared with the
-// selector host and mouse actions.
-// Note: the unified layer deliberately ignores selectorView. The Huh
-// selector overlay paints a header-less option list with its own internal
-// scrolling, which desyncs from the sectioned rows (headers consume visual
-// rows the selector does not know about) and lands option labels under the
-// wrong headers. Manual row paint below is the single source of truth;
-// keyboard navigation flows through the reducer and mouse through hit maps,
-// neither of which needs the overlay.
-func buildChatSearchUnifiedLayer(bounds image.Rectangle, model ViewModel, location *time.Location, styles renderStyles, searchInputView, _ string) surfaceResult {
+// public chats. Selection is a single flattened index shared with the reducer
+// and mouse actions. The sectioned rows are the single source of truth: the
+// manual row paint is the only label/selection render, keyboard navigation
+// flows through the reducer and mouse through hit maps.
+func buildChatSearchUnifiedLayer(bounds image.Rectangle, model ViewModel, location *time.Location, styles renderStyles, searchInputView string) surfaceResult {
 	search := model.ChatSearch
 	rows := buildUnifiedChatSearchRows(model, location)
 	capacity := max(1, bounds.Dy()-12)

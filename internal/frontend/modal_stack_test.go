@@ -373,7 +373,7 @@ func TestModalStackMembersHiddenUnderMedia(t *testing.T) {
 func countMemberHits(hits []Hit) int {
 	count := 0
 	for _, hit := range hits {
-		if hit.Click.Action == OpenMemberDetail || hit.Click.Action == SelectMember {
+		if hit.Click.Action == OpenMemberDetail {
 			count++
 		}
 	}

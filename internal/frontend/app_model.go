@@ -26,9 +26,6 @@ type AppModel struct {
 	chatSearchInput      *chatSearchInputHost
 	chatTitleInput       *chatSettingsInputHost
 	chatDescriptionInput *chatSettingsInputHost
-	// listModals owns the single persistent selector host plus the one
-	// descriptor/option synchronization path shared by every list modal.
-	listModals *listModalController
 }
 
 type appModelMetadata struct {
@@ -74,7 +71,6 @@ func NewAppModel(initial State, session *Handler) (AppModel, error) {
 		chatSearchInput:      newChatSearchInputHost(),
 		chatTitleInput:       newChatSettingsInputHost(),
 		chatDescriptionInput: newChatSettingsInputHost(),
-		listModals:           newListModalController(),
 	}, nil
 }
 
@@ -119,7 +115,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.deliver(m.applyMessage(Resized{
 			Width:  max(0, msg.Width),
 			Height: max(0, msg.Height),
-		})), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost(), m.syncChatSettingsInputHosts(), m.syncListModalController())
+		})), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost(), m.syncChatSettingsInputHosts())
 	case tea.PasteMsg:
 		if focus := m.Snapshot().Focus; focus == FocusComposer {
 			var preSync tea.Cmd
@@ -155,9 +151,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					PromptID: m.authorizationInput.Identity(),
 					Value:    value,
 				})
-				return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncListModalController())
+				return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost())
 			}
-			return m, tea.Batch(preSync, cmd, m.syncPhotoPathInputHost(), m.syncListModalController())
+			return m, tea.Batch(preSync, cmd, m.syncPhotoPathInputHost())
 		}
 		if focus := m.Snapshot().Focus; focus == FocusPhotoSend {
 			preSync := m.syncPhotoPathInputHost()
@@ -174,9 +170,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					ChatID: m.photoPathInput.Identity(),
 					Value:  value,
 				})
-				return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncPhotoPathInputHost(), m.syncListModalController())
+				return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncPhotoPathInputHost())
 			}
-			return m, tea.Batch(preSync, cmd, m.syncPhotoPathInputHost(), m.syncListModalController())
+			return m, tea.Batch(preSync, cmd, m.syncPhotoPathInputHost())
 		}
 		if focus := m.Snapshot().Focus; focus == FocusSearchInput {
 			preSync := m.syncMessageSearchInputHost()
@@ -190,9 +186,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			changed, value, cmd := m.messageSearchInput.Update(paste)
 			if changed {
 				commands := m.applyMessage(MessageSearchValueChanged{ChatID: m.messageSearchInput.Identity(), Value: value})
-				return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncMessageSearchInputHost(), m.syncListModalController())
+				return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncMessageSearchInputHost())
 			}
-			return m, tea.Batch(preSync, cmd, m.syncMessageSearchInputHost(), m.syncListModalController())
+			return m, tea.Batch(preSync, cmd, m.syncMessageSearchInputHost())
 		}
 		if focus := m.Snapshot().Focus; focus == FocusChatSearchInput {
 			preSync := m.syncChatSearchInputHost()
@@ -206,9 +202,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			changed, value, cmd := m.chatSearchInput.Update(paste)
 			if changed {
 				commands := m.applyMessage(ChatSearchValueChanged{Value: value})
-				return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncChatSearchInputHost(), m.syncListModalController())
+				return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncChatSearchInputHost())
 			}
-			return m, tea.Batch(preSync, cmd, m.syncChatSearchInputHost(), m.syncListModalController())
+			return m, tea.Batch(preSync, cmd, m.syncChatSearchInputHost())
 		}
 		if focus := m.Snapshot().Focus; focus == FocusChatSettingsInput {
 			preSync := m.syncChatSettingsInputHosts()
@@ -221,10 +217,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if changed {
 				if snap.ChatSettings != nil {
 					commands := m.applyMessage(ChatSettingsValueChanged{ChatID: snap.ChatSettings.ChatID, Field: field, EditorID: editorID, Value: value})
-					return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncChatSettingsInputHosts(), m.syncListModalController())
+					return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncChatSettingsInputHosts())
 				}
 			}
-			return m, tea.Batch(preSync, cmd, m.syncChatSettingsInputHosts(), m.syncListModalController())
+			return m, tea.Batch(preSync, cmd, m.syncChatSettingsInputHosts())
 		}
 		return m, nil
 	case tea.KeyPressMsg:
@@ -235,21 +231,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			commands := m.applyMessage(received)
-			return m, tea.Batch(m.deliver(commands), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost(), m.syncChatSettingsInputHosts(), m.syncListModalController())
+			return m, tea.Batch(m.deliver(commands), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost(), m.syncChatSettingsInputHosts())
 		}
 		if received, ok := mapCommandMenuKey(snapshot.CommandMenu != nil, msg); ok {
 			commands := m.applyMessage(received)
 			return m, tea.Batch(m.deliver(commands), m.syncComposerTextHost())
 		}
 		if received, ok := mapKeyPress(focus, msg); ok {
-			if focus == FocusMembers && snapshot.Members != nil && snapshot.Members.Detail == nil &&
-				(received.Action == SelectNext || received.Action == SelectPrevious) {
-				selected, cmd := m.listModals.NavigateMembers(snapshot, m.location, msg, received.Action)
-				if selected.Action == NoAction {
-					return m, cmd
-				}
-				return m, tea.Batch(cmd, m.deliver(m.applyMessage(selected)), m.syncListModalController())
-			}
 			if snap := m.Snapshot(); snap.StickerPicker != nil {
 				switch received.Action {
 				case StickerMoveLeft, StickerMoveRight, StickerMoveUp, StickerMoveDown, StickerActivate, Close:
@@ -266,9 +254,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							PromptID: m.authorizationInput.Identity(),
 							Value:    value,
 						})
-						return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncListModalController())
+						return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost())
 					}
-					return m, tea.Batch(preSync, cmd, m.syncPhotoPathInputHost(), m.syncListModalController())
+					return m, tea.Batch(preSync, cmd, m.syncPhotoPathInputHost())
 				}
 				if focus == FocusPhotoSend {
 					preSync := m.syncPhotoPathInputHost()
@@ -278,27 +266,27 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							ChatID: m.photoPathInput.Identity(),
 							Value:  value,
 						})
-						return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncPhotoPathInputHost(), m.syncListModalController())
+						return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncPhotoPathInputHost())
 					}
-					return m, tea.Batch(preSync, cmd, m.syncPhotoPathInputHost(), m.syncListModalController())
+					return m, tea.Batch(preSync, cmd, m.syncPhotoPathInputHost())
 				}
 				if focus == FocusSearchInput {
 					preSync := m.syncMessageSearchInputHost()
 					changed, value, cmd := m.messageSearchInput.Update(msg)
 					if changed {
 						commands := m.applyMessage(MessageSearchValueChanged{ChatID: m.messageSearchInput.Identity(), Value: value})
-						return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncMessageSearchInputHost(), m.syncListModalController())
+						return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncMessageSearchInputHost())
 					}
-					return m, tea.Batch(preSync, cmd, m.syncMessageSearchInputHost(), m.syncListModalController())
+					return m, tea.Batch(preSync, cmd, m.syncMessageSearchInputHost())
 				}
 				if focus == FocusChatSearchInput {
 					preSync := m.syncChatSearchInputHost()
 					changed, value, cmd := m.chatSearchInput.Update(msg)
 					if changed {
 						commands := m.applyMessage(ChatSearchValueChanged{Value: value})
-						return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncChatSearchInputHost(), m.syncListModalController())
+						return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncChatSearchInputHost())
 					}
-					return m, tea.Batch(preSync, cmd, m.syncChatSearchInputHost(), m.syncListModalController())
+					return m, tea.Batch(preSync, cmd, m.syncChatSearchInputHost())
 				}
 				if focus == FocusChatSettingsInput {
 					preSync := m.syncChatSettingsInputHosts()
@@ -311,10 +299,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if changed {
 						if snap.ChatSettings != nil {
 							commands := m.applyMessage(ChatSettingsValueChanged{ChatID: snap.ChatSettings.ChatID, Field: field, EditorID: editorID, Value: value})
-							return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncChatSettingsInputHosts(), m.syncListModalController())
+							return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncChatSettingsInputHosts())
 						}
 					}
-					return m, tea.Batch(preSync, cmd, m.syncChatSettingsInputHosts(), m.syncListModalController())
+					return m, tea.Batch(preSync, cmd, m.syncChatSettingsInputHosts())
 				}
 				if focus != FocusComposer {
 					return m, m.deliver(m.applyMessage(received))
@@ -354,10 +342,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, tea.Batch(preSync, m.deliver(commands), cmd)
 			case ComposerSubmit:
-				return m, tea.Batch(m.deliver(m.applyMessage(received)), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncListModalController())
+				return m, tea.Batch(m.deliver(m.applyMessage(received)), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost())
 			default:
 				commands := m.applyMessage(received)
-				return m, tea.Batch(m.deliver(commands), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost(), m.syncListModalController())
+				return m, tea.Batch(m.deliver(commands), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost())
 			}
 		}
 		if focus == FocusComposer && textInputAllowed(msg.Key()) {
@@ -394,9 +382,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					PromptID: m.authorizationInput.Identity(),
 					Value:    value,
 				})
-				return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncListModalController())
+				return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost())
 			}
-			return m, tea.Batch(preSync, cmd, m.syncPhotoPathInputHost(), m.syncListModalController())
+			return m, tea.Batch(preSync, cmd, m.syncPhotoPathInputHost())
 		}
 		if focus == FocusPhotoSend && photoEditKeyAllowed(msg.Key()) {
 			preSync := m.syncPhotoPathInputHost()
@@ -406,27 +394,27 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					ChatID: m.photoPathInput.Identity(),
 					Value:  value,
 				})
-				return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncPhotoPathInputHost(), m.syncListModalController())
+				return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncPhotoPathInputHost())
 			}
-			return m, tea.Batch(preSync, cmd, m.syncPhotoPathInputHost(), m.syncListModalController())
+			return m, tea.Batch(preSync, cmd, m.syncPhotoPathInputHost())
 		}
 		if focus == FocusSearchInput && textInputAllowed(msg.Key()) {
 			preSync := m.syncMessageSearchInputHost()
 			changed, value, cmd := m.messageSearchInput.Update(msg)
 			if changed {
 				commands := m.applyMessage(MessageSearchValueChanged{ChatID: m.messageSearchInput.Identity(), Value: value})
-				return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncMessageSearchInputHost(), m.syncListModalController())
+				return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncMessageSearchInputHost())
 			}
-			return m, tea.Batch(preSync, cmd, m.syncMessageSearchInputHost(), m.syncListModalController())
+			return m, tea.Batch(preSync, cmd, m.syncMessageSearchInputHost())
 		}
 		if focus == FocusChatSearchInput && textInputAllowed(msg.Key()) {
 			preSync := m.syncChatSearchInputHost()
 			changed, value, cmd := m.chatSearchInput.Update(msg)
 			if changed {
 				commands := m.applyMessage(ChatSearchValueChanged{Value: value})
-				return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncChatSearchInputHost(), m.syncListModalController())
+				return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncChatSearchInputHost())
 			}
-			return m, tea.Batch(preSync, cmd, m.syncChatSearchInputHost(), m.syncListModalController())
+			return m, tea.Batch(preSync, cmd, m.syncChatSearchInputHost())
 		}
 		if focus == FocusChatSettingsInput && textInputAllowed(msg.Key()) {
 			preSync := m.syncChatSettingsInputHosts()
@@ -439,34 +427,34 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if changed {
 				if snap.ChatSettings != nil {
 					commands := m.applyMessage(ChatSettingsValueChanged{ChatID: snap.ChatSettings.ChatID, Field: field, EditorID: editorID, Value: value})
-					return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncChatSettingsInputHosts(), m.syncListModalController())
+					return m, tea.Batch(preSync, m.deliver(commands), cmd, m.syncChatSettingsInputHosts())
 				}
 			}
-			return m, tea.Batch(preSync, cmd, m.syncChatSettingsInputHosts(), m.syncListModalController())
+			return m, tea.Batch(preSync, cmd, m.syncChatSettingsInputHosts())
 		}
 		return m, nil
 	case tea.MouseClickMsg:
 		if received, ok := mapMouseClick(msg, m.hitRegions()); ok {
 			commands := m.applyMessage(received)
-			return m, tea.Batch(m.deliver(commands), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost(), m.syncChatSettingsInputHosts(), m.syncListModalController())
+			return m, tea.Batch(m.deliver(commands), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost(), m.syncChatSettingsInputHosts())
 		}
 		return m, nil
 	case tea.MouseWheelMsg:
 		if received, ok := mapMouseWheel(msg, m.hitRegions()); ok {
 			commands := m.applyMessage(received)
-			return m, tea.Batch(m.deliver(commands), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost(), m.syncChatSettingsInputHosts(), m.syncListModalController())
+			return m, tea.Batch(m.deliver(commands), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost(), m.syncChatSettingsInputHosts())
 		}
 		return m, nil
 	case toastExpiredMsg:
 		commands := m.applyMessage(ToastExpired{Generation: msg.generation})
-		return m, tea.Batch(m.deliver(commands), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost(), m.syncChatSettingsInputHosts(), m.syncListModalController())
+		return m, tea.Batch(m.deliver(commands), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost(), m.syncChatSettingsInputHosts())
 	default:
 		commands := m.applyMessage(msg)
 		if complete, ok := msg.(ShutdownComplete); ok {
 			m.recordShutdownError(complete.Error)
 			return m, tea.Quit
 		}
-		return m, tea.Batch(m.deliver(commands), m.resubscribe(msg), m.toastExpiryCommand(), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost(), m.syncChatSettingsInputHosts(), m.syncListModalController())
+		return m, tea.Batch(m.deliver(commands), m.resubscribe(msg), m.toastExpiryCommand(), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost(), m.syncChatSettingsInputHosts())
 	}
 }
 
@@ -679,24 +667,4 @@ func (m *AppModel) syncChatSettingsInputHosts() tea.Cmd {
 		m.chatTitleInput.Sync(titleID, title, titleFocused, width),
 		m.chatDescriptionInput.Sync(descriptionID, description, descriptionFocused, width),
 	)
-}
-
-// syncListModalController projects one snapshot into the shared list modal
-// controller. The controller resolves the single active listModalDescriptor
-// (identity, exact displayed rows, derived options, authoritative semantic
-// selection, focus, preferred modal width, and the bounded PreferEdit
-// override) and synchronizes its one selector host, so option order and
-// geometry can never disagree with the rendered frame.
-//
-// The reducer-driven selection model stays untouched: the host is a render and
-// geometry mirror of authoritative state, never an input owner. When no list
-// modal is active this skips the heavy Select projection (clones
-// chats/avatars/groups) that composer typing would otherwise run at 30 Hz.
-func (m AppModel) syncListModalController() tea.Cmd {
-	snap := m.Snapshot()
-	bounds := image.Rect(0, 0, max(0, snap.Width), max(0, snap.Height))
-	if !listModalSnapshotActive(snap) {
-		return m.listModals.Reset(bounds)
-	}
-	return m.listModals.Sync(Select(snap, m.location), m.location)
 }

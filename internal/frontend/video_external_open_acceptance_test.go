@@ -15,13 +15,13 @@ func TestVideoExternalOpenAcceptance_ActionMenuLabelsAndSemanticParity(t *testin
 	if opened.MessageMenu == nil {
 		t.Fatal("received Video did not open a message action menu")
 	}
-	options := selectorOptionsFromRows(messageActionRows(opened.MessageMenu))
+	options := actionableRows(messageActionRows(opened.MessageMenu))
 	if len(options) == 0 || options[0].ID != "action:open-video" || options[0].Label != "Open video" {
-		t.Fatalf("Video selector options = %#v, want Open video first", options)
+		t.Fatalf("Video rows = %#v, want Open video first", options)
 	}
 	wantAction := ActionReceived{Action: ViewMessageMedia, ChatID: 9, MessageID: 77}
-	if options[0].Value != wantAction {
-		t.Fatalf("Video selector action = %#v, want %#v", options[0].Value, wantAction)
+	if options[0].Action != wantAction {
+		t.Fatalf("Video row action = %#v, want %#v", options[0].Action, wantAction)
 	}
 
 	model := Select(opened, time.UTC)
@@ -50,9 +50,9 @@ func TestVideoExternalOpenAcceptance_ActionMenuLabelsAndSemanticParity(t *testin
 func TestVideoExternalOpenAcceptance_PhotoActionLabelUnchanged(t *testing.T) {
 	opened := videoExternalOpenFrontendState(domain.MessagePhoto)
 	updateState(&opened, ActionReceived{Action: OpenMessageActionMenu})
-	options := selectorOptionsFromRows(messageActionRows(opened.MessageMenu))
+	options := actionableRows(messageActionRows(opened.MessageMenu))
 	if len(options) == 0 || options[0].ID != "action:view-image" || options[0].Label != "View image" {
-		t.Fatalf("Photo selector options = %#v, want existing View image first", options)
+		t.Fatalf("Photo rows = %#v, want existing View image first", options)
 	}
 }
 

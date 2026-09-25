@@ -13,7 +13,7 @@ func chatActionFrame(bounds image.Rectangle) image.Rectangle {
 	return centeredSurfaceRectangle(bounds, min(54, bounds.Dx()), min(14, bounds.Dy())).Intersect(bounds)
 }
 
-func buildChatActionLayer(model ViewModel, styles renderStyles, selectorView string) surfaceResult {
+func buildChatActionLayer(model ViewModel, styles renderStyles) surfaceResult {
 	menu := model.ChatActions
 	_, ok := chatActionTarget(model)
 	if menu == nil || !ok {
@@ -24,7 +24,7 @@ func buildChatActionLayer(model ViewModel, styles renderStyles, selectorView str
 		title = "Confirm action"
 	}
 	bounds := image.Rect(0, 0, model.Width, model.Height)
-	return buildListModalWidth(bounds, title, displayedChatActionRows(model), styles, chatActionFrame(bounds).Dx(), selectorView)
+	return buildListModalWidth(bounds, title, displayedChatActionRows(model), styles, chatActionFrame(bounds).Dx())
 }
 
 // displayedChatActionRows is the chat action modal's single row source for one

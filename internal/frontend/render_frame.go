@@ -113,15 +113,12 @@ const (
 // a stable HitMap. Zero or too-small bounds produce the matching safe frame.
 // editorViews is the typed production injection bundle carrying the
 // persistent editor Huh Views into the composition seam. Composer feeds the
-// conversation layer; Authorization feeds the authorization overlay;
-// Selector feeds the three list-selector modals; PhotoPath feeds the Photo
-// send modal input. A zero value field means "no view
+// conversation layer; Authorization feeds the authorization overlay; PhotoPath
+// feeds the Photo send modal input. A zero value field means "no view
 // injected" and must never fall back to legacy model text.
 type editorViews struct {
 	Composer      string
 	Authorization string
-
-	Selector string
 
 	PhotoPath string
 

@@ -40,16 +40,13 @@ func membersTitle(members *MembersState) string {
 	return "Members"
 }
 
-func buildMembersLayer(model ViewModel, styles renderStyles, selectorView string) surfaceResult {
+func buildMembersLayer(model ViewModel, styles renderStyles) surfaceResult {
 	if model.Members == nil {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
 	bounds := image.Rect(0, 0, model.Width, model.Height)
 	width := membersFrame(bounds).Dx()
 	rows := displayedMembersRows(model, styles.Dim)
-	if selectorView != "" {
-		return buildListModalWidth(bounds, membersTitle(model.Members), rows, styles, width, selectorView)
-	}
 	return buildListModalWidth(bounds, membersTitle(model.Members), rows, styles, width)
 }
 
@@ -77,7 +74,7 @@ func displayedMembersRows(model ViewModel, dim bool) []modalRowSpec {
 	return windowMembersRows(rows, selected, max(1, model.Height-5))
 }
 
-// memberDetailChromeRows counts the non-navigable detail rows the selector
+// memberDetailChromeRows counts the non-navigable detail rows the windowing
 // geometry must account for: avatar rows, info headers, and the Working
 // status row. Navigable options (Back plus actions) are counted separately.
 func memberDetailChromeRows(detail *MemberDetail, hasAvatar bool) int {

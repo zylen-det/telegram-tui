@@ -492,28 +492,13 @@ func TestActionModalReferenceLabelFitsWideMenu(t *testing.T) {
 		MessageMenu: &MessageActionMenu{ChatID: 9, MessageID: 30, ReferencedMessageID: 20, Selected: 0},
 	}
 	styles := newRenderStyles(false)
-	controller := newListModalController()
-	_ = controller.Sync(model, nil)
-
-	for _, tc := range []struct {
-		name    string
-		surface surfaceResult
-	}{
-		{"manual", buildActionModalLayer(model, styles)},
-		{"selector", buildActionModalLayer(model, styles, controller.View())},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if tc.surface.Rect.Dx() != messageActionModalWidth {
-				t.Fatalf("modal width = %d, want %d", tc.surface.Rect.Dx(), messageActionModalWidth)
-			}
-			_, canvas := listModalCanvas(image.Rect(0, 0, 80, 24), tc.surface)
-			if !strings.Contains(plainText(canvas.Render()), label) {
-				t.Fatalf("reference label is truncated: %q", plainText(canvas.Render()))
-			}
-		})
+	surface := buildActionModalLayer(model, styles)
+	if surface.Rect.Dx() != messageActionModalWidth {
+		t.Fatalf("modal width = %d, want %d", surface.Rect.Dx(), messageActionModalWidth)
 	}
-	if rect := selectorHostRectWidth(image.Rect(0, 0, 80, 24), 1, 1, messageActionModalWidth); controller.host.width != rect.Dx() {
-		t.Fatalf("selector width = %d, want %d", controller.host.width, rect.Dx())
+	_, canvas := listModalCanvas(image.Rect(0, 0, 80, 24), surface)
+	if !strings.Contains(plainText(canvas.Render()), label) {
+		t.Fatalf("reference label is truncated: %q", plainText(canvas.Render()))
 	}
 
 	model.Width = 26

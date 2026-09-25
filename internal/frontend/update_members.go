@@ -100,20 +100,20 @@ func reduceMembersAction(state *State, event ActionReceived) []Effect {
 	case Close:
 		state.Focus = members.PreviousFocus
 		state.Members = nil
+	case SelectNext, SelectPrevious:
+		if state.Focus != FocusMembers || members.Loading || len(members.Results) == 0 {
+			return nil
+		}
+		delta := 1
+		if event.Action == SelectPrevious {
+			delta = -1
+		}
+		members.Selected = max(0, min(len(members.Results)-1, members.Selected+delta))
+		return maybePaginateMembers(state)
 	case SelectChat:
 		state.Focus = FocusConversation
 		state.Members = nil
 		return reduceAction(state, event)
-	case SelectMember:
-		if state.Focus != FocusMembers || event.ChatID != members.ChatID {
-			return nil
-		}
-		for index := range members.Results {
-			if members.Results[index].User.ID == event.UserID {
-				members.Selected = index
-				return maybePaginateMembers(state)
-			}
-		}
 	case Activate:
 		if state.Focus != FocusMembers || members.Loading || len(members.Results) == 0 {
 			return nil

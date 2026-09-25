@@ -783,11 +783,9 @@ func plainView(content string) string {
 	return ansiSequence.ReplaceAllString(content, "")
 }
 
-// plainAppView mirrors production's post-Update host state when a test swaps
-// the model-owned state directly instead of driving AppModel.Update. View
-// itself remains pure and snapshots the owned state exactly once.
+// plainAppView renders the model-owned frame through View. View itself
+// remains pure and snapshots the owned state exactly once.
 func plainAppView(model AppModel) string {
-	_ = model.syncListModalController()
 	return plainView(model.View().Content)
 }
 

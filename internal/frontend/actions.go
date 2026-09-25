@@ -71,7 +71,6 @@ const (
 	RevokeInviteLink
 	ConfirmRevokeInviteLink
 	CancelRevokeInviteLink
-	SelectMember
 	OpenDetailsAvatar
 	OpenMemberDetail
 	CloseMemberDetail

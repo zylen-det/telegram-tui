@@ -15,16 +15,13 @@ func pinnedMessagesFrame(bounds image.Rectangle) image.Rectangle {
 	return centeredSurfaceRectangle(bounds, width, height).Intersect(bounds)
 }
 
-func buildPinnedMessagesLayer(model ViewModel, location *time.Location, overlayStyles renderStyles, selectorView string) surfaceResult {
+func buildPinnedMessagesLayer(model ViewModel, location *time.Location, overlayStyles renderStyles) surfaceResult {
 	if model.PinnedMessages == nil {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
 	rows := displayedPinnedMessagesRows(model, location)
 	bounds := image.Rect(0, 0, model.Width, model.Height)
 	width := pinnedMessagesFrame(bounds).Dx()
-	if selectorView != "" {
-		return buildListModalWidth(bounds, "Pinned messages", rows, overlayStyles, width, selectorView)
-	}
 	return buildListModalWidth(bounds, "Pinned messages", rows, overlayStyles, width)
 }
 

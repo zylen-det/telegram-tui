@@ -96,66 +96,6 @@ func TestHuhInputPasswordMasksSecret(t *testing.T) {
 	}
 }
 
-func TestHuhSelectExplicitKeyMapValueAndGeometry(t *testing.T) {
-	var val string
-	// Select with no keymap is inert for navigation; explicit keymap enables it.
-	selNoKM := huh.NewSelect[string]().
-		Options(
-			huh.NewOption("a", "Alpha"),
-			huh.NewOption("b", "Bravo"),
-			huh.NewOption("c", "Charlie"),
-		).
-		Value(&val).
-		WithTheme(huhTheme()).(*huh.Select[string])
-
-	// Without keymap, Select navigation via Down is inert
-	_ = selNoKM.Focus()
-	_, _ = selNoKM.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyDown}))
-	if got := val; got != "Alpha" {
-		t.Fatalf("select without keymap Down should be inert: value=%q", got)
-	}
-
-	// With explicit keymap, Down should advance the bound value
-	sel := huh.NewSelect[string]().
-		Options(
-			huh.NewOption("a", "Alpha"),
-			huh.NewOption("b", "Bravo"),
-			huh.NewOption("c", "Charlie"),
-		).
-		Value(&val).
-		WithTheme(huhTheme()).
-		WithKeyMap(huhKeyMap()).(*huh.Select[string])
-	// Height() is on the concrete type, not on huh.Field.
-	sel.Height(2)
-
-	sel.Focus()
-
-	// Down navigates to next option (bound value holds Option.Value)
-	result, _ := sel.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyDown}))
-	sel = result.(*huh.Select[string])
-	if got := val; got != "Bravo" {
-		t.Fatalf("first down: value=%q, want %q", got, "Bravo")
-	}
-
-	// Another down to last option
-	result, _ = sel.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyDown}))
-	sel = result.(*huh.Select[string])
-	if got := val; got != "Charlie" {
-		t.Fatalf("second down: value=%q, want %q", got, "Charlie")
-	}
-
-	// View must not be empty
-	view := sel.View()
-	if strings.TrimSpace(view) == "" {
-		t.Fatal("Select View returned empty string")
-	}
-
-	// Height(2) sets outer geometry — prove it via lipgloss v2 measurement.
-	if got := lipgloss.Height(view); got != 2 {
-		t.Fatalf("Select outer geometry height = %d, want 2", got)
-	}
-}
-
 // huhStyleContract is one entry of the Huh theme contract: the exact palette
 // foreground and background a field style must carry, and whether it is bold.
 // lipgloss.NoColor{} means "leave it unset" so the terminal's own colors show

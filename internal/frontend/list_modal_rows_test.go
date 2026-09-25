@@ -8,6 +8,29 @@ import (
 	"github.com/zylen-det/telegram-tui/internal/domain"
 )
 
+// actionableRow is the test-side summary of one displayed list row: exactly
+// the modalRowSpec identity fields the manual paint and hit map consume.
+type actionableRow struct {
+	ID     string
+	Label  string
+	Action ActionReceived
+}
+
+// actionableRows is the test-only mirror of the production rowSelectable
+// predicate: a row joins the list only when it carries an ID and a real
+// action and is not a structural header. Order and exact semantic payloads
+// are preserved.
+func actionableRows(rows []modalRowSpec) []actionableRow {
+	var out []actionableRow
+	for _, row := range rows {
+		if !rowSelectable(row) {
+			continue
+		}
+		out = append(out, actionableRow{ID: row.ID, Label: row.Label, Action: row.Action})
+	}
+	return out
+}
+
 func TestListModalRowsMessageActionsCanonicalSemanticPayloads(t *testing.T) {
 	menu := &MessageActionMenu{
 		ChatID:    9,
@@ -20,29 +43,34 @@ func TestListModalRowsMessageActionsCanonicalSemanticPayloads(t *testing.T) {
 		CanReact:  true,
 		MediaFile: domain.MediaFileRef{ID: 4, CanDownload: true},
 	}
-	got := selectorOptionsFromRows(messageActionRows(menu))
-	want := []selectorOption{
-		{ID: "action:view-image", Label: "View image", Value: ActionReceived{Action: ViewMessageMedia, ChatID: 9, MessageID: 22}},
-		{ID: "action:reply", Label: "Reply", Value: ActionReceived{Action: ReplyMessage, ChatID: 9, MessageID: 22}},
-		{ID: "action:forward", Label: "Forward", Value: ActionReceived{Action: ForwardMessageSource, ChatID: 9, MessageID: 22}},
-		{ID: "action:edit", Label: "Edit", Value: ActionReceived{Action: EditMessage, ChatID: 9, MessageID: 22}},
-		{ID: "action:copy", Label: "Copy", Value: ActionReceived{Action: CopyMessage, ChatID: 9, MessageID: 22}},
-		{ID: "action:react", Label: "React", Value: ActionReceived{Action: ReactMessage, ChatID: 9, MessageID: 22}},
-		{ID: "action:pin", Label: "Unpin", Value: ActionReceived{Action: PinMessage, ChatID: 9, MessageID: 22}},
-		{ID: "action:delete", Label: "Delete", Value: ActionReceived{Action: DeleteMessage, ChatID: 9, MessageID: 22}},
-		{ID: "action:delete-all", Label: "Delete for everyone", Value: ActionReceived{Action: DeleteForEveryone, ChatID: 9, MessageID: 22}},
+	got := actionableRows(messageActionRows(menu))
+	want := []actionableRow{
+		{ID: "action:view-image", Label: "View image", Action: ActionReceived{Action: ViewMessageMedia, ChatID: 9, MessageID: 22}},
+		{ID: "action:reply", Label: "Reply", Action: ActionReceived{Action: ReplyMessage, ChatID: 9, MessageID: 22}},
+		{ID: "action:forward", Label: "Forward", Action: ActionReceived{Action: ForwardMessageSource, ChatID: 9, MessageID: 22}},
+		{ID: "action:edit", Label: "Edit", Action: ActionReceived{Action: EditMessage, ChatID: 9, MessageID: 22}},
+		{ID: "action:copy", Label: "Copy", Action: ActionReceived{Action: CopyMessage, ChatID: 9, MessageID: 22}},
+		{ID: "action:react", Label: "React", Action: ActionReceived{Action: ReactMessage, ChatID: 9, MessageID: 22}},
+		{ID: "action:pin", Label: "Unpin", Action: ActionReceived{Action: PinMessage, ChatID: 9, MessageID: 22}},
+		{ID: "action:delete", Label: "Delete", Action: ActionReceived{Action: DeleteMessage, ChatID: 9, MessageID: 22}},
+		{ID: "action:delete-all", Label: "Delete for everyone", Action: ActionReceived{Action: DeleteForEveryone, ChatID: 9, MessageID: 22}},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("compiled Message actions = %#v, want %#v", got, want)
 	}
 
-	huhOptions := selectorHuhOptions(got)
-	if len(huhOptions) != len(want) {
-		t.Fatalf("Huh options = %d, want %d", len(huhOptions), len(want))
+	// The selected flag tracks the authoritative Selected index only.
+	rows := messageActionRows(menu)
+	for index, row := range rows {
+		if row.Selected != (index == menu.Selected) {
+			t.Errorf("row %d (%s) selected = %t, want %t", index, row.ID, row.Selected, index == menu.Selected)
+		}
 	}
-	for index, option := range huhOptions {
-		if option.Key != want[index].Label || option.Value != want[index].Value {
-			t.Errorf("Huh option %d = {%q %#v}, want {%q %#v}", index, option.Key, option.Value, want[index].Label, want[index].Value)
+	menu.Selected = 3
+	rows = messageActionRows(menu)
+	for index, row := range rows {
+		if row.Selected != (index == 3) {
+			t.Errorf("settled row %d (%s) selected = %t, want %t", index, row.ID, row.Selected, index == 3)
 		}
 	}
 }
@@ -63,39 +91,39 @@ func TestListModalRowsMessageActionLoadingErrorGating(t *testing.T) {
 		{name: "error", menu: func() MessageActionMenu { m := base; m.Error = &domain.AppError{Message: "unavailable"}; return m }()},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := selectorOptionsFromRows(messageActionRows(&tc.menu))
-			want := []selectorOption{
-				{ID: "action:reply", Label: "Reply", Value: ActionReceived{Action: ReplyMessage, ChatID: 9, MessageID: 22}},
-				{ID: "action:copy", Label: "Copy", Value: ActionReceived{Action: CopyMessage, ChatID: 9, MessageID: 22}},
+			got := actionableRows(messageActionRows(&tc.menu))
+			want := []actionableRow{
+				{ID: "action:reply", Label: "Reply", Action: ActionReceived{Action: ReplyMessage, ChatID: 9, MessageID: 22}},
+				{ID: "action:copy", Label: "Copy", Action: ActionReceived{Action: CopyMessage, ChatID: 9, MessageID: 22}},
 			}
 			if !reflect.DeepEqual(got, want) {
-				t.Fatalf("compiled gated options = %#v, want %#v", got, want)
+				t.Fatalf("compiled gated rows = %#v, want %#v", got, want)
 			}
 		})
 	}
-	if got := selectorOptionsFromRows(messageActionRows(nil)); got != nil {
-		t.Fatalf("nil Message menu options = %#v, want nil", got)
+	if got := actionableRows(messageActionRows(nil)); got != nil {
+		t.Fatalf("nil Message menu rows = %#v, want nil", got)
 	}
 }
 
 func TestListModalRowsReactionPaletteExactSemanticPayloads(t *testing.T) {
 	picker := &ReactionPicker{ChatID: 9, MessageID: 22}
-	got := selectorOptionsFromRows(reactionRows(picker))
+	got := actionableRows(reactionRows(picker))
 	if len(got) != len(ReactionPalette) {
-		t.Fatalf("reaction options = %d, want %d", len(got), len(ReactionPalette))
+		t.Fatalf("reaction rows = %d, want %d", len(got), len(ReactionPalette))
 	}
 	for index, emoji := range ReactionPalette {
-		want := selectorOption{
-			ID:    "reaction:" + strconv.Itoa(index),
-			Label: emoji,
-			Value: ActionReceived{Action: Activate, ChatID: 9, MessageID: 22, Rune: rune(index + 0x10000)},
+		want := actionableRow{
+			ID:     "reaction:" + strconv.Itoa(index),
+			Label:  emoji,
+			Action: ActionReceived{Action: Activate, ChatID: 9, MessageID: 22, Rune: rune(index + 0x10000)},
 		}
 		if got[index] != want {
-			t.Errorf("reaction option %d = %#v, want %#v", index, got[index], want)
+			t.Errorf("reaction row %d = %#v, want %#v", index, got[index], want)
 		}
 	}
-	if got := selectorOptionsFromRows(reactionRows(nil)); got != nil {
-		t.Fatalf("nil Reaction picker options = %#v, want nil", got)
+	if got := actionableRows(reactionRows(nil)); got != nil {
+		t.Fatalf("nil Reaction picker rows = %#v, want nil", got)
 	}
 }
 
@@ -105,35 +133,33 @@ func TestListModalRowsForwardUsesChatIdentityAcrossReorder(t *testing.T) {
 		{Chat: domain.Chat{ID: 101, Title: "Alpha"}},
 		{Chat: domain.Chat{ID: 202, Title: "Bravo"}},
 	}
-	got := selectorOptionsFromRows(forwardRows(picker, first))
-	selected := got[1].Value
+	got := actionableRows(forwardRows(picker, first))
+	selected := got[1].Action
 	if selected != (ActionReceived{Action: Activate, ChatID: 202}) {
 		t.Fatalf("forward selected identity = %#v, want ChatID 202", selected)
 	}
 
-	reordered := []ChatRow{first[1], first[0]}
-	next := selectorOptionsFromRows(forwardRows(picker, reordered))
-	index := selectorOptionIndex(next, selected)
-	if index != 0 || next[index].ID != "forward:0:202" || next[index].Label != "Bravo" {
-		t.Fatalf("reordered stable identity index=%d options=%#v", index, next)
+	reorderedRows := forwardRows(picker, []ChatRow{first[1], first[0]})
+	index := -1
+	for rowIndex, row := range reorderedRows {
+		if row.Action == selected {
+			index = rowIndex
+		}
 	}
-	if got := selectorOptionsFromRows(forwardRows(nil, first)); got != nil {
-		t.Fatalf("nil Forward picker options = %#v, want nil", got)
+	if index != 0 || reorderedRows[index].ID != "forward:0:202" || reorderedRows[index].Label != "Bravo" {
+		t.Fatalf("reordered stable identity index=%d rows=%#v", index, reorderedRows)
 	}
-}
-
-func TestSelectorOptionIndexRejectsMissingIdentity(t *testing.T) {
-	options := []selectorOption{{Value: ActionReceived{Action: CopyMessage, ChatID: 9, MessageID: 22}}}
-	if got := selectorOptionIndex(options, ActionReceived{Action: ReplyMessage, ChatID: 9, MessageID: 22}); got != -1 {
-		t.Fatalf("missing semantic identity index = %d, want -1", got)
+	if got := actionableRows(forwardRows(nil, first)); got != nil {
+		t.Fatalf("nil Forward picker rows = %#v, want nil", got)
 	}
 }
 
-// TestSelectorOptionsFromRowsKeepsOnlyActionableDisplayedRows documents the one
-// generic derivation shared by every list modal: a row joins the selector only
-// when it carries both an ID and a real action, order and exact semantic
-// payload are preserved, and nothing else is dropped or reordered.
-func TestSelectorOptionsFromRowsKeepsOnlyActionableDisplayedRows(t *testing.T) {
+// TestActionableRowsKeepsOnlyActionableDisplayedRows documents the one
+// predicate shared by every list modal: a row joins the interactive hit list
+// (and keyboard selection) only when it carries an ID and a real action and
+// is not a header, order and exact semantic payload are preserved, and
+// nothing else is dropped or reordered.
+func TestActionableRowsKeepsOnlyActionableDisplayedRows(t *testing.T) {
 	first := ActionReceived{Action: CopyMessage, ChatID: 9, MessageID: 22}
 	second := ActionReceived{Action: EditMessage, ChatID: 9, MessageID: 22}
 	rows := []modalRowSpec{
@@ -143,38 +169,43 @@ func TestSelectorOptionsFromRowsKeepsOnlyActionableDisplayedRows(t *testing.T) {
 		{ID: "one", Label: "Copy", Action: first},
 		{ID: "two", Label: "Edit", Action: second, Selected: true},
 	}
-	want := []selectorOption{
-		{ID: "one", Label: "Copy", Value: first},
-		{ID: "two", Label: "Edit", Value: second},
+	want := []actionableRow{
+		{ID: "one", Label: "Copy", Action: first},
+		{ID: "two", Label: "Edit", Action: second},
 	}
-	if got := selectorOptionsFromRows(rows); !reflect.DeepEqual(got, want) {
-		t.Fatalf("derived options = %#v, want %#v", got, want)
+	if got := actionableRows(rows); !reflect.DeepEqual(got, want) {
+		t.Fatalf("derived rows = %#v, want %#v", got, want)
 	}
-	// Informational, header, and empty rows never become selectable, so a list
-	// without a single actionable row derives no options at all.
-	if got := selectorOptionsFromRows(rows[:3]); got != nil {
-		t.Fatalf("non-actionable rows derived options: %#v", got)
+	// Informational, header, and empty rows never become selectable, so a
+	// list without a single actionable row derives no interactive rows.
+	if got := actionableRows(rows[:3]); got != nil {
+		t.Fatalf("non-actionable rows derived interactive rows: %#v", got)
 	}
-	if got := selectorOptionsFromRows(nil); got != nil {
-		t.Fatalf("nil rows derived options: %#v", got)
+	if got := actionableRows(nil); got != nil {
+		t.Fatalf("nil rows derived interactive rows: %#v", got)
 	}
-	// The authoritative selection is the selected actionable row; header and
+	// The paint-side selection is the selected actionable row; header and
 	// informational rows stay out of it.
-	if got := selectorRowsAuthoritative(rows); got != second {
-		t.Fatalf("authoritative = %#v, want %#v", got, second)
+	selectedActionable := func(specs []modalRowSpec) ActionReceived {
+		for _, row := range specs {
+			if row.Selected && rowSelectable(row) {
+				return row.Action
+			}
+		}
+		return ActionReceived{}
+	}
+	if got := selectedActionable(rows); got != second {
+		t.Fatalf("selected actionable = %#v, want %#v", got, second)
 	}
 	unselected := append([]modalRowSpec(nil), rows...)
 	unselected[4].Selected = false
-	if got := selectorRowsAuthoritative(unselected); got != (ActionReceived{}) {
+	if got := selectedActionable(unselected); got != (ActionReceived{}) {
 		t.Fatalf("unselected rows authoritative = %#v, want zero payload", got)
 	}
 	headerOnly := append([]modalRowSpec(nil), rows...)
 	headerOnly[0].Selected = true
 	headerOnly[4].Selected = false
-	if got := selectorRowsAuthoritative(headerOnly); got != (ActionReceived{}) {
-		t.Fatalf("header selection leaked into authoritative: %#v", got)
-	}
-	if !rowSelectable(rows[3]) || rowSelectable(rows[0]) || rowSelectable(rows[1]) || rowSelectable(rows[2]) {
-		t.Fatal("row selection predicate misclassified rows")
+	if got := selectedActionable(headerOnly); got != (ActionReceived{}) {
+		t.Fatalf("header selection leaked into paint: %#v", got)
 	}
 }

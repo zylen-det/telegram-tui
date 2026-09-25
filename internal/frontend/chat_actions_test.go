@@ -19,8 +19,8 @@ func TestChatActionInputAndSelectorOptions(t *testing.T) {
 	}
 	menu := &ChatActionMenuState{ChatID: 9}
 	chat := domain.Chat{ID: 9, Kind: domain.ChatSupergroup, IsMember: true}
-	options := selectorOptionsFromRows(chatActionRows(chat, menu))
-	if len(options) < 2 || options[0].Label != "Open chat" || options[0].Value != (ActionReceived{Action: OpenChat, ChatID: 9}) {
+	options := actionableRows(chatActionRows(chat, menu))
+	if len(options) < 2 || options[0].ID != "chat-action:Open chat" || options[0].Label != "Open chat" || options[0].Action != (ActionReceived{Action: OpenChat, ChatID: 9}) {
 		t.Fatalf("options = %#v", options)
 	}
 }
@@ -33,7 +33,7 @@ func TestChatActionLayerOwnsModalInteractions(t *testing.T) {
 		ActiveChat:  domain.Chat{ID: 9, Title: "Team", Kind: domain.ChatSupergroup, IsMember: true},
 		ChatActions: &ChatActionMenuState{ChatID: 9},
 	}
-	layer := buildChatActionLayer(model, newRenderStyles(false), "")
+	layer := buildChatActionLayer(model, newRenderStyles(false))
 	if layer.Layer == nil || !layer.IsModal || len(layer.Interactions) == 0 {
 		t.Fatalf("layer = %#v", layer)
 	}

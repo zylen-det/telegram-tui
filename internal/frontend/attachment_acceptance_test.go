@@ -97,13 +97,13 @@ func TestAttachmentActionOptionsAreExactAndPreserveAcceptedMedia(t *testing.T) {
 				MediaFile: domain.MediaFileRef{ID: 1, CanDownload: true},
 				Loading:   true,
 			}
-			options := selectorOptionsFromRows(messageActionRows(menu))
-			if len(options) == 0 || options[0].ID != test.id || options[0].Label != test.label || options[0].Value.Action != ViewMessageMedia {
+			options := actionableRows(messageActionRows(menu))
+			if len(options) == 0 || options[0].ID != test.id || options[0].Label != test.label || options[0].Action.Action != ViewMessageMedia {
 				t.Fatalf("options = %#v", options)
 			}
 			menu.Loading = false
 			menu.Error = &domain.AppError{Kind: domain.ErrorInternal}
-			options = selectorOptionsFromRows(messageActionRows(menu))
+			options = actionableRows(messageActionRows(menu))
 			if len(options) == 0 || options[0].ID != test.id {
 				t.Fatalf("error-state options = %#v", options)
 			}

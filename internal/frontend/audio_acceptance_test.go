@@ -70,8 +70,8 @@ func TestAudioActionLabelsAndPhotoVideoNonRegression(t *testing.T) {
 		{kind: domain.MessagePhoto, id: "action:view-image", label: "View image"},
 	} {
 		menu := &MessageActionMenu{ChatID: 9, MessageID: 77, MediaFile: file, MediaKind: test.kind}
-		options := selectorOptionsFromRows(messageActionRows(menu))
-		if len(options) != 1 || options[0].ID != test.id || options[0].Label != test.label || options[0].Value.Action != ViewMessageMedia {
+		options := actionableRows(messageActionRows(menu))
+		if len(options) != 1 || options[0].ID != test.id || options[0].Label != test.label || options[0].Action.Action != ViewMessageMedia {
 			t.Fatalf("kind %v options = %#v", test.kind, options)
 		}
 	}

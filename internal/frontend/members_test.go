@@ -50,17 +50,17 @@ func TestMembersKeyMappings(t *testing.T) {
 	}
 }
 
-func TestMembersSelectorOptionsCarryChatUserIdentity(t *testing.T) {
+func TestMembersRowsCarryChatUserIdentity(t *testing.T) {
 	model := membersViewModel()
-	options := selectorOptionsFromRows(membersRows(model.Members))
+	options := actionableRows(membersRows(model.Members))
 	if len(options) != 2 || options[0].ID != "member:1" || options[1].ID != "member:2" {
-		t.Fatalf("options = %#v", options)
+		t.Fatalf("rows = %#v", options)
 	}
-	if options[0].Value != (ActionReceived{Action: OpenMemberDetail, ChatID: 9, UserID: 1}) {
-		t.Fatalf("option payload = %#v", options[0].Value)
+	if options[0].Action != (ActionReceived{Action: OpenMemberDetail, ChatID: 9, UserID: 1}) {
+		t.Fatalf("row payload = %#v", options[0].Action)
 	}
-	if got := selectorOptionsFromRows(membersRows(nil)); got != nil {
-		t.Fatalf("nil members options = %#v", got)
+	if got := actionableRows(membersRows(nil)); got != nil {
+		t.Fatalf("nil members rows = %#v", got)
 	}
 }
 
@@ -78,7 +78,7 @@ func TestMemberResultLabelSanitizesAndBounds(t *testing.T) {
 func TestMembersLayerIsModalAndClosesUnderlyingHits(t *testing.T) {
 	styles := newRenderStyles(true)
 	model := membersViewModel()
-	layer := buildMembersLayer(model, styles, "")
+	layer := buildMembersLayer(model, styles)
 	if layer.Layer == nil || !layer.IsModal || layer.Rect.Empty() {
 		t.Fatalf("layer = nil=%t modal=%t rect=%v", layer.Layer == nil, layer.IsModal, layer.Rect)
 	}
@@ -193,7 +193,7 @@ func TestMemberDetailLayerShowsAvatarAndKeepsSelection(t *testing.T) {
 	}
 	model.MemberDetailAvatar = pixel.Avatar{Width: 6, Height: 6, Cells: cells}
 	model.Members.Detail = &MemberDetail{UserID: 1, Name: "Ada", Username: "ada"}
-	layer := buildMembersLayer(model, styles, "")
+	layer := buildMembersLayer(model, styles)
 	if layer.Layer == nil || !layer.IsModal {
 		t.Fatal("detail layer should be modal")
 	}
@@ -209,12 +209,12 @@ func TestMessageMenuUserInfoRowAfterCopy(t *testing.T) {
 		ChatID: 9, MessageID: 22, UserID: 7,
 		Capabilities: domain.MessageCapabilities{Copy: true},
 	}
-	options := selectorOptionsFromRows(messageActionRows(menu))
+	options := actionableRows(messageActionRows(menu))
 	if len(options) != 2 || options[0].ID != "action:copy" || options[1].ID != "action:user-info" {
 		t.Fatalf("options = %#v", options)
 	}
-	if options[1].Value != (ActionReceived{Action: ViewUserInfo, ChatID: 9, MessageID: 22}) {
-		t.Fatalf("user info option = %#v", options[1].Value)
+	if options[1].Action != (ActionReceived{Action: ViewUserInfo, ChatID: 9, MessageID: 22}) {
+		t.Fatalf("user info payload = %#v", options[1].Action)
 	}
 	styles := newRenderStyles(false)
 	model := ViewModel{Width: 80, Height: 24, MessageMenu: menu}
@@ -226,7 +226,7 @@ func TestMessageMenuUserInfoRowAfterCopy(t *testing.T) {
 		t.Fatalf("row order = %#v", surface.Interactions)
 	}
 	anonymous := &MessageActionMenu{ChatID: 9, MessageID: 22, Capabilities: domain.MessageCapabilities{Copy: true}}
-	if got := selectorOptionsFromRows(messageActionRows(anonymous)); len(got) != 1 {
+	if got := actionableRows(messageActionRows(anonymous)); len(got) != 1 {
 		t.Fatalf("anonymous options = %#v", got)
 	}
 }
@@ -242,7 +242,7 @@ func TestMemberDetailViewAvatarRowAndOption(t *testing.T) {
 	if rows[2].Action != (ActionReceived{Action: ViewMemberAvatar, ChatID: 9, UserID: 1}) {
 		t.Fatalf("view action = %#v", rows[2].Action)
 	}
-	options := selectorOptionsFromRows(rows)
+	options := actionableRows(rows)
 	if len(options) != 7 || options[1].ID != "member-action:view-avatar" {
 		t.Fatalf("options = %#v", options)
 	}
@@ -266,16 +266,27 @@ func TestMemberAvatarModalStaysTopmostOverMembers(t *testing.T) {
 	}
 }
 
-func TestMemberDetailSelectorOptionsMirrorRows(t *testing.T) {
+func TestMemberDetailRowsMirrorSelection(t *testing.T) {
 	model := membersViewModel()
 	model.Members.Detail = &MemberDetail{UserID: 1, Name: "Ada", Username: "ada"}
 	rows, _ := memberDetailRows(model.Members, nil)
-	options := selectorOptionsFromRows(rows)
+	options := actionableRows(rows)
 	if len(options) != 6 || options[0].ID != "member:back" || options[1].ID != "member-action:copy-username" {
 		t.Fatalf("options = %#v", options)
 	}
-	if options[0].Value != (ActionReceived{Action: CloseMemberDetail, ChatID: 9}) {
-		t.Fatalf("back option = %#v", options[0].Value)
+	if options[0].Action != (ActionReceived{Action: CloseMemberDetail, ChatID: 9}) {
+		t.Fatalf("back payload = %#v", options[0].Action)
+	}
+	// Exactly one actionable row carries the selected flag from the
+	// authoritative detail selection.
+	selected := 0
+	for _, row := range rows {
+		if row.Selected && rowSelectable(row) {
+			selected++
+		}
+	}
+	if selected != 1 {
+		t.Fatalf("selected actionable rows = %d, want 1", selected)
 	}
 }
 
@@ -286,7 +297,7 @@ func TestMembersLayerUsesDetailTitle(t *testing.T) {
 	if got := membersTitle(model.Members); got != "Ada" {
 		t.Fatalf("title = %q", got)
 	}
-	layer := buildMembersLayer(model, styles, "")
+	layer := buildMembersLayer(model, styles)
 	if layer.Layer == nil || !layer.IsModal {
 		t.Fatal("detail layer should be modal")
 	}

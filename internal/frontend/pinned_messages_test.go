@@ -48,17 +48,17 @@ func TestPinnedMessageKeyMappings(t *testing.T) {
 	}
 }
 
-func TestPinnedMessageSelectorOptionsCarryChatMessageIdentity(t *testing.T) {
+func TestPinnedMessageRowsCarryChatMessageIdentity(t *testing.T) {
 	model := pinnedViewModel()
-	options := selectorOptionsFromRows(pinnedMessagesRows(model, time.UTC))
+	options := actionableRows(pinnedMessagesRows(model, time.UTC))
 	if len(options) != 2 || options[0].ID != "pinned:30" || options[1].ID != "pinned:20" {
-		t.Fatalf("options = %#v", options)
+		t.Fatalf("rows = %#v", options)
 	}
-	if options[0].Value != (ActionReceived{Action: SelectMessage, ChatID: 9, MessageID: 30}) {
-		t.Fatalf("option payload = %#v", options[0].Value)
+	if options[0].Action != (ActionReceived{Action: SelectMessage, ChatID: 9, MessageID: 30}) {
+		t.Fatalf("row payload = %#v", options[0].Action)
 	}
-	if got := selectorOptionsFromRows(pinnedMessagesRows(ViewModel{}, time.UTC)); got != nil {
-		t.Fatalf("nil pinned options = %#v", got)
+	if got := actionableRows(pinnedMessagesRows(ViewModel{}, time.UTC)); got != nil {
+		t.Fatalf("nil pinned rows = %#v", got)
 	}
 }
 
@@ -76,7 +76,7 @@ func TestPinnedMessageResultLabelSanitizesAndBounds(t *testing.T) {
 func TestPinnedMessageLayerIsModalAndClosesUnderlyingHits(t *testing.T) {
 	styles := newRenderStyles(true)
 	model := pinnedViewModel()
-	layer := buildPinnedMessagesLayer(model, time.UTC, styles, "")
+	layer := buildPinnedMessagesLayer(model, time.UTC, styles)
 	if layer.Layer == nil || !layer.IsModal || layer.Rect.Empty() {
 		t.Fatalf("layer = nil=%t modal=%t rect=%v", layer.Layer == nil, layer.IsModal, layer.Rect)
 	}

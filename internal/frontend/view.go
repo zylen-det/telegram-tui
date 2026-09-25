@@ -62,8 +62,6 @@ func (m AppModel) View() tea.View {
 		Composer:      m.composerText.View(),
 		Authorization: m.authorizationInput.View(),
 
-		Selector: m.listModals.View(),
-
 		PhotoPath: m.photoPathInput.View(),
 
 		MessageSearch: m.messageSearchInput.View(),
