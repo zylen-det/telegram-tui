@@ -16,13 +16,6 @@ func editableFocus(focus Focus) bool {
 		focus == FocusSearchInput || focus == FocusChatSearchInput || focus == FocusChatSettingsInput
 }
 
-func textInputAllowed(key tea.Key) bool {
-	if key.Text == "" {
-		return false
-	}
-	return key.Mod & ^tea.ModShift == 0
-}
-
 func mapKeyPress(focus Focus, msg tea.KeyPressMsg) (ActionReceived, bool) {
 	key := msg.Key()
 	key.Mod &^= tea.ModCapsLock | tea.ModNumLock | tea.ModScrollLock

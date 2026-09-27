@@ -116,17 +116,3 @@ func TestAppModelHuhAuthorizationRoutesWholeValueEditingAndSubmit(t *testing.T) 
 		t.Fatalf("submitted authorization view did not show safe progress status:\n%s", plain)
 	}
 }
-
-func TestAppModelHuhAuthorizationDoesNotRouteModifiedText(t *testing.T) {
-	model := newAppModelForTest(t, authorizationAppState(31, "keep", false), newTestSession(t))
-	for _, key := range []tea.Key{
-		{Text: "x", Code: 'x', Mod: tea.ModAlt},
-		{Text: "u", Code: 'u', Mod: tea.ModCtrl},
-		{Code: tea.KeyBackspace, Mod: tea.ModAlt},
-	} {
-		model, _ = updateAppModel(t, model, tea.KeyPressMsg(key))
-	}
-	if got := string(model.Snapshot().Prompt.Input); got != "keep" {
-		t.Fatalf("modified key changed prompt input: %q", got)
-	}
-}

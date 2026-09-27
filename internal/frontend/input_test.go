@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/zylen-det/telegram-tui/internal/auth"
 	"github.com/zylen-det/telegram-tui/internal/domain"
 )
 
@@ -316,38 +317,54 @@ func TestReactionPickerKeyboardMappings(t *testing.T) {
 	}
 }
 
-func TestEditableModifierTextDoesNotMutateEngine(t *testing.T) {
+func TestEditableInputsForwardCaretKeysToHuh(t *testing.T) {
 	for _, test := range []struct {
 		name  string
 		focus Focus
-		key   tea.Key
+		value func(State) string
 	}{
-		{name: "auth alt text", focus: FocusAuth, key: tea.Key{Code: 'j', Text: "j", Mod: tea.ModAlt}},
-		{name: "auth ctrl text", focus: FocusAuth, key: tea.Key{Code: 'u', Text: "u", Mod: tea.ModCtrl}},
-		{name: "composer meta text", focus: FocusComposer, key: tea.Key{Code: 'q', Text: "q", Mod: tea.ModMeta}},
+		{"composer", FocusComposer, func(s State) string { return s.Drafts[9] }},
+		{"authorization", FocusAuth, func(s State) string { return string(s.Prompt.Input) }},
+		{"photo path", FocusPhotoSend, func(s State) string { return string(s.PhotoSend.Input) }},
+		{"message search", FocusSearchInput, func(s State) string { return string(s.MessageSearch.Input) }},
+		{"chat search", FocusChatSearchInput, func(s State) string { return string(s.ChatSearch.Input) }},
+		{"chat title", FocusChatSettingsInput, func(s State) string { return string(s.ChatSettings.TitleInput) }},
+		{"chat description", FocusChatSettingsInput, func(s State) string { return string(s.ChatSettings.DescriptionInput) }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			state := InitialState()
+			state.Width, state.Height = 100, 24
 			state.Focus = test.focus
-			if test.focus == FocusAuth {
-				state.Prompt = &PromptState{}
-			} else {
-				state.Chats = []domain.Chat{{ID: 7, CanSend: true}}
-				state.Drafts[7] = "before"
+			state.Connection = domain.ConnectionOnline
+			state.Chats = []domain.Chat{{ID: 9, CanSend: true}}
+			state.SelectedChat = 0
+			switch test.focus {
+			case FocusComposer:
+				state.Drafts[9] = "ab"
+			case FocusAuth:
+				state.Prompt = &PromptState{Prompt: auth.Prompt{ID: 17}, Input: []rune("ab")}
+			case FocusPhotoSend:
+				state.PhotoSend = &PhotoSendState{ChatID: 9, Input: []rune("ab")}
+			case FocusSearchInput:
+				state.MessageSearch = &MessageSearchState{ChatID: 9, Input: []rune("ab")}
+			case FocusChatSearchInput:
+				state.ChatSearch = &ChatSearchState{Input: []rune("ab")}
+			case FocusChatSettingsInput:
+				state.ChatSettings = &ChatSettingsState{ChatID: 9, Mode: ChatSettingsTitleEditor, TitleInput: []rune("ab"), DescriptionInput: []rune("ab"), TitleEditorID: 1, DescriptionEditorID: 2}
+				if test.name == "chat description" {
+					state.ChatSettings.Mode = ChatSettingsDescriptionEditor
+				}
 			}
 			model := newAppModelForTest(t, state, newTestSession(t))
-			before := model.Snapshot()
-			_, cmd := model.Update(tea.KeyPressMsg(test.key))
-			if cmd != nil {
-				t.Fatal("modified text key returned a command")
-			}
-			after := model.Snapshot()
-			if test.focus == FocusAuth {
-				if len(after.Prompt.Input) != len(before.Prompt.Input) {
-					t.Fatal("modified text key changed authorization input")
+			for _, key := range []tea.Key{{Code: tea.KeyLeft}, {Code: tea.KeyLeft}, {Code: tea.KeyRight}} {
+				model, _ = updateAppModel(t, model, tea.KeyPressMsg(key))
+				if got := model.Snapshot(); got.Focus != test.focus || test.value(got) != "ab" {
+					t.Fatalf("caret key changed focus or value: focus=%v value=%q", got.Focus, test.value(got))
 				}
-			} else if after.Drafts[7] != before.Drafts[7] {
-				t.Fatal("modified text key changed composer draft")
+			}
+			model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Text: "X"}))
+			if got := test.value(model.Snapshot()); got != "aXb" {
+				t.Fatalf("edit at caret = %q, want aXb", got)
 			}
 		})
 	}
@@ -413,7 +430,7 @@ func TestModifierNegativeDirectMapping(t *testing.T) {
 	}
 }
 
-func TestModifierNegativeAppModelUpdateDoesNotMutate(t *testing.T) {
+func TestModifiedPaneKeyDoesNotNavigateAndHuhEditsComposer(t *testing.T) {
 	model := mainSurfaceModel(t, 100, 24)
 	state := model.Snapshot()
 	state.Focus = FocusChats
@@ -427,18 +444,17 @@ func TestModifierNegativeAppModelUpdateDoesNotMutate(t *testing.T) {
 
 	state = model.Snapshot()
 	state.Focus = FocusComposer
-	beforeDraft := state.Drafts[state.Chats[state.SelectedChat].ID]
 	model.state = &state
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: tea.KeyBackspace, Mod: tea.ModAlt}))
 	state = model.Snapshot()
 	chatID := state.Chats[state.SelectedChat].ID
-	if got := state.Drafts[chatID]; got != beforeDraft {
-		t.Fatalf("Alt-Backspace changed draft from %q to %q", beforeDraft, got)
+	if got, want := state.Drafts[chatID], "draft "; got != want {
+		t.Fatalf("Huh Alt-Backspace = %q, want %q", got, want)
 	}
 
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: 'A', Text: "A", Mod: tea.ModShift}))
-	if got := model.Snapshot().Drafts[chatID]; got != beforeDraft+"A" {
-		t.Fatalf("uppercase editable input = %q, want %q", got, beforeDraft+"A")
+	if got, want := model.Snapshot().Drafts[chatID], "draft A"; got != want {
+		t.Fatalf("uppercase editable input = %q, want %q", got, want)
 	}
 }
 

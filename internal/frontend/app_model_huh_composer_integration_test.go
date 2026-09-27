@@ -145,7 +145,7 @@ func TestAppModelHuhComposerAppliesCleanRemoteDraftImmediately(t *testing.T) {
 	assertHuhComposerHost(t, model, composerTextIdentity{ChatID: 9}, "remote cloud draft", true, 42, 2)
 }
 
-func TestAppModelHuhComposerPreservesReservedAndModifiedKeys(t *testing.T) {
+func TestAppModelHuhComposerPreservesReservedKeys(t *testing.T) {
 	state := InitialState()
 	state.Connection = domain.ConnectionOnline
 	state.Chats = []domain.Chat{{ID: 9, CanSend: true}}
@@ -153,17 +153,6 @@ func TestAppModelHuhComposerPreservesReservedAndModifiedKeys(t *testing.T) {
 	state.Focus = FocusComposer
 	state.Drafts[9] = "keep"
 	model := newAppModelForTest(t, state, newTestSession(t))
-
-	for _, key := range []tea.Key{
-		{Code: tea.KeyBackspace, Mod: tea.ModAlt},
-		{Code: 'q', Text: "q", Mod: tea.ModMeta},
-		{Code: 'u', Text: "u", Mod: tea.ModCtrl},
-	} {
-		model, _ = updateAppModel(t, model, tea.KeyPressMsg(key))
-	}
-	if got, want := model.Snapshot().Drafts[9], "keep"; got != want {
-		t.Fatalf("modified key changed draft: %q, want %q", got, want)
-	}
 
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: 'o', Text: "o", Mod: tea.ModCtrl}))
 	snapshot := model.Snapshot()

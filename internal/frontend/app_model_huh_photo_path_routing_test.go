@@ -75,21 +75,6 @@ func TestAppModelHuhPhotoPathEscapeClosesAndClearsHost(t *testing.T) {
 	}
 }
 
-func TestAppModelHuhPhotoPathModifiedKeysAreNoOps(t *testing.T) {
-	model := newAppModelForTest(t, photoPathRoutingState("keep"), newTestSession(t))
-	for _, key := range []tea.Key{
-		{Text: "x", Code: 'x', Mod: tea.ModAlt},
-		{Text: "u", Code: 'u', Mod: tea.ModCtrl},
-		{Code: tea.KeyBackspace, Mod: tea.ModAlt},
-		{Code: tea.KeyLeft, Mod: tea.ModCtrl},
-	} {
-		model, _ = updateAppModel(t, model, tea.KeyPressMsg(key))
-	}
-	if got := string(model.Snapshot().PhotoSend.Input); got != "keep" {
-		t.Fatalf("modified key changed photo path: %q", got)
-	}
-}
-
 func TestAppModelHuhPhotoPathCtrlOFocusesHost(t *testing.T) {
 	state := InitialState()
 	state.Width, state.Height = 100, 24

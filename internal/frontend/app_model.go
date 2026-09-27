@@ -348,9 +348,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(m.deliver(commands), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost())
 			}
 		}
-		key := msg.Key()
-		key.Mod &^= tea.ModCapsLock | tea.ModNumLock | tea.ModScrollLock
-		if focus == FocusComposer && (textInputAllowed(msg.Key()) || key.Mod == 0 && (key.Code == tea.KeyLeft || key.Code == tea.KeyRight || key.Code == tea.KeyUp || key.Code == tea.KeyDown)) {
+		if focus == FocusComposer {
 			var preSync tea.Cmd
 			if snapForID := m.Snapshot(); snapForID.SelectedChat >= 0 && snapForID.SelectedChat < len(snapForID.Chats) {
 				wantID := snapForID.Chats[snapForID.SelectedChat].ID
@@ -376,7 +374,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Batch(preSync, m.deliver(commands), cmd)
 		}
-		if focus == FocusAuth && textInputAllowed(msg.Key()) {
+		if focus == FocusAuth {
 			preSync := m.syncAuthorizationInputHost()
 			changed, value, cmd := m.authorizationInput.Update(msg)
 			if changed {
@@ -388,7 +386,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Batch(preSync, cmd, m.syncPhotoPathInputHost())
 		}
-		if focus == FocusPhotoSend && photoEditKeyAllowed(msg.Key()) {
+		if focus == FocusPhotoSend {
 			preSync := m.syncPhotoPathInputHost()
 			changed, value, cmd := m.photoPathInput.Update(msg)
 			if changed {
@@ -400,7 +398,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Batch(preSync, cmd, m.syncPhotoPathInputHost())
 		}
-		if focus == FocusSearchInput && textInputAllowed(msg.Key()) {
+		if focus == FocusSearchInput {
 			preSync := m.syncMessageSearchInputHost()
 			changed, value, cmd := m.messageSearchInput.Update(msg)
 			if changed {
@@ -409,7 +407,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Batch(preSync, cmd, m.syncMessageSearchInputHost())
 		}
-		if focus == FocusChatSearchInput && textInputAllowed(msg.Key()) {
+		if focus == FocusChatSearchInput {
 			preSync := m.syncChatSearchInputHost()
 			changed, value, cmd := m.chatSearchInput.Update(msg)
 			if changed {
@@ -418,7 +416,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Batch(preSync, cmd, m.syncChatSearchInputHost())
 		}
-		if focus == FocusChatSettingsInput && textInputAllowed(msg.Key()) {
+		if focus == FocusChatSettingsInput {
 			preSync := m.syncChatSettingsInputHosts()
 			snap := m.Snapshot()
 			host, field, editorID := m.chatSettingsEditor(snap.ChatSettings)
@@ -501,11 +499,6 @@ func (m AppModel) recordShutdownError(shutdownErr error) {
 	m.metadata.mu.Lock()
 	m.metadata.shutdownErr = shutdownErr
 	m.metadata.mu.Unlock()
-}
-
-func photoEditKeyAllowed(key tea.Key) bool {
-	key.Mod &^= tea.ModCapsLock | tea.ModNumLock | tea.ModScrollLock
-	return key.Mod&^tea.ModShift == 0
 }
 
 func (m AppModel) deliver(commands []Effect) tea.Cmd {

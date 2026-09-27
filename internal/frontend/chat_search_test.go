@@ -71,6 +71,30 @@ func TestChatSearchKeyMappings(t *testing.T) {
 	}
 }
 
+func TestChatSearchInputArrowsSelectResultsWithoutMovingCaret(t *testing.T) {
+	state := InitialState()
+	state.Width, state.Height = 100, 24
+	state.Focus = FocusChatSearchInput
+	state.ChatSearch = &ChatSearchState{
+		Input:      []rune("ab"),
+		LocalChats: []domain.Chat{{ID: 9, Title: "first"}, {ID: 10, Title: "second"}},
+	}
+	model := newAppModelForTest(t, state, newTestSession(t))
+	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: tea.KeyLeft}))
+	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: tea.KeyDown}))
+	if got := model.Snapshot().ChatSearch; got.Selected != 1 || string(got.Input) != "ab" {
+		t.Fatalf("Down selection/input = %d/%q, want 1/ab", got.Selected, string(got.Input))
+	}
+	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: tea.KeyUp}))
+	if got := model.Snapshot().ChatSearch; got.Selected != 0 || string(got.Input) != "ab" {
+		t.Fatalf("Up selection/input = %d/%q, want 0/ab", got.Selected, string(got.Input))
+	}
+	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Text: "X"}))
+	if got := string(model.Snapshot().ChatSearch.Input); got != "aXb" {
+		t.Fatalf("typing after Up/Down = %q, want aXb", got)
+	}
+}
+
 // TestChatSearchRowsCarryChatIdentity documents the manual chat-search row
 // source: section headers and the informational empty/loading/error row stay
 // outside the actionable subset. These sectioned modalRowSpec rows are the
