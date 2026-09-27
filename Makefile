@@ -36,8 +36,8 @@ build:
 	CGO_CFLAGS="-I$(TDLIB_PREFIX)/include" \
 	CGO_LDFLAGS="-Wl,-rpath,$(TDLIB_PREFIX)/lib -L$(TDLIB_PREFIX)/lib -ltdjson" \
 	go build -trimpath -tags 'tdlib libtdjson' \
-		-ldflags "-X github.com/zylen-det/telegram-tui/internal/buildinfo.version=$(VERSION)" \
-		-o bin/telegram-tui ./cmd/telegram-tui
+		-ldflags "-X github.com/zylen-det/tuilegram/internal/buildinfo.version=$(VERSION)" \
+		-o bin/tuilegram ./cmd/tuilegram
 
 test-tdlib:
 	CGO_ENABLED=1 \

@@ -15,7 +15,7 @@ output=${1:-docs/assets/demo.gif}
 
 work=$(mktemp -d)
 socket="unix:$work/kitty.sock"
-class="telegram-tui-demo-$$"
+class="tuilegram-demo-$$"
 kitty_pid=
 recorder_pid=
 cleanup() {

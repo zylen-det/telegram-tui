@@ -12,8 +12,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/media/thumbnail"
+	"github.com/zylen-det/tuilegram/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/media/thumbnail"
 )
 
 // messageSelection is the active message selection used to decide whether a

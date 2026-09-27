@@ -5,9 +5,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/zylen-det/telegram-tui/internal/auth"
-	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/telegram"
+	"github.com/zylen-det/tuilegram/internal/auth"
+	"github.com/zylen-det/tuilegram/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/telegram"
 )
 
 func TestLayoutBreakpoints(t *testing.T) {

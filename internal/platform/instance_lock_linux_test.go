@@ -24,7 +24,7 @@ func TestInstanceLockRejectsLiveOwnerWithTypedAlreadyRunningError(t *testing.T) 
 	if !errors.As(err, &alreadyRunning) {
 		t.Fatalf("AcquireInstanceLock(second) error = %T, want *AlreadyRunningError", err)
 	}
-	if got := err.Error(); got != "another telegram-tui instance is already running" {
+	if got := err.Error(); got != "another tuilegram instance is already running" {
 		t.Fatalf("already-running error = %q", got)
 	}
 }

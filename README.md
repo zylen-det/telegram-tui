@@ -1,17 +1,17 @@
-# telegram-tui
+# tuilegram
 
-[![CI](https://github.com/zylen-det/telegram-tui/actions/workflows/ci.yml/badge.svg)](https://github.com/zylen-det/telegram-tui/actions/workflows/ci.yml)
+[![CI](https://github.com/zylen-det/tuilegram/actions/workflows/ci.yml/badge.svg)](https://github.com/zylen-det/tuilegram/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ## What is this?
 
-A Telegram client that lives in your terminal. Built with [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) and [TDLib](https://github.com/tdlib/td), telegram-tui runs in [Kitty](https://sw.kovidgoyal.net/kitty/) with inline images, mouse support, desktop notifications, and a persistent Telegram session.
+A Telegram client that lives in your terminal. Built with [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) and [TDLib](https://github.com/tdlib/td), tuilegram runs in [Kitty](https://sw.kovidgoyal.net/kitty/) with inline images, mouse support, desktop notifications, and a persistent Telegram session.
 
-![Animated demo of telegram-tui showing chats and message actions](docs/assets/demo.gif)
+![Animated demo of tuilegram showing chats and message actions](docs/assets/demo.gif)
 
 > **Project status:** This is an early release for Arch Linux x86-64 and Kitty; see [Known limitations](#known-limitations).
 
-telegram-tui is unofficial and is not affiliated with Telegram.
+tuilegram is unofficial and is not affiliated with Telegram.
 
 ## Features
 
@@ -32,13 +32,15 @@ Desktop notifications are optional; they need a freedesktop-compatible notificat
 
 ### Install the release
 
+The renamed installer supports `tuilegram` release archives starting with v0.4.0. Older releases use the previous archive name.
+
 Install the latest release without `sudo`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zylen-det/telegram-tui/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/zylen-det/tuilegram/main/scripts/install.sh | sh
 ```
 
-The installer verifies the release checksum, places versioned files under `~/.local/opt/telegram-tui`, and links the executable as `~/.local/bin/telegram-tui`. If necessary, add that directory to `PATH`:
+The installer verifies the release checksum, places versioned files under `~/.local/opt/tuilegram`, and links the executable as `~/.local/bin/tuilegram`. If necessary, add that directory to `PATH`:
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
@@ -47,16 +49,16 @@ export PATH="$HOME/.local/bin:$PATH"
 Install a specific version or use another prefix:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zylen-det/telegram-tui/main/scripts/install.sh \
-  | VERSION=v0.1.0 PREFIX="$HOME/.local" sh
+curl -fsSL https://raw.githubusercontent.com/zylen-det/tuilegram/main/scripts/install.sh \
+  | VERSION=v0.4.0 PREFIX="$HOME/.local" sh
 ```
 
-You can also download the archive and `SHA256SUMS` from [GitHub Releases](https://github.com/zylen-det/telegram-tui/releases), verify it, and run it in place:
+You can also download the archive and `SHA256SUMS` from [GitHub Releases](https://github.com/zylen-det/tuilegram/releases), verify it, and run it in place:
 
 ```bash
 sha256sum --check SHA256SUMS
-tar -xzf telegram-tui_<version>_linux_x86_64.tar.gz
-./telegram-tui_<version>_linux_x86_64/telegram-tui
+tar -xzf tuilegram_<version>_linux_x86_64.tar.gz
+./tuilegram_<version>_linux_x86_64/tuilegram
 ```
 
 Keep the archive's `lib` directory beside the executable; it contains the matching TDLib shared library. To build from source instead, see [Build from source](#build-from-source).
@@ -66,7 +68,7 @@ Keep the archive's `lib` directory beside the executable; it contains the matchi
 Start the client:
 
 ```bash
-telegram-tui
+tuilegram
 ```
 
 Follow the prompts in the TUI:
@@ -81,7 +83,7 @@ That's it. If Telegram rejects the phone number, you can enter it again without 
 You can also supply app credentials for a one-off launch:
 
 ```bash
-TELEGRAM_API_ID=12345 TELEGRAM_API_HASH=... telegram-tui
+TELEGRAM_API_ID=12345 TELEGRAM_API_HASH=... tuilegram
 ```
 
 Credential lookup order is environment → config file → first-run prompt.
@@ -126,8 +128,8 @@ Link actions open a second menu of TDLib-marked links to choose from; links behi
 Command-line help and version information are available without starting the TUI:
 
 ```bash
-telegram-tui --help
-telegram-tui --version
+tuilegram --help
+tuilegram --version
 ```
 
 ## Other information
@@ -141,9 +143,9 @@ The interface adapts to the terminal size:
 - **Narrow:** 60–79 columns and at least 18 rows, using separate pages.
 - **Too small:** below 60×18, where the application preserves state and asks for more room.
 
-telegram-tui uses the terminal's default background. Configure translucency in Kitty—for example, `background_opacity 0.9`—rather than in the application.
+tuilegram uses the terminal's default background. Configure translucency in Kitty—for example, `background_opacity 0.9`—rather than in the application.
 
-Sender names above messages use the sender accent-color ID assigned by Telegram; the adjacent timestamp keeps the normal text color. IDs 0–6 default to a Telegram Android-style palette. Newly generated `config.toml` files include a `[sender_colors]` section with all seven defaults. Edit any of its six-digit RGB values in `~/.config/telegram-tui/config.toml` (or under `XDG_CONFIG_HOME`) and restart to apply changes. For an older config, add the section yourself:
+Sender names above messages use the sender accent-color ID assigned by Telegram; the adjacent timestamp keeps the normal text color. IDs 0–6 default to a Telegram Android-style palette. Newly generated `config.toml` files include a `[sender_colors]` section with all seven defaults. Edit any of its six-digit RGB values in `~/.config/tuilegram/config.toml` (or under `XDG_CONFIG_HOME`) and restart to apply changes. For an older config, add the section yourself:
 
 ```toml
 [sender_colors]
@@ -151,21 +153,21 @@ Sender names above messages use the sender accent-color ID assigned by Telegram;
 "3" = "#40A920" # green
 ```
 
-Unspecified IDs retain their defaults. For other accent IDs, telegram-tui uses TDLib's dark-theme RGB values when available. This does not sync themes with another Telegram app.
+Unspecified IDs retain their defaults. For other accent IDs, tuilegram uses TDLib's dark-theme RGB values when available. This does not sync themes with another Telegram app.
 
 ### Local data and privacy
 
 | Data | Default location |
 |---|---|
-| Preferences and credentials | `~/.config/telegram-tui/config.toml` |
-| Application state and log | `~/.local/state/telegram-tui/` |
-| TDLib database | `~/.local/share/telegram-tui/tdlib/database/` |
-| Downloaded avatar files | `~/.cache/telegram-tui/avatars/files/` |
-| Disposable pixel cache | `~/.cache/telegram-tui/avatars/pixels/` |
+| Preferences and credentials | `~/.config/tuilegram/config.toml` |
+| Application state and log | `~/.local/state/tuilegram/` |
+| TDLib database | `~/.local/share/tuilegram/tdlib/database/` |
+| Downloaded avatar files | `~/.cache/tuilegram/avatars/files/` |
+| Disposable pixel cache | `~/.cache/tuilegram/avatars/pixels/` |
 
-The corresponding XDG environment variables override these roots. Removing the avatar cache does not remove the Telegram session.
+The corresponding XDG environment variables override these roots. Existing installation data is not migrated to the new directories; you will need to sign in again. Removing the avatar cache does not remove the Telegram session.
 
-Logs are rotating and restricted to an allow-list. They do not contain credentials, message or draft text, Telegram payloads, local media paths, commands, or raw errors. Normal and failed exits are recorded in `~/.local/state/telegram-tui/telegram-tui.log` (or under `XDG_STATE_HOME`); failed startup logs only a safe error category, not raw TDLib details, and returns a nonzero exit status.
+Logs are rotating and restricted to an allow-list. They do not contain credentials, message or draft text, Telegram payloads, local media paths, commands, or raw errors. Normal and failed exits are recorded in `~/.local/state/tuilegram/tuilegram.log` (or under `XDG_STATE_HOME`); failed startup logs only a safe error category, not raw TDLib details, and returns a nonzero exit status.
 
 ### Known limitations
 
@@ -186,11 +188,11 @@ sudo pacman -S --needed base-devel openssl zlib go git curl kitty
 Then clone the repository and build:
 
 ```bash
-git clone https://github.com/zylen-det/telegram-tui.git
-cd telegram-tui
+git clone https://github.com/zylen-det/tuilegram.git
+cd tuilegram
 make tdlib
 make build
-./bin/telegram-tui
+./bin/tuilegram
 ```
 
 `make tdlib` downloads and verifies the pinned prebuilt TDLib library. To compile that same TDLib commit locally instead:
@@ -217,7 +219,7 @@ Run the native integration and production build checks with:
 make tdlib
 make test-tdlib
 make build
-./bin/telegram-tui --version
+./bin/tuilegram --version
 git diff --check
 ```
 
@@ -230,4 +232,4 @@ See [`docs/architecture.md`](docs/architecture.md) for package boundaries and [`
 
 ### License
 
-telegram-tui is available under the [MIT License](LICENSE). Release archives also include license material for TDLib, the prebuilt package, and Go dependencies.
+tuilegram is available under the [MIT License](LICENSE). Release archives also include license material for TDLib, the prebuilt package, and Go dependencies.

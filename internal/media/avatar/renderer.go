@@ -10,8 +10,8 @@ import (
 	_ "image/png"
 	"os"
 
-	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/media/pixel"
+	"github.com/zylen-det/tuilegram/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/media/pixel"
 )
 
 const rendererVersion = 1

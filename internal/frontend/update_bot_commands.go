@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 func requestBotCommandsIfAbsent(state *State, chatID domain.ChatID) []Effect {

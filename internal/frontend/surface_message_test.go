@@ -10,10 +10,10 @@ import (
 
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/media/pixel"
-	"github.com/zylen-det/telegram-tui/internal/media/thumbnail"
-	"github.com/zylen-det/telegram-tui/internal/telegram"
+	"github.com/zylen-det/tuilegram/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/media/pixel"
+	"github.com/zylen-det/tuilegram/internal/media/thumbnail"
+	"github.com/zylen-det/tuilegram/internal/telegram"
 )
 
 func messageGroupCanvas(

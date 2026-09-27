@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 func TestVideoExternalOpenAcceptance_ActionMenuLabelsAndSemanticParity(t *testing.T) {

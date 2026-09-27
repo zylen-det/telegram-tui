@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 func TestVideoExternalOpenAcceptance_EligibleReceivedVideoActionAndNoDoubleDispatch(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 func clickListHit(t *testing.T, model AppModel, hit Hit) AppModel {

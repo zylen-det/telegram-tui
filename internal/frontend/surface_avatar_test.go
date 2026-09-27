@@ -8,7 +8,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/zylen-det/telegram-tui/internal/media/pixel"
+	"github.com/zylen-det/tuilegram/internal/media/pixel"
 )
 
 // avatarCanvas composes a compositor rooted at (0,0) containing the avatar

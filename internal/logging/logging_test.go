@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 func TestLoggerEmitsOnlyAllowListedSanitizedFields(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "state", "telegram-tui.log")
+	path := filepath.Join(t.TempDir(), "state", "tuilegram.log")
 	logger, closer, err := New(path, slog.LevelDebug)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)

@@ -34,7 +34,7 @@ Kitty image emission and cleanup is a separate overlay lifecycle.
 
 | Package | Responsibility |
 |---|---|
-| `cmd/telegram-tui` | Bootstrap, dependencies, process ownership, signals, exit code |
+| `cmd/tuilegram` | Bootstrap, dependencies, process ownership, signals, exit code |
 | `internal/domain` | Telegram-independent chat, message, user, media, and error models |
 | `internal/frontend` | Bubble Tea model/state/update, effect adaptation, Huh text-input hosts, render-data selection, grouping/layout/hit maps, Lipgloss surfaces/compositor, cursor, and Kitty coordination |
 | `internal/frontend/components` | Reusable Lipgloss frontend components |

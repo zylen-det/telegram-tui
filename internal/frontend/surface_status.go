@@ -5,7 +5,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 // buildStatusLayer builds the status bar surface: an exact root box with an
@@ -25,7 +25,7 @@ func buildStatusLayer(model ViewModel, styles renderStyles) surfaceResult {
 	connectionVisible := connectionX > rect.Min.X
 
 	// Brand.
-	brand := "telegram-tui"
+	brand := "tuilegram"
 	brandStyle := styles.Accent
 	brandRight := rect.Max.X
 	if connectionVisible {
@@ -56,7 +56,7 @@ func buildStatusLayer(model ViewModel, styles renderStyles) surfaceResult {
 		title = "Chats"
 	}
 	centeredX := rect.Min.X + centeredX(rect.Dx(), displayWidth(title))
-	left := rect.Min.X + displayWidth("telegram-tui") + 3
+	left := rect.Min.X + displayWidth("tuilegram") + 3
 	right := connectionX - 2
 	titleX := centeredX
 	if titleX < left {

@@ -8,7 +8,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/auth"
+	"github.com/zylen-det/tuilegram/internal/auth"
 )
 
 func renderAuthorizationSurface(t *testing.T, data authorizationData, injected ...string) (string, surfaceResult) {

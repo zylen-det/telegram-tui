@@ -9,8 +9,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/frontend/components"
+	"github.com/zylen-det/tuilegram/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/frontend/components"
 )
 
 // listModalCanvas composes a full-size styles.Base root with the modal layer

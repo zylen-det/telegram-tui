@@ -18,13 +18,13 @@ func TestResolvePathsUsesAbsoluteXDGOverrides(t *testing.T) {
 
 	got := ResolvePaths(getenv, "/home/alice")
 	want := Paths{
-		ConfigFile:     filepath.Join("/custom/config", "telegram-tui", "config.toml"),
-		StateDir:       filepath.Join("/custom/state", "telegram-tui"),
-		TDLibLog:       filepath.Join("/custom/state", "telegram-tui", "tdlib.log"),
-		DataDir:        filepath.Join("/custom/data", "telegram-tui"),
-		TDLibDatabase:  filepath.Join("/custom/data", "telegram-tui", "tdlib", "database"),
-		TDLibFiles:     filepath.Join("/custom/cache", "telegram-tui", "avatars", "files"),
-		AvatarCacheDir: filepath.Join("/custom/cache", "telegram-tui", "avatars", "pixels"),
+		ConfigFile:     filepath.Join("/custom/config", "tuilegram", "config.toml"),
+		StateDir:       filepath.Join("/custom/state", "tuilegram"),
+		TDLibLog:       filepath.Join("/custom/state", "tuilegram", "tdlib.log"),
+		DataDir:        filepath.Join("/custom/data", "tuilegram"),
+		TDLibDatabase:  filepath.Join("/custom/data", "tuilegram", "tdlib", "database"),
+		TDLibFiles:     filepath.Join("/custom/cache", "tuilegram", "avatars", "files"),
+		AvatarCacheDir: filepath.Join("/custom/cache", "tuilegram", "avatars", "pixels"),
 	}
 
 	if got != want {
@@ -45,13 +45,13 @@ func TestResolvePathsIgnoresUnsetAndRelativeXDGValues(t *testing.T) {
 
 	got := ResolvePaths(getenv, "/home/bob")
 	want := Paths{
-		ConfigFile:     filepath.Join("/home/bob", ".config", "telegram-tui", "config.toml"),
-		StateDir:       filepath.Join("/home/bob", ".local", "state", "telegram-tui"),
-		TDLibLog:       filepath.Join("/home/bob", ".local", "state", "telegram-tui", "tdlib.log"),
-		DataDir:        filepath.Join("/home/bob", ".local", "share", "telegram-tui"),
-		TDLibDatabase:  filepath.Join("/home/bob", ".local", "share", "telegram-tui", "tdlib", "database"),
-		TDLibFiles:     filepath.Join("/home/bob", ".cache", "telegram-tui", "avatars", "files"),
-		AvatarCacheDir: filepath.Join("/home/bob", ".cache", "telegram-tui", "avatars", "pixels"),
+		ConfigFile:     filepath.Join("/home/bob", ".config", "tuilegram", "config.toml"),
+		StateDir:       filepath.Join("/home/bob", ".local", "state", "tuilegram"),
+		TDLibLog:       filepath.Join("/home/bob", ".local", "state", "tuilegram", "tdlib.log"),
+		DataDir:        filepath.Join("/home/bob", ".local", "share", "tuilegram"),
+		TDLibDatabase:  filepath.Join("/home/bob", ".local", "share", "tuilegram", "tdlib", "database"),
+		TDLibFiles:     filepath.Join("/home/bob", ".cache", "tuilegram", "avatars", "files"),
+		AvatarCacheDir: filepath.Join("/home/bob", ".cache", "tuilegram", "avatars", "pixels"),
 	}
 
 	if got != want {

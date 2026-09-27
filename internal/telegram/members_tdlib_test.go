@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	td "github.com/zelenin/go-tdlib/client"
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 func memberUser(id int64, first, username string) *td.User {

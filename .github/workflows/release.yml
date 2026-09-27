@@ -31,11 +31,11 @@ jobs:
         run: make package VERSION="${VERSION}"
       - name: Test one-line installer
         env:
-          PREFIX: ${{ runner.temp }}/telegram-tui-install
-          TELEGRAM_TUI_RELEASE_URL: file://${{ github.workspace }}/dist
+          PREFIX: ${{ runner.temp }}/tuilegram-install
+          TUILEGRAM_RELEASE_URL: file://${{ github.workspace }}/dist
         run: |
           cat scripts/install.sh | sh
-          test "$("${PREFIX}/bin/telegram-tui" --version)" = "${VERSION}"
+          test "$("${PREFIX}/bin/tuilegram" --version)" = "${VERSION}"
       - name: Upload release assets
         env:
           GH_TOKEN: ${{ github.token }}

@@ -1,4 +1,4 @@
- telegram-tui                             Release channel                                    online
+ tuilegram                             Release channel                                    online
 ╭─Chats──────────────────────╮╭─Release channel───────────────────────────────────────────────────ⓘ╮
 │▀▀▀▀▀▀ Mina Chen            ││                                                                    │
 │▀▀▀▀▀▀ Ship it              ││                                                                    │

@@ -11,9 +11,9 @@ import (
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/auth"
-	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/media/thumbnail"
+	"github.com/zylen-det/tuilegram/internal/auth"
+	"github.com/zylen-det/tuilegram/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/media/thumbnail"
 )
 
 // modalStackOverlayCase binds one registered overlay ID to the ViewModel

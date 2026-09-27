@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 func openChatSearch(state *State) []Effect {

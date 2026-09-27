@@ -1,4 +1,4 @@
-module github.com/zylen-det/telegram-tui
+module github.com/zylen-det/tuilegram
 
 go 1.26
 

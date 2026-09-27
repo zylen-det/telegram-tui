@@ -6,8 +6,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/media/thumbnail"
+	"github.com/zylen-det/tuilegram/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/media/thumbnail"
 )
 
 func TestAttachmentMetadataAndFallbacks(t *testing.T) {

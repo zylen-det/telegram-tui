@@ -3,7 +3,7 @@ package frontend
 import (
 	"time"
 
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 // A reference jump belongs to the open message menu. Closing the menu cancels

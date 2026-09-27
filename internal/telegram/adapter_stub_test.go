@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zylen-det/telegram-tui/internal/config"
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/config"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 func TestNewWithoutTDLibReturnsSafeVersionError(t *testing.T) {

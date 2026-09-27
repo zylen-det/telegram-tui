@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	td "github.com/zelenin/go-tdlib/client"
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 func tdSticker(fileID, thumbID int32, width, height int32, emoji string) *td.Sticker {

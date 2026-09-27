@@ -3,9 +3,9 @@
 package telegram
 
 import (
-	"github.com/zylen-det/telegram-tui/internal/auth"
-	"github.com/zylen-det/telegram-tui/internal/config"
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/auth"
+	"github.com/zylen-det/tuilegram/internal/config"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 func New(runtime config.Runtime, prompts auth.Prompter) (Client, error) {

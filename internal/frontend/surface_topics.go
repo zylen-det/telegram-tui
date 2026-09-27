@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"image"
 
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 // topicsFrame is the centered modal geometry for the forum-topic list,

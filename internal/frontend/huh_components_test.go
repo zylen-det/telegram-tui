@@ -109,7 +109,7 @@ type huhStyleContract struct {
 }
 
 // huhThemeContract flattens both field states into the complete palette
-// contract derived from the telegram-tui palette in styles.go. It is the
+// contract derived from the tuilegram palette in styles.go. It is the
 // authority for the Huh half of the visual language: ordinary field surfaces
 // keep the terminal's default background, while focused buttons, blurred
 // buttons, and cards keep their intentional fills.

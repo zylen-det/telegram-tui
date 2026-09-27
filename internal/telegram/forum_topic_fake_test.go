@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 func forumFixture() FakeData {

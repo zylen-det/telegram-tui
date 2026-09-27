@@ -5,5 +5,5 @@ cd "$(dirname "$0")/.."
 bin_dir=$(mktemp -d)
 trap 'rm -rf "$bin_dir"' EXIT
 trap 'exit 1' HUP INT TERM
-go build -o "$bin_dir/telegram-tui-demo" ./cmd/demo
-"$bin_dir/telegram-tui-demo"
+go build -o "$bin_dir/tuilegram-demo" ./cmd/demo
+"$bin_dir/tuilegram-demo"

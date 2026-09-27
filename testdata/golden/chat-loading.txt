@@ -1,4 +1,4 @@
- telegram-tui                                  Chats                                         online
+ tuilegram                                  Chats                                         online
 ╭─Chats──────────────────────╮╭─Conversation───────────────────────────────────────────────────────╮
 │Loading chats...            ││                                                                    │
 │                            ││                                                                    │

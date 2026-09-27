@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/zylen-det/telegram-tui/internal/auth"
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/auth"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 func TestSemanticInputMapsNavigationAndEditors(t *testing.T) {

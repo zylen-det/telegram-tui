@@ -52,4 +52,4 @@ jobs:
       - name: Build production binary
         run: make build
       - name: Check binary
-        run: ./bin/telegram-tui --version
+        run: ./bin/tuilegram --version

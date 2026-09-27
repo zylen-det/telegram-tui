@@ -16,13 +16,13 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/blacktop/go-termimg"
-	"github.com/zylen-det/telegram-tui/internal/auth"
-	"github.com/zylen-det/telegram-tui/internal/config"
-	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/frontend"
-	"github.com/zylen-det/telegram-tui/internal/logging"
-	"github.com/zylen-det/telegram-tui/internal/platform"
-	"github.com/zylen-det/telegram-tui/internal/telegram"
+	"github.com/zylen-det/tuilegram/internal/auth"
+	"github.com/zylen-det/tuilegram/internal/config"
+	"github.com/zylen-det/tuilegram/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/frontend"
+	"github.com/zylen-det/tuilegram/internal/logging"
+	"github.com/zylen-det/tuilegram/internal/platform"
+	"github.com/zylen-det/tuilegram/internal/telegram"
 )
 
 func TestCopyProductionCompositionInjectsClipboard(t *testing.T) {
@@ -102,7 +102,7 @@ func TestRunReportsSanitizedApplicationFailure(t *testing.T) {
 	if code := run(context.Background(), nil, strings.NewReader(""), &stdout, &stderr); code != 1 {
 		t.Fatalf("run() code = %d", code)
 	}
-	if strings.Contains(stderr.String(), "raw secret") || !strings.Contains(stderr.String(), "telegram-tui could not start") {
+	if strings.Contains(stderr.String(), "raw secret") || !strings.Contains(stderr.String(), "tuilegram could not start") {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
 }
@@ -115,7 +115,7 @@ func TestRunReportsAlreadyRunningActionablyAndSafely(t *testing.T) {
 	if code := run(context.Background(), nil, strings.NewReader(""), &stdout, &stderr); code != 1 {
 		t.Fatalf("run() code = %d", code)
 	}
-	const want = "another telegram-tui instance is already running; close it normally before retrying\n"
+	const want = "another tuilegram instance is already running; close it normally before retrying\n"
 	if stdout.Len() != 0 || stderr.String() != want {
 		t.Fatalf("already-running output = stdout %q stderr %q, want stderr %q", stdout.String(), stderr.String(), want)
 	}
@@ -188,7 +188,7 @@ func TestEnsureRuntimeDirectoriesCreatesPrivatePaths(t *testing.T) {
 }
 
 func TestReportApplicationExitLogsStartupFailureWithoutSecrets(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "telegram-tui.log")
+	path := filepath.Join(t.TempDir(), "tuilegram.log")
 	logger, closer, err := logging.New(path, slog.LevelInfo)
 	if err != nil {
 		t.Fatal(err)
@@ -215,9 +215,9 @@ func TestReportApplicationExitLogsStartupFailureWithoutSecrets(t *testing.T) {
 	if bytes.Contains(contents, []byte(private)) || bytes.Contains(contents, []byte(fatal.Message)) || bytes.Contains(contents, []byte(fatal.Op)) {
 		t.Fatalf("exit log contains a raw failure: %s", contents)
 	}
-	if !bytes.Contains(contents, []byte(`"level":"ERROR","msg":"telegram-tui","operation":"exit:startup","kind":"authorization"`)) ||
-		!bytes.Contains(contents, []byte(`"level":"ERROR","msg":"telegram-tui","operation":"exit:application","kind":"internal"`)) ||
-		!bytes.Contains(contents, []byte(`"level":"INFO","msg":"telegram-tui","operation":"exit:application"`)) {
+	if !bytes.Contains(contents, []byte(`"level":"ERROR","msg":"tuilegram","operation":"exit:startup","kind":"authorization"`)) ||
+		!bytes.Contains(contents, []byte(`"level":"ERROR","msg":"tuilegram","operation":"exit:application","kind":"internal"`)) ||
+		!bytes.Contains(contents, []byte(`"level":"INFO","msg":"tuilegram","operation":"exit:application"`)) {
 		t.Fatalf("exit log lacks status metadata: %s", contents)
 	}
 }

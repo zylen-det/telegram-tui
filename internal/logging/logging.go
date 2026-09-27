@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/domain"
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 )
 
@@ -77,7 +77,7 @@ func (h *allowListHandler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (h *allowListHandler) Handle(ctx context.Context, record slog.Record) error {
-	clean := slog.NewRecord(record.Time, record.Level, "telegram-tui", record.PC)
+	clean := slog.NewRecord(record.Time, record.Level, "tuilegram", record.PC)
 	record.Attrs(func(attribute slog.Attr) bool {
 		attribute.Value = attribute.Value.Resolve()
 		if _, ok := allowedKeys[attribute.Key]; !ok {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 type ChatCursor struct{ Limit int }

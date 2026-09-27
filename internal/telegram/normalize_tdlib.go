@@ -9,7 +9,7 @@ import (
 	"time"
 
 	td "github.com/zelenin/go-tdlib/client"
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 type chatPeer struct {

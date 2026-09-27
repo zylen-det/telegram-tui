@@ -8,10 +8,10 @@ import (
 	"runtime"
 
 	td "github.com/zelenin/go-tdlib/client"
-	"github.com/zylen-det/telegram-tui/internal/auth"
-	"github.com/zylen-det/telegram-tui/internal/buildinfo"
-	"github.com/zylen-det/telegram-tui/internal/config"
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/auth"
+	"github.com/zylen-det/tuilegram/internal/buildinfo"
+	"github.com/zylen-det/tuilegram/internal/config"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 type authorizationClient interface {

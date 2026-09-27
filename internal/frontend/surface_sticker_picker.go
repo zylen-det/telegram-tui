@@ -6,7 +6,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/media/thumbnail"
+	"github.com/zylen-det/tuilegram/internal/media/thumbnail"
 )
 
 func buildStickerPickerLayer(model ViewModel, styles renderStyles) surfaceResult {

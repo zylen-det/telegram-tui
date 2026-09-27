@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 // statusCanvas composes a compositor rooted at (0,0) containing the status
@@ -62,7 +62,7 @@ func TestStatusBrandFallbackAndActiveTitle(t *testing.T) {
 	model.ActiveChat = domain.Chat{}
 	canvas := statusCanvas(model, buildStatusLayer(model, styles))
 	text := plainText(canvas.Render())
-	if !strings.Contains(text, "telegram-tui") {
+	if !strings.Contains(text, "tuilegram") {
 		t.Error("status missing brand")
 	}
 	if !strings.Contains(text, "Chats") {
@@ -118,11 +118,11 @@ func TestStatusLongTitleClippedWithinReservations(t *testing.T) {
 
 	connection := "online"
 	connectionX := model.Width - displayWidth(connection) - 1
-	left := displayWidth("telegram-tui") + 3
+	left := displayWidth("tuilegram") + 3
 	right := connectionX - 2
 
 	// The title must not overwrite the brand at x=1.
-	if cell := canvas.CellAt(1, 0); cell.Content != "telegram-tui"[0:1] {
+	if cell := canvas.CellAt(1, 0); cell.Content != "tuilegram"[0:1] {
 		t.Errorf("brand cell overwritten by long title: %q", cell.Content)
 	}
 	// The title must not overwrite the connection text.
@@ -179,8 +179,8 @@ func TestStatusNarrowBrandStaysWithinRect(t *testing.T) {
 		width int
 		want  string
 	}{
-		{width: 5, want: " tele"},
-		{width: 10, want: " teonline"},
+		{width: 5, want: " tuil"},
+		{width: 10, want: " tuonline"},
 	} {
 		model := ViewModel{
 			Width:      test.width,

@@ -10,9 +10,9 @@ import (
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/auth"
-	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/frontend/components"
+	"github.com/zylen-det/tuilegram/internal/auth"
+	"github.com/zylen-det/tuilegram/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/frontend/components"
 )
 
 func frameBaseModel(width, height int) ViewModel {
@@ -72,7 +72,7 @@ func TestApplicationFrameBaseSurfacesProduceSemanticHits(t *testing.T) {
 	frame := composeApplication(model, time.Local)
 	plain := ansi.Strip(frame.Content)
 
-	for _, want := range []string{"telegram-tui", "Chats", "Mina Chen", "Weekend dev", "[Send]"} {
+	for _, want := range []string{"tuilegram", "Chats", "Mina Chen", "Weekend dev", "[Send]"} {
 		if !strings.Contains(plain, want) {
 			t.Errorf("base frame missing %q", want)
 		}

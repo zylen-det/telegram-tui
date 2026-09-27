@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/zylen-det/telegram-tui/internal/telegram"
+	"github.com/zylen-det/tuilegram/internal/telegram"
 )
 
 func inviteLinksFrame(bounds image.Rectangle) image.Rectangle {

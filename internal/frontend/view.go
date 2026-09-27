@@ -5,7 +5,7 @@ import (
 	"image/color"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/zylen-det/telegram-tui/internal/auth"
+	"github.com/zylen-det/tuilegram/internal/auth"
 )
 
 func (m Model) View() tea.View {
@@ -13,7 +13,7 @@ func (m Model) View() tea.View {
 	view := tea.NewView(content)
 	view.AltScreen = true
 	view.MouseMode = tea.MouseModeNone
-	view.WindowTitle = "telegram-tui Authorization"
+	view.WindowTitle = "tuilegram Authorization"
 	view.ForegroundColor = color.RGBA{R: textColor.r, G: textColor.g, B: textColor.b, A: 255}
 	if cursorX >= 0 && cursorY >= 0 {
 		view.Cursor = tea.NewCursor(cursorX, cursorY)
@@ -28,7 +28,7 @@ func (m Model) render() (string, int, int) {
 
 	bounds := image.Rect(0, 0, m.width, m.height)
 	if m.width < minimumWidth || m.height < minimumHeight {
-		frame := composeTooSmall(bounds, "telegram-tui requires at least 60x18")
+		frame := composeTooSmall(bounds, "tuilegram requires at least 60x18")
 		return frame.Content, -1, -1
 	}
 

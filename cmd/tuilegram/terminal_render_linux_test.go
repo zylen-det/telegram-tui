@@ -14,10 +14,10 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/creack/pty/v2"
-	"github.com/zylen-det/telegram-tui/internal/auth"
-	"github.com/zylen-det/telegram-tui/internal/config"
-	"github.com/zylen-det/telegram-tui/internal/frontend"
-	"github.com/zylen-det/telegram-tui/internal/telegram"
+	"github.com/zylen-det/tuilegram/internal/auth"
+	"github.com/zylen-det/tuilegram/internal/config"
+	"github.com/zylen-det/tuilegram/internal/frontend"
+	"github.com/zylen-det/tuilegram/internal/telegram"
 	"golang.org/x/term"
 )
 

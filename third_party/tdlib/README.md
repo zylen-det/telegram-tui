@@ -1,6 +1,6 @@
 # TDLib build headers
 
-These files support linking telegram-tui against the pinned TDLib JSON shared
+These files support linking tuilegram against the pinned TDLib JSON shared
 library without requiring a full TDLib source build.
 
 - TDLib version: `1.8.64`

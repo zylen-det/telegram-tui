@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 func TestFakeSearchChatMessagesPaginationOrderAndContext(t *testing.T) {

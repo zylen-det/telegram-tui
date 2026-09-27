@@ -1,8 +1,8 @@
 package frontend
 
 import (
-	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/telegram"
+	"github.com/zylen-det/tuilegram/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/telegram"
 )
 
 // openTopics opens the forum-topic list for the active chat. It only runs

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/zylen-det/telegram-tui/internal/auth"
+	"github.com/zylen-det/tuilegram/internal/auth"
 )
 
 func authorizationAppState(id uint64, input string, secret bool) State {

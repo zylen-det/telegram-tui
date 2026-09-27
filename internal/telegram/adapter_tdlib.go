@@ -14,9 +14,9 @@ import (
 	"unicode/utf8"
 
 	td "github.com/zelenin/go-tdlib/client"
-	"github.com/zylen-det/telegram-tui/internal/auth"
-	"github.com/zylen-det/telegram-tui/internal/config"
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/auth"
+	"github.com/zylen-det/tuilegram/internal/config"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 type getOptionFunc func(*td.GetOptionRequest) (td.OptionValue, error)

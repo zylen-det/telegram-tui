@@ -4,7 +4,7 @@ import (
 	"image"
 	"strconv"
 
-	"github.com/zylen-det/telegram-tui/internal/telegram"
+	"github.com/zylen-det/tuilegram/internal/telegram"
 )
 
 func administrationFrame(bounds image.Rectangle) image.Rectangle {

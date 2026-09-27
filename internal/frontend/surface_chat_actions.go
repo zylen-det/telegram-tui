@@ -3,7 +3,7 @@ package frontend
 import (
 	"image"
 
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 func chatActionFrame(bounds image.Rectangle) image.Rectangle {

@@ -8,5 +8,5 @@ type Info struct {
 }
 
 func Current() Info {
-	return Info{Name: "telegram-tui", Version: version}
+	return Info{Name: "tuilegram", Version: version}
 }

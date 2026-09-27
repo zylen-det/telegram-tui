@@ -27,7 +27,7 @@ var (
 )
 
 const (
-	notificationAppName       = "telegram-tui"
+	notificationAppName       = "tuilegram"
 	notificationDisplayMillis = int32(5000)
 	notificationCallTimeout   = 2 * time.Second
 )

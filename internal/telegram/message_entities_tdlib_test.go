@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	td "github.com/zelenin/go-tdlib/client"
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 func TestMessageEntitiesFormattingTypes(t *testing.T) {

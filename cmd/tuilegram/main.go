@@ -15,18 +15,18 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/blacktop/go-termimg"
-	"github.com/zylen-det/telegram-tui/internal/auth"
-	"github.com/zylen-det/telegram-tui/internal/buildinfo"
-	"github.com/zylen-det/telegram-tui/internal/config"
-	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/frontend"
-	"github.com/zylen-det/telegram-tui/internal/logging"
-	"github.com/zylen-det/telegram-tui/internal/media/avatar"
-	"github.com/zylen-det/telegram-tui/internal/media/kitty"
-	"github.com/zylen-det/telegram-tui/internal/media/pixel"
-	"github.com/zylen-det/telegram-tui/internal/media/thumbnail"
-	"github.com/zylen-det/telegram-tui/internal/platform"
-	"github.com/zylen-det/telegram-tui/internal/telegram"
+	"github.com/zylen-det/tuilegram/internal/auth"
+	"github.com/zylen-det/tuilegram/internal/buildinfo"
+	"github.com/zylen-det/tuilegram/internal/config"
+	"github.com/zylen-det/tuilegram/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/frontend"
+	"github.com/zylen-det/tuilegram/internal/logging"
+	"github.com/zylen-det/tuilegram/internal/media/avatar"
+	"github.com/zylen-det/tuilegram/internal/media/kitty"
+	"github.com/zylen-det/tuilegram/internal/media/pixel"
+	"github.com/zylen-det/tuilegram/internal/media/thumbnail"
+	"github.com/zylen-det/tuilegram/internal/platform"
+	"github.com/zylen-det/tuilegram/internal/telegram"
 )
 
 func main() {
@@ -42,7 +42,7 @@ type appOptions struct {
 
 var startApplication = productionApplication
 
-const helpText = `Usage: telegram-tui [options]
+const helpText = `Usage: tuilegram [options]
 
 Options:
   -h, --help       Show help
@@ -60,16 +60,16 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		}
 	}
 	if len(args) != 0 {
-		_, _ = fmt.Fprintln(stderr, "telegram-tui supports only -h, --help, -v, and --version; credentials belong in the TUI, environment, or local config")
+		_, _ = fmt.Fprintln(stderr, "tuilegram supports only -h, --help, -v, and --version; credentials belong in the TUI, environment, or local config")
 		return 1
 	}
 	if err := startApplication(ctx, appOptions{stdin: stdin, stdout: stdout, stderr: stderr}); err != nil {
 		var alreadyRunning *platform.AlreadyRunningError
 		if errors.As(err, &alreadyRunning) {
-			_, _ = fmt.Fprintln(stderr, "another telegram-tui instance is already running; close it normally before retrying")
+			_, _ = fmt.Fprintln(stderr, "another tuilegram instance is already running; close it normally before retrying")
 			return 1
 		}
-		_, _ = fmt.Fprintln(stderr, "telegram-tui could not start or close safely; verify the local config, Kitty, and TDLib setup")
+		_, _ = fmt.Fprintln(stderr, "tuilegram could not start or close safely; verify the local config, Kitty, and TDLib setup")
 		return 1
 	}
 	return 0
@@ -99,7 +99,7 @@ func withInstanceOwnership(stateDir string, start func() error) (resultErr error
 }
 
 func runOwnedProductionApplication(parent context.Context, options appOptions, paths config.Paths) (resultErr error) {
-	logger, logCloser, err := logging.New(filepath.Join(paths.StateDir, "telegram-tui.log"), slog.LevelInfo)
+	logger, logCloser, err := logging.New(filepath.Join(paths.StateDir, "tuilegram.log"), slog.LevelInfo)
 	if err != nil {
 		return err
 	}

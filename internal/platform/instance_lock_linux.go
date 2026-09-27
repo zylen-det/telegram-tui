@@ -15,7 +15,7 @@ const instanceLockName = "instance.lock"
 type AlreadyRunningError struct{}
 
 func (*AlreadyRunningError) Error() string {
-	return "another telegram-tui instance is already running"
+	return "another tuilegram instance is already running"
 }
 
 // InstanceLock holds exclusive process ownership until Close is called.

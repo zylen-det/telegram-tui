@@ -17,16 +17,16 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/blacktop/go-termimg"
-	"github.com/zylen-det/telegram-tui/internal/auth"
-	"github.com/zylen-det/telegram-tui/internal/config"
-	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/frontend"
-	"github.com/zylen-det/telegram-tui/internal/media/avatar"
-	"github.com/zylen-det/telegram-tui/internal/media/kitty"
-	"github.com/zylen-det/telegram-tui/internal/media/pixel"
-	"github.com/zylen-det/telegram-tui/internal/media/thumbnail"
-	"github.com/zylen-det/telegram-tui/internal/platform"
-	"github.com/zylen-det/telegram-tui/internal/telegram"
+	"github.com/zylen-det/tuilegram/internal/auth"
+	"github.com/zylen-det/tuilegram/internal/config"
+	"github.com/zylen-det/tuilegram/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/frontend"
+	"github.com/zylen-det/tuilegram/internal/media/avatar"
+	"github.com/zylen-det/tuilegram/internal/media/kitty"
+	"github.com/zylen-det/tuilegram/internal/media/pixel"
+	"github.com/zylen-det/tuilegram/internal/media/thumbnail"
+	"github.com/zylen-det/tuilegram/internal/platform"
+	"github.com/zylen-det/tuilegram/internal/telegram"
 )
 
 // A separate command keeps the installed client and its CLI unchanged.
@@ -44,7 +44,7 @@ func (noAccountResolver) Resolve(ctx context.Context) (config.Runtime, error) {
 }
 
 func run() (resultErr error) {
-	root, err := os.MkdirTemp("", "telegram-tui-demo-*")
+	root, err := os.MkdirTemp("", "tuilegram-demo-*")
 	if err != nil {
 		return err
 	}
@@ -137,7 +137,7 @@ func copyDemoAsset(root, name string) (string, error) {
 func demoData(photo, avatarPath string) telegram.FakeData {
 	at := time.Date(2026, time.July, 20, 14, 35, 0, 0, time.Local)
 	chats := []domain.Chat{
-		{ID: 1, Kind: domain.ChatSupergroup, Title: "Terminal Makers", LastMessage: "The colors look great! See telegram-tui on GitHub.", LastMessageAt: at.Unix(), UnreadCount: 3, UnreadMentionCount: 1, CanSend: true, CanReact: true, IsMember: true, IsPinned: true, Order: 5},
+		{ID: 1, Kind: domain.ChatSupergroup, Title: "Terminal Makers", LastMessage: "The colors look great! See tuilegram on GitHub.", LastMessageAt: at.Unix(), UnreadCount: 3, UnreadMentionCount: 1, CanSend: true, CanReact: true, IsMember: true, IsPinned: true, Order: 5},
 		{ID: 2, Kind: domain.ChatPrivate, Title: "Mina Chen", Avatar: domain.AvatarRef{FileID: 102, UniqueID: "demo-user-avatar"}, LastMessage: "See you tomorrow", LastMessageAt: at.Add(-time.Hour).Unix(), CanSend: true, CanReact: true, IsMember: true, Order: 4, Draft: domain.Draft{Text: "Sounds good!", Date: at.Unix()}},
 		{ID: 3, Kind: domain.ChatChannel, Title: "Release Notes", LastMessage: "This channel is read-only", LastMessageAt: at.Add(-100 * time.Minute).Unix(), UnreadCount: 1, IsMember: true, Order: 3},
 		{ID: 4, Kind: domain.ChatSupergroup, IsForum: true, Title: "Project Forum", LastMessage: "Let's polish the colors", LastMessageAt: at.Add(-150 * time.Minute).Unix(), CanSend: true, CanReact: true, IsMember: true, Order: 2},
@@ -154,8 +154,8 @@ func demoData(photo, avatarPath string) telegram.FakeData {
 			{ID: 16, ChatID: 1, Sender: domain.SenderRef{Kind: domain.SenderUser, ID: 13}, SenderName: "Kai", SenderAccentKnown: true, SenderAccentID: 1, SentAt: at.Add(-13 * time.Minute), Kind: domain.MessageText, Text: "Here's a sample image:", Pinned: true},
 			{ID: 17, ChatID: 1, Sender: domain.SenderRef{Kind: domain.SenderUser, ID: 10}, SenderName: "Iris", SenderAccentKnown: true, SenderAccentID: 3, SentAt: at.Add(-6 * time.Minute), Kind: domain.MessagePhoto, Text: "A sample image", Media: domain.MessageMedia{File: photoRef, Thumbnail: photoRef, Width: 674, Height: 414, MIMEType: "image/png"}, Reactions: []domain.MessageReaction{{Emoji: "❤️", Count: 2}}},
 			{ID: 18, ChatID: 1, Sender: domain.SenderRef{Kind: domain.SenderUser, ID: 11}, SenderName: "Noah", SenderAccentKnown: true, SenderAccentID: 5, SentAt: at, Kind: domain.MessageText,
-				Text:     "The colors look great! See telegram-tui on GitHub.",
-				Entities: []domain.TextEntity{{Offset: 27, Length: 12, Kind: domain.EntityLink, Link: domain.LinkTextURL, URL: "https://github.com/zylen-det/telegram-tui"}}},
+				Text:     "The colors look great! See tuilegram on GitHub.",
+				Entities: []domain.TextEntity{{Offset: 27, Length: 9, Kind: domain.EntityLink, Link: domain.LinkTextURL, URL: "https://github.com/zylen-det/tuilegram"}}},
 		},
 		2: {
 			{ID: 21, ChatID: 2, Sender: domain.SenderRef{Kind: domain.SenderUser, ID: 12}, SenderName: "Mina", SenderAccentKnown: true, SenderAccentID: 2, SentAt: at.Add(-3 * time.Hour), Kind: domain.MessageText, Text: "Are we still on for tomorrow?"},

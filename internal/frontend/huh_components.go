@@ -6,7 +6,7 @@ import (
 )
 
 // huhTheme returns a Huh Theme whose focused/blurred field styles use the
-// existing telegram-tui palette from this package, not Huh's default visual
+// existing tuilegram palette from this package, not Huh's default visual
 // identity.
 func huhTheme() huh.Theme {
 	return telegramHuhTheme{}

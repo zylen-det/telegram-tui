@@ -7,9 +7,9 @@ import (
 	"time"
 	"unicode/utf16"
 
-	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/frontend"
-	"github.com/zylen-det/telegram-tui/internal/telegram"
+	"github.com/zylen-det/tuilegram/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/frontend"
+	"github.com/zylen-det/tuilegram/internal/telegram"
 )
 
 func TestDemoDataRunsWithoutAccountAndLoadsMedia(t *testing.T) {
@@ -41,9 +41,9 @@ func TestDemoDataRunsWithoutAccountAndLoadsMedia(t *testing.T) {
 	link := last.Entities[0]
 	units := utf16.Encode([]rune(last.Text))
 	if link.Offset < 0 || link.Length <= 0 || link.Offset+link.Length > len(units) ||
-		string(utf16.Decode(units[link.Offset:link.Offset+link.Length])) != "telegram-tui" ||
+		string(utf16.Decode(units[link.Offset:link.Offset+link.Length])) != "tuilegram" ||
 		link.Kind != domain.EntityLink || link.Link != domain.LinkTextURL ||
-		link.URL != "https://github.com/zylen-det/telegram-tui" {
+		link.URL != "https://github.com/zylen-det/tuilegram" {
 		t.Fatalf("demo text URL = %+v in %q", link, last.Text)
 	}
 	var photoRef domain.MediaFileRef

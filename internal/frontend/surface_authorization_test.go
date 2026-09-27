@@ -279,7 +279,7 @@ func TestTooSmallExactDimensionsAndWarning(t *testing.T) {
 		{59, 17},
 		{30, 10},
 	} {
-		frame := composeTooSmall(image.Rect(0, 0, tc.width, tc.height), "telegram-tui requires at least 60x18")
+		frame := composeTooSmall(image.Rect(0, 0, tc.width, tc.height), "tuilegram requires at least 60x18")
 		if frame.Compositor == nil {
 			t.Fatalf("%dx%d: compositor is nil", tc.width, tc.height)
 		}
@@ -308,8 +308,8 @@ func TestTooSmallExactDimensionsAndWarning(t *testing.T) {
 
 		// Compare against the grapheme-safe visible text: composeTooSmall
 		// truncates the warning to the viewport width on narrow viewports.
-		lineWidth := min(tc.width, displayWidth("telegram-tui requires at least 60x18"))
-		wantVisible := ansi.Strip(renderLine(newRenderStyles(false).Warning, "telegram-tui requires at least 60x18", lineWidth))
+		lineWidth := min(tc.width, displayWidth("tuilegram requires at least 60x18"))
+		wantVisible := ansi.Strip(renderLine(newRenderStyles(false).Warning, "tuilegram requires at least 60x18", lineWidth))
 		if !strings.Contains(plainText(frame.Content), wantVisible) {
 			t.Errorf("%dx%d: missing warning visible text %q", tc.width, tc.height, wantVisible)
 		}
@@ -317,7 +317,7 @@ func TestTooSmallExactDimensionsAndWarning(t *testing.T) {
 }
 
 func TestTooSmallZeroBoundsSafe(t *testing.T) {
-	frame := composeTooSmall(image.Rect(0, 0, 0, 0), "telegram-tui requires at least 60x18")
+	frame := composeTooSmall(image.Rect(0, 0, 0, 0), "tuilegram requires at least 60x18")
 	if frame.Content != "" {
 		t.Errorf("zero-bounds frame content = %q, want empty", frame.Content)
 	}
@@ -328,7 +328,7 @@ func TestTooSmallZeroBoundsSafe(t *testing.T) {
 
 func TestTooSmallWarningCentered(t *testing.T) {
 	bounds := image.Rect(0, 0, 59, 17)
-	frame := composeTooSmall(bounds, "telegram-tui requires at least 60x18")
+	frame := composeTooSmall(bounds, "tuilegram requires at least 60x18")
 	lines := strings.Split(frame.Content, "\n")
 	// The warning is centered at absolute Y = bounds.Min.Y + bounds.Dy()/2.
 	wantY := bounds.Dy() / 2

@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zylen-det/telegram-tui/internal/auth"
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/auth"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 type promptResult struct {

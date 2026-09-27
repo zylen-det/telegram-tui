@@ -3,7 +3,7 @@ package frontend
 import (
 	"testing"
 
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 func TestAppModelHuhComposerSynchronizesSharedTextGeometry(t *testing.T) {

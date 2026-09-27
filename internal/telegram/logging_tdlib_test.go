@@ -7,13 +7,13 @@ import (
 	"testing"
 
 	td "github.com/zelenin/go-tdlib/client"
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 func TestConfigureTDLibLoggingUsesPrivateStateFileWithoutCapturingApplicationStderr(t *testing.T) {
 	var stream *td.SetLogStreamRequest
 	var verbosity *td.SetLogVerbosityLevelRequest
-	err := configureTDLibLoggingWith("/private/state/telegram-tui/tdlib.log",
+	err := configureTDLibLoggingWith("/private/state/tuilegram/tdlib.log",
 		func(request *td.SetLogStreamRequest) (*td.Ok, error) { stream = request; return &td.Ok{}, nil },
 		func(request *td.SetLogVerbosityLevelRequest) (*td.Ok, error) {
 			verbosity = request
@@ -24,7 +24,7 @@ func TestConfigureTDLibLoggingUsesPrivateStateFileWithoutCapturingApplicationStd
 		t.Fatal("configureTDLibLoggingWith returned an unexpected error")
 	}
 	file, ok := stream.LogStream.(*td.LogStreamFile)
-	if !ok || file.Path != "/private/state/telegram-tui/tdlib.log" || file.MaxFileSize != tdlibLogMaxFileSize || file.RedirectStderr {
+	if !ok || file.Path != "/private/state/tuilegram/tdlib.log" || file.MaxFileSize != tdlibLogMaxFileSize || file.RedirectStderr {
 		t.Fatalf("TDLib log stream = %#v", stream.LogStream)
 	}
 	if verbosity == nil || verbosity.NewVerbosityLevel != 2 {

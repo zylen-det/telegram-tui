@@ -18,11 +18,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/zylen-det/telegram-tui/internal/media/kitty"
+	"github.com/zylen-det/tuilegram/internal/media/kitty"
 )
 
 const (
-	overlayWindowTitle = "telegram-tui"
+	overlayWindowTitle = "tuilegram"
 	overlayFrameMarker = ";overlay-frame="
 	overlayFrameDigits = 16
 	overlayNonceBytes  = 16

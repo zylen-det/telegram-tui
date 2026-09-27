@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 // actionableRow is the test-side summary of one displayed list row: exactly

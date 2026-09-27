@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/zylen-det/telegram-tui/internal/auth"
+	"github.com/zylen-det/tuilegram/internal/auth"
 )
 
 func promptValueState() State {

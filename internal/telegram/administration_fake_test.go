@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 func TestFakeAdministrationMutationsAndChannelGuard(t *testing.T) {

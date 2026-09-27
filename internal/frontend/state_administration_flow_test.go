@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/telegram"
+	"github.com/zylen-det/tuilegram/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/telegram"
 )
 
 func TestAdministrationRightsAndRestrictionsRespectLiveLimits(t *testing.T) {

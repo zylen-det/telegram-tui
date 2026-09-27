@@ -2,7 +2,7 @@ package config
 
 import "path/filepath"
 
-const appDirectory = "telegram-tui"
+const appDirectory = "tuilegram"
 
 type Paths struct {
 	ConfigFile     string

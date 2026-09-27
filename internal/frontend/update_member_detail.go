@@ -4,8 +4,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zylen-det/telegram-tui/internal/domain"
-	"github.com/zylen-det/telegram-tui/internal/media/avatar"
+	"github.com/zylen-det/tuilegram/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/media/avatar"
 )
 
 type DetailsActionItem struct {

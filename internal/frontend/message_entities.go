@@ -5,7 +5,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/charmbracelet/x/ansi"
-	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/tuilegram/internal/domain"
 )
 
 type messageTextSpan struct {

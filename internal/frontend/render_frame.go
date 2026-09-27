@@ -148,7 +148,7 @@ func composeApplication(model ViewModel, location *time.Location, views ...edito
 
 	bounds := image.Rect(0, 0, model.Width, model.Height)
 	if model.Layout.Mode == LayoutTooSmall {
-		return composeTooSmall(bounds, fmt.Sprintf("telegram-tui requires at least 60x18; current %dx%d", model.Width, model.Height))
+		return composeTooSmall(bounds, fmt.Sprintf("tuilegram requires at least 60x18; current %dx%d", model.Width, model.Height))
 	}
 
 	// The overlay registry owns every concrete modal branch: which overlays are

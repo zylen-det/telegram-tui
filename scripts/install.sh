@@ -1,12 +1,12 @@
 #!/bin/sh
 set -eu
 
-repository="${TELEGRAM_TUI_REPOSITORY:-zylen-det/telegram-tui}"
+repository="${TUILEGRAM_REPOSITORY:-zylen-det/tuilegram}"
 prefix="${PREFIX:-${HOME:-}/.local}"
 version="${VERSION:-}"
 
 fail() {
-	printf 'telegram-tui installer: %s\n' "$*" >&2
+	printf 'tuilegram installer: %s\n' "$*" >&2
 	exit 1
 }
 
@@ -35,11 +35,11 @@ fi
 printf '%s\n' "${version}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$' || fail "invalid release version: ${version}"
 
 release_version="${version#v}"
-release_name="telegram-tui_${release_version}_linux_x86_64"
+release_name="tuilegram_${release_version}_linux_x86_64"
 archive_name="${release_name}.tar.gz"
-release_url="${TELEGRAM_TUI_RELEASE_URL:-https://github.com/${repository}/releases/download/${version}}"
+release_url="${TUILEGRAM_RELEASE_URL:-https://github.com/${repository}/releases/download/${version}}"
 
-temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/telegram-tui-install.XXXXXX")"
+temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/tuilegram-install.XXXXXX")"
 cleanup() {
 	rm -rf "${temporary_dir}"
 }
@@ -62,12 +62,12 @@ printf '%s  %s\n' "${checksum}" "${archive}" | sha256sum --check --status || fai
 
 tar -xzf "${archive}" -C "${temporary_dir}"
 source_dir="${temporary_dir}/${release_name}"
-[ -x "${source_dir}/telegram-tui" ] || fail 'release archive does not contain the executable'
+[ -x "${source_dir}/tuilegram" ] || fail 'release archive does not contain the executable'
 [ -f "${source_dir}/lib/libtdjson.so.1.8.64" ] || fail 'release archive does not contain the pinned TDLib library'
-installed_version="$("${source_dir}/telegram-tui" --version)" || fail 'downloaded executable could not start'
+installed_version="$("${source_dir}/tuilegram" --version)" || fail 'downloaded executable could not start'
 [ "${installed_version}" = "${version}" ] || fail "downloaded version is ${installed_version}, expected ${version}"
 
-install_root="${prefix}/opt/telegram-tui"
+install_root="${prefix}/opt/tuilegram"
 version_dir="${install_root}/${version}"
 candidate_dir="${install_root}/.${version}.new.$$"
 mkdir -p "${install_root}" "${prefix}/bin"
@@ -76,11 +76,11 @@ mkdir -p "${candidate_dir}"
 cp -a "${source_dir}/." "${candidate_dir}/"
 rm -rf "${version_dir}"
 mv "${candidate_dir}" "${version_dir}"
-ln -sfn "../opt/telegram-tui/${version}/telegram-tui" "${prefix}/bin/telegram-tui"
+ln -sfn "../opt/tuilegram/${version}/tuilegram" "${prefix}/bin/tuilegram"
 
-printf 'telegram-tui %s installed at %s\n' "${version}" "${version_dir}"
-printf 'command: %s/bin/telegram-tui\n' "${prefix}"
+printf 'tuilegram %s installed at %s\n' "${version}" "${version_dir}"
+printf 'command: %s/bin/tuilegram\n' "${prefix}"
 case ":${PATH:-}:" in
 	*":${prefix}/bin:"*) ;;
-	*) printf 'add %s/bin to PATH to run telegram-tui directly\n' "${prefix}" >&2 ;;
+	*) printf 'add %s/bin to PATH to run tuilegram directly\n' "${prefix}" >&2 ;;
 esac

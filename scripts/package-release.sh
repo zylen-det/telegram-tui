@@ -32,7 +32,7 @@ if [[ ! -f "${library}" ]]; then
 fi
 
 release_version="${version#v}"
-release_name="telegram-tui_${release_version}_linux_x86_64"
+release_name="tuilegram_${release_version}_linux_x86_64"
 dist_dir="${project_root}/dist"
 stage_dir="${dist_dir}/${release_name}"
 rm -rf "${dist_dir}"
@@ -42,8 +42,8 @@ CGO_ENABLED=1 \
 CGO_CFLAGS="-I${tdlib_prefix}/include" \
 CGO_LDFLAGS="-Wl,-rpath,\$ORIGIN/lib -L${tdlib_prefix}/lib -ltdjson" \
 go build -trimpath -tags 'tdlib libtdjson' \
-	-ldflags "-s -w -X github.com/zylen-det/telegram-tui/internal/buildinfo.version=${version}" \
-	-o "${stage_dir}/telegram-tui" "${project_root}/cmd/telegram-tui"
+	-ldflags "-s -w -X github.com/zylen-det/tuilegram/internal/buildinfo.version=${version}" \
+	-o "${stage_dir}/tuilegram" "${project_root}/cmd/tuilegram"
 
 install -m 0755 "${library}" "${stage_dir}/lib/libtdjson.so.${tdlib_version}"
 ln -s "libtdjson.so.${tdlib_version}" "${stage_dir}/lib/libtdjson.so"
@@ -57,11 +57,11 @@ GOFLAGS='-tags=tdlib,libtdjson' \
 CGO_ENABLED=1 \
 CGO_CFLAGS="-I${tdlib_prefix}/include" \
 CGO_LDFLAGS="-L${tdlib_prefix}/lib -ltdjson" \
-go run github.com/google/go-licenses/v2@v2.0.1 save "${project_root}/cmd/telegram-tui" \
+go run github.com/google/go-licenses/v2@v2.0.1 save "${project_root}/cmd/tuilegram" \
 	--save_path="${stage_dir}/share/licenses/go"
 
-"${stage_dir}/telegram-tui" --version | grep -Fx "${version}" >/dev/null
-LD_LIBRARY_PATH= ldd "${stage_dir}/telegram-tui" | grep -F "${stage_dir}/lib/libtdjson.so.${tdlib_version}" >/dev/null
+"${stage_dir}/tuilegram" --version | grep -Fx "${version}" >/dev/null
+LD_LIBRARY_PATH= ldd "${stage_dir}/tuilegram" | grep -F "${stage_dir}/lib/libtdjson.so.${tdlib_version}" >/dev/null
 
 archive="${dist_dir}/${release_name}.tar.gz"
 tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
