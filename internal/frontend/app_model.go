@@ -26,6 +26,7 @@ type AppModel struct {
 	chatSearchInput      *chatSearchInputHost
 	chatTitleInput       *chatSettingsInputHost
 	chatDescriptionInput *chatSettingsInputHost
+	pendingListClick     *pendingListClick
 }
 
 type appModelMetadata struct {
@@ -104,6 +105,11 @@ func (m AppModel) Init() tea.Cmd {
 }
 
 func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg.(type) {
+	case tea.MouseClickMsg, tea.MouseReleaseMsg, tea.MouseMotionMsg:
+	default:
+		m.pendingListClick = nil
+	}
 	switch msg := msg.(type) {
 	case ProcessQuitMsg:
 		return m, m.deliver(m.applyMessage(ActionReceived{Action: Quit}))
@@ -434,12 +440,34 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case tea.MouseClickMsg:
-		if received, ok := mapMouseClick(msg, m.hitRegions()); ok {
-			commands := m.applyMessage(received)
-			return m, tea.Batch(m.deliver(commands), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost(), m.syncChatSettingsInputHosts())
+		if msg.Button != tea.MouseLeft {
+			m.pendingListClick = nil
+			return m, nil
 		}
-		return m, nil
+		hit, ok := m.hitRegions().ClickAt(msg.X, msg.Y)
+		if !ok {
+			m.pendingListClick = nil
+			return m, nil
+		}
+		if hit.ListRow {
+			context := mouseListContext(m.state)
+			previous := m.pendingListClick
+			m.pendingListClick = nil
+			if context == nil || !focusMouseListRow(m.state, hit) {
+				return m, nil
+			}
+			if previous == nil || previous.context != context || previous.action != hit.Click || previous.id != hit.ID || time.Since(previous.at) > doubleClickInterval {
+				m.pendingListClick = &pendingListClick{context: context, action: hit.Click, id: hit.ID, at: time.Now()}
+				return m, tea.Batch(m.deliver(paginateMouseListFocus(m.state)), m.syncComposerTextHost(), m.syncChatSearchInputHost())
+			}
+			hit.Click = activateMouseListRow(hit.Click)
+		} else {
+			m.pendingListClick = nil
+		}
+		commands := m.applyMessage(hit.Click)
+		return m, tea.Batch(m.deliver(commands), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost(), m.syncChatSettingsInputHosts())
 	case tea.MouseWheelMsg:
+		m.pendingListClick = nil
 		if received, ok := mapMouseWheel(msg, m.hitRegions()); ok {
 			commands := m.applyMessage(received)
 			return m, tea.Batch(m.deliver(commands), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost(), m.syncChatSettingsInputHosts())

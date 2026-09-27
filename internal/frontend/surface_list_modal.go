@@ -123,10 +123,10 @@ func buildListModalWidth(bounds image.Rectangle, title string, rows []modalRowSp
 
 		if rowSelectable(spec) {
 			rowContent := renderEmptyBox(rowStyle, rowLocal.Dx(), rowLocal.Dy())
-			interactions = append(interactions, addInteractive(
-				root, frame.Min, rowLocal, spec.ID, zModalRow, rowContent,
-				spec.Action, ActionReceived{}, ActionReceived{},
-			))
+			interaction := addInteractive(root, frame.Min, rowLocal, spec.ID, zModalRow, rowContent,
+				spec.Action, ActionReceived{}, ActionReceived{})
+			interaction.ListRow = true
+			interactions = append(interactions, interaction)
 			rowLayer := root.GetLayer(spec.ID)
 			addModalRowLabel(rowLayer, row, spec, rowStyle)
 		} else {

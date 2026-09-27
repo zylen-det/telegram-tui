@@ -71,7 +71,7 @@ func TestMembersKeyboardNavigationAcrossWindowAndPage(t *testing.T) {
 			t.Fatalf("up %d: selected member %d not visible in frame", i, i+1)
 		}
 	}
-	// A mouse click after scrolling must still target the displayed row.
+	// After scrolling, a first click focuses the displayed row; the second opens it.
 	var clicked Hit
 	for _, hit := range model.hitRegions() {
 		if hit.Click.Action == OpenMemberDetail && hit.Click.UserID != 11 {
@@ -82,15 +82,19 @@ func TestMembersKeyboardNavigationAcrossWindowAndPage(t *testing.T) {
 	if clicked.Rect.Empty() {
 		t.Fatal("no clickable member row after scrolling")
 	}
-	model, _ = updateAppModel(t, model, tea.MouseClickMsg{X: clicked.Rect.Min.X, Y: clicked.Rect.Min.Y, Button: tea.MouseLeft})
-	if detail := model.Snapshot().Members.Detail; detail == nil || detail.UserID != clicked.Click.UserID {
-		t.Fatalf("click opened %#v, want user %d", detail, clicked.Click.UserID)
+	click := tea.MouseClickMsg{X: clicked.Rect.Min.X, Y: clicked.Rect.Min.Y, Button: tea.MouseLeft}
+	model, _ = updateAppModel(t, model, click)
+	if snap := model.Snapshot(); snap.Members.Detail != nil || snap.Members.Results[snap.Members.Selected].User.ID != clicked.Click.UserID {
+		t.Fatalf("first click did not focus user %d", clicked.Click.UserID)
 	}
-	// Back out to the list; the authoritative Selected index is unchanged,
-	// so Enter activates member 11 (index 10).
+	model, _ = updateAppModel(t, model, click)
+	if detail := model.Snapshot().Members.Detail; detail == nil || detail.UserID != clicked.Click.UserID {
+		t.Fatalf("double click opened %#v, want user %d", detail, clicked.Click.UserID)
+	}
+	// Back out to the list; Enter activates the newly focused member.
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
 	model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
-	if detail := model.Snapshot().Members.Detail; detail == nil || detail.UserID != 11 {
+	if detail := model.Snapshot().Members.Detail; detail == nil || detail.UserID != clicked.Click.UserID {
 		t.Fatalf("Enter must activate the selected member 11, detail=%#v", detail)
 	}
 }

@@ -73,7 +73,9 @@ func buildChatSettingsLayer(model ViewModel, styles renderStyles, inputView stri
 		if selected {
 			style = styles.Selected
 		}
-		interactions = append(interactions, addInteractive(root, frame.Min, row.Sub(frame.Min), "chat-settings:row:"+itoa(index), zModalRow, renderEmptyBox(style, row.Dx(), 1), item.Action, ActionReceived{}, ActionReceived{}))
+		interaction := addInteractive(root, frame.Min, row.Sub(frame.Min), "chat-settings:row:"+itoa(index), zModalRow, renderEmptyBox(style, row.Dx(), 1), item.Action, ActionReceived{}, ActionReceived{})
+		interaction.ListRow = true
+		interactions = append(interactions, interaction)
 		root.AddLayers(lipgloss.NewLayer(style.Render(ansi.Truncate(item.Label, max(1, row.Dx()-2), ""))).X(row.Min.X - frame.Min.X + 1).Y(row.Min.Y - frame.Min.Y).Z(zModalContent))
 	}
 	if settings.Loading {

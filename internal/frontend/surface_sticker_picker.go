@@ -80,8 +80,10 @@ func buildStickerPickerLayer(model ViewModel, styles renderStyles) surfaceResult
 		tileText := style.Width(local.Dx()).Height(local.Dy()).Render("")
 		id := fmt.Sprintf("sticker:%d", sticker.File.ID)
 		click := ActionReceived{Action: StickerActivate, RequestID: picker.RequestID, StickerFileID: sticker.File.ID}
-		interactions = append(interactions, addInteractive(root, frame.Min, local, id, zModalRow, tileText,
-			click, request(StickerMoveUp), request(StickerMoveDown)))
+		interaction := addInteractive(root, frame.Min, local, id, zModalRow, tileText,
+			click, request(StickerMoveUp), request(StickerMoveDown))
+		interaction.ListRow = true
+		interactions = append(interactions, interaction)
 
 		block := blocks[sticker.File.ID]
 		if block.Width > 0 && block.Height > 0 {

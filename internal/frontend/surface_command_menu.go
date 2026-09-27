@@ -90,9 +90,11 @@ func buildCommandMenuLayer(model ViewModel, historyRect, composerRect image.Rect
 		text := renderLine(style, prefix+label, innerWidth)
 		local := image.Rect(1, row, frame.Dx()-1, row+1)
 		action := ActionReceived{Action: CommandMenuActivate, ChatID: menu.ChatID, CommandIndex: index}
-		interactions = append(interactions, addInteractive(root, frame.Min, local,
+		interaction := addInteractive(root, frame.Min, local,
 			fmt.Sprintf("command-menu:%d", index), zCommandMenuRow, text, action,
-			request(CommandMenuPrevious), request(CommandMenuNext)))
+			request(CommandMenuPrevious), request(CommandMenuNext))
+		interaction.ListRow = true
+		interactions = append(interactions, interaction)
 	}
 
 	return surfaceResult{Layer: root, Rect: frame, Interactions: interactions, Cursor: renderCursor{X: -1, Y: -1}}

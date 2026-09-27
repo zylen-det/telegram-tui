@@ -23,6 +23,7 @@ type layerInteraction struct {
 	Rect      image.Rectangle
 	Z         int
 	Click     ActionReceived
+	ListRow   bool
 	WheelUp   ActionReceived
 	WheelDown ActionReceived
 	Virtual   bool
@@ -247,8 +248,10 @@ func compileHits(interactions []layerInteraction) HitMap {
 			continue
 		}
 		hits = append(hits, Hit{
+			ID:        interaction.ID,
 			Rect:      interaction.Rect,
 			Click:     interaction.Click,
+			ListRow:   interaction.ListRow,
 			WheelUp:   interaction.WheelUp,
 			WheelDown: interaction.WheelDown,
 		})

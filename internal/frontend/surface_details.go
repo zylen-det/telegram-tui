@@ -130,10 +130,10 @@ func buildDetailsLayer(model ViewModel, styles renderStyles) surfaceResult {
 		x := inner.Min.X + (inner.Dx()-width)/2
 		actionLocal := image.Rect(x-rect.Min.X, y-rect.Min.Y, x-rect.Min.X+width, y-rect.Min.Y+1)
 		actionContent := renderLine(styles.Accent, text, width)
-		interactions = append(interactions, addInteractive(
-			pane.Layer, rect.Min, actionLocal, detailsActionID(item.Action), zControl, actionContent,
-			ActionReceived{Action: item.Action}, ActionReceived{}, ActionReceived{},
-		))
+		interaction := addInteractive(pane.Layer, rect.Min, actionLocal, detailsActionID(item.Action), zControl, actionContent,
+			ActionReceived{Action: item.Action}, ActionReceived{}, ActionReceived{})
+		interaction.ListRow = true
+		interactions = append(interactions, interaction)
 		y++
 	}
 

@@ -122,6 +122,7 @@ func buildChatRowLayer(row ChatRow, rect image.Rectangle, location *time.Locatio
 		Rect:      rect,
 		Z:         zRowBackground,
 		Click:     ActionReceived{Action: FocusChat, ChatID: row.Chat.ID},
+		ListRow:   true,
 		WheelUp:   ActionReceived{Action: SelectPrevious},
 		WheelDown: ActionReceived{Action: SelectNext},
 	}}

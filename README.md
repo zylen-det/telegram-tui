@@ -90,17 +90,17 @@ Credential lookup order is environment → config file → first-run prompt.
 |---|---|---|
 | Move chat focus / list selection | `j` / `k` or Up / Down | Click a row or use the wheel |
 | Cycle visible panes (not the message input) | `h` / `l` or Left / Right; Shift-Tab / Tab | Click a pane |
-| Open focused conversation | Enter in the chat list | — |
-| Chat actions | `a` in the chat list | Click an action once the menu is open |
+| Open focused conversation | Enter in the chat list | Double-click a chat row |
+| Chat actions | `a` in the chat list | Double-click an action once the menu is open |
 | Chat info | `K` or F2 | Click Info |
 | Focus message input | `i` in a conversation | Click the input |
-| Activate a message or modal action | Enter; action menus also show direct keys at the right of each option | Click the action |
+| Activate a message or modal action | Enter; action menus also show direct keys at the right of each option | Double-click a list action |
 | Close or go back | Esc; `q` inside a modal | Click close or outside |
-| Search from the chat list | `/` | Click a result |
+| Search from the chat list | `/` | Double-click a result |
 | Next unread / mentioned chat | `u` / `m` in the chat list | — |
 | View pinned messages | `p` in a conversation | — |
-| Go to a referenced message | Select the reply, press Enter, choose Go to referenced message | Choose Go to referenced message in the reply's actions |
-| Browse forum topics | `t` in a forum conversation | Click a topic once the list is open |
+| Go to a referenced message | Select the reply, press Enter, choose Go to referenced message | Double-click Go to referenced message in the reply's actions |
+| Browse forum topics | `t` in a forum conversation | Double-click a topic once the list is open |
 | Page through history | Ctrl-u / Ctrl-d or Page Up / Page Down | Use the wheel |
 | Send a message | Enter | Click Send |
 | Insert a newline | Shift-Enter | — |
@@ -110,7 +110,7 @@ Credential lookup order is environment → config file → first-run prompt.
 
 In action menus, `j`/`k` move between options and Enter activates the selected one. Direct keys activate the indicated option without moving selection; only keys for visible actions are active. Message actions use `v` view/open media, `r` reply, `g` go to referenced message, `f` forward, `e` edit, `y` copy (yank), `c` copy link, `o` open link, `i` user info, `a` react, `p` pin/unpin, `d` delete for self, and `D` delete for everyone. Link actions open a second menu of TDLib-marked links to choose from; links behind display text appear as `URL(display text)`. Chat actions use `o` open, `i` info, `a` archive/unarchive, `p` pin/unpin, `m` mute/unmute, `r` mark read/unread, `c` clear history, `d` delete, `l` leave, and `J` join (`j` remains navigation). Confirmation uses `c` cancel or `y` confirm. Esc/`q` goes back; Ctrl-C still quits.
 
-Moving through the chat list changes the focused row without replacing the selected conversation. Press Enter to open the focused conversation without moving focus from Chats; pane navigation wraps among visible Chats, Conversation, and Info panes without opening another chat. Press `a` for actions on the focused chat. Press `i` to focus the message input from a visible conversation.
+A single click focuses any selectable list row (including modal actions, search results, bot commands, Info actions, and sticker tiles); a second click on the same row within 400 ms performs its Enter action. Non-list controls such as Send and Close still act on one click. Moving through the chat list changes the focused row without replacing the selected conversation. Press Enter to open the focused conversation without moving focus from Chats; pane navigation wraps among visible Chats, Conversation, and Info panes without opening another chat. Press `a` for actions on the focused chat. Press `i` to focus the message input from a visible conversation.
 
 Typing `/` at the beginning of the composer opens bot-command completion where available. Sent text messages use Telegram's human-friendly Markdown syntax: for example, `**bold**`, `__italic__`, `` `code` ``, and `~~strikethrough~~` become formatted text after sending. The composer does not preview formatting. Plain `q` never quits the process; it only closes the current modal or page.
 

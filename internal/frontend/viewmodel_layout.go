@@ -66,16 +66,30 @@ func layoutMode(width, height int) Layout {
 }
 
 type Hit struct {
+	ID        string
 	Rect      image.Rectangle
 	Click     ActionReceived
+	ListRow   bool
 	WheelUp   ActionReceived
 	WheelDown ActionReceived
 }
 
 type HitMap []Hit
 
+// ClickAt returns the topmost actionable hit, including its list-row marker.
+func (hits HitMap) ClickAt(x, y int) (Hit, bool) {
+	point := image.Pt(x, y)
+	for i := len(hits) - 1; i >= 0; i-- {
+		if point.In(hits[i].Rect) && hits[i].Click.Action != NoAction {
+			return hits[i], true
+		}
+	}
+	return Hit{}, false
+}
+
 func (hits HitMap) ActionAt(x, y int) (ActionReceived, bool) {
-	return hits.actionAt(x, y, func(hit Hit) ActionReceived { return hit.Click })
+	hit, ok := hits.ClickAt(x, y)
+	return hit.Click, ok
 }
 
 func (hits HitMap) WheelAt(x, y int, up bool) (ActionReceived, bool) {
