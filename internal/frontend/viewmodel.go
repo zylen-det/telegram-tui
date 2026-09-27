@@ -277,6 +277,7 @@ func cloneMessageMenu(menu *MessageActionMenu) *MessageActionMenu {
 		return nil
 	}
 	clone := *menu
+	clone.Links = append([]messageLink(nil), menu.Links...)
 	return &clone
 }
 

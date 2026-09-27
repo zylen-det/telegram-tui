@@ -414,7 +414,8 @@ type StartupFailed struct{ Error domain.AppError }
 type ShutdownComplete struct{ Error *domain.AppError }
 type OperationFailed struct{ Error domain.AppError }
 type PromptRequested struct{ Prompt auth.Prompt }
-type ClipboardWritten struct{}
+type ClipboardWritten struct{ Label string }
+type WebLinkOpening struct{}
 type ClipboardWriteFailed struct{ Error domain.AppError }
 type ToastExpired struct{ Generation uint64 }
 type MessagePropertiesLoaded struct {

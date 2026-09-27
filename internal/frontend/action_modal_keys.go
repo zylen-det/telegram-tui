@@ -19,6 +19,10 @@ func actionModalShortcut(action Action) string {
 		return "e"
 	case CopyMessage:
 		return "y" // yank
+	case CopyMessageLink:
+		return "c"
+	case OpenMessageLink:
+		return "o"
 	case ViewUserInfo, ViewChatInfo:
 		return "i"
 	case ReactMessage:
@@ -81,6 +85,8 @@ func mapActionModalKey(state State, msg tea.KeyPressMsg) (ActionReceived, bool) 
 		if index := chatIndex(state.Chats, state.ChatActions.ChatID); index >= 0 {
 			rows = chatActionRows(state.Chats[index], state.ChatActions)
 		}
+	} else if state.MessageMenu.LinkAction != NoAction {
+		rows = messageLinkRows(state.MessageMenu)
 	} else {
 		rows = messageActionRows(state.MessageMenu)
 	}

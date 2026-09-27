@@ -37,13 +37,30 @@ func TestMessageEntitiesFormattingTypes(t *testing.T) {
 	}
 }
 
+func TestMessageEntitiesLinkTypes(t *testing.T) {
+	text := &td.FormattedText{Text: "https://one.example labeled email", Entities: []*td.TextEntity{
+		{Offset: 0, Length: 19, Type: &td.TextEntityTypeUrl{}},
+		{Offset: 20, Length: 7, Type: &td.TextEntityTypeTextUrl{Url: "https://two.example"}},
+		{Offset: 28, Length: 5, Type: &td.TextEntityTypeEmailAddress{}},
+	}}
+	got := messageEntities(&td.MessageText{Text: text})
+	want := []domain.TextEntity{
+		{Offset: 0, Length: 19, Kind: domain.EntityLink, Link: domain.LinkPlainURL},
+		{Offset: 20, Length: 7, Kind: domain.EntityLink, Link: domain.LinkTextURL, URL: "https://two.example"},
+		{Offset: 28, Length: 5, Kind: domain.EntityLink},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("link entities = %#v, want %#v", got, want)
+	}
+}
+
 func TestMessageEntitiesNormalizeAndUpdate(t *testing.T) {
 	text := &td.FormattedText{Text: "😀link", Entities: []*td.TextEntity{
 		{Offset: 2, Length: 4, Type: &td.TextEntityTypeTextUrl{Url: "https://example.org"}},
 		{Offset: 0, Length: 2, Type: &td.TextEntityTypeBold{}},
 		{Offset: 0, Length: 2, Type: &td.TextEntityTypeCustomEmoji{}},
 	}}
-	want := []domain.TextEntity{{Offset: 2, Length: 4, Kind: domain.EntityLink}, {Offset: 0, Length: 2, Kind: domain.EntityBold}}
+	want := []domain.TextEntity{{Offset: 2, Length: 4, Kind: domain.EntityLink, Link: domain.LinkTextURL, URL: "https://example.org"}, {Offset: 0, Length: 2, Kind: domain.EntityBold}}
 	n := newNormalizer()
 	message := n.message(&td.Message{Id: 1, Content: &td.MessageText{Text: text}})
 	if message.Text != text.Text || !reflect.DeepEqual(message.Entities, want) {

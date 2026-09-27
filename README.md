@@ -17,7 +17,7 @@ telegram-tui is an unofficial client and is not affiliated with Telegram.
 - Read and send messages in private chats, groups, supergroups, channels, and forum topics.
 - Navigate with Vim keys, conventional keys, a mouse, or any combination of them.
 - Search chats and messages, jump to unread or mentioned chats, browse pinned messages, and use bot-command completion.
-- Reply, edit, delete, forward, pin, copy, and react to messages when Telegram permits the action. Open a replied-to message from its message actions.
+- Reply, edit, delete, forward, pin, copy, and react to messages when Telegram permits the action. Open a replied-to message from its message actions; copy or open a web link from a message or caption by choosing its link in a second menu.
 - Keep Telegram cloud drafts—including reply targets—synchronized across devices.
 - Send photos, videos, audio, documents, and stickers. Preview images and available thumbnails inline as terminal pixel cells, or view images at full fidelity through Kitty's graphics protocol; other media opens in the system application.
 - Browse members and use supported group/channel administration controls.
@@ -108,7 +108,7 @@ Credential lookup order is environment → config file → first-run prompt.
 | Open the sticker picker | Ctrl+S | Click `[Sticker]` |
 | Stop the application | Ctrl-C | — |
 
-In action menus, `j`/`k` move between options and Enter activates the selected one. Direct keys activate the indicated option without moving selection; only keys for visible actions are active. Message actions use `v` view/open media, `r` reply, `g` go to referenced message, `f` forward, `e` edit, `y` copy (yank), `i` user info, `a` react, `p` pin/unpin, `d` delete for self, and `D` delete for everyone. Chat actions use `o` open, `i` info, `a` archive/unarchive, `p` pin/unpin, `m` mute/unmute, `r` mark read/unread, `c` clear history, `d` delete, `l` leave, and `J` join (`j` remains navigation). Confirmation uses `c` cancel or `y` confirm. Esc/`q` goes back; Ctrl-C still quits.
+In action menus, `j`/`k` move between options and Enter activates the selected one. Direct keys activate the indicated option without moving selection; only keys for visible actions are active. Message actions use `v` view/open media, `r` reply, `g` go to referenced message, `f` forward, `e` edit, `y` copy (yank), `c` copy link, `o` open link, `i` user info, `a` react, `p` pin/unpin, `d` delete for self, and `D` delete for everyone. Link actions open a second menu of TDLib-marked links to choose from; links behind display text appear as `URL(display text)`. Chat actions use `o` open, `i` info, `a` archive/unarchive, `p` pin/unpin, `m` mute/unmute, `r` mark read/unread, `c` clear history, `d` delete, `l` leave, and `J` join (`j` remains navigation). Confirmation uses `c` cancel or `y` confirm. Esc/`q` goes back; Ctrl-C still quits.
 
 Moving through the chat list changes the focused row without replacing the selected conversation. Press Enter to open the focused conversation without moving focus from Chats; pane navigation wraps among visible Chats, Conversation, and Info panes without opening another chat. Press `a` for actions on the focused chat. Press `i` to focus the message input from a visible conversation.
 

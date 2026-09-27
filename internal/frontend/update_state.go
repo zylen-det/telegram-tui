@@ -4,6 +4,7 @@ import (
 	"image/color"
 	"math"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -659,8 +660,14 @@ func updateState(state *State, raw Event) []Effect {
 		failure := event.Error
 		setToast(state, failure, 4*time.Second)
 	case ClipboardWritten:
-		success := domain.AppError{Message: "Message copied"}
+		label := event.Label
+		if label == "" {
+			label = "Message copied"
+		}
+		success := domain.AppError{Message: label}
 		setToast(state, success, 2*time.Second)
+	case WebLinkOpening:
+		setToast(state, domain.AppError{Message: "Opening link in browser"}, 2*time.Second)
 	case ToastExpired:
 		if state.Toast != nil && event.Generation == state.ToastGeneration {
 			state.Toast = nil
@@ -805,6 +812,7 @@ func reduceTelegramUpdate(state *State, event TelegramEvent) []Effect {
 			state.Messages[update.ChatID][index].Kind = update.Kind
 			state.Messages[update.ChatID][index].Text = update.Text
 			state.Messages[update.ChatID][index].Entities = append([]domain.TextEntity(nil), update.Entities...)
+			syncMessageMenuLinks(state, state.Messages[update.ChatID][index])
 			state.Messages[update.ChatID][index].FileName = update.FileName
 			state.Messages[update.ChatID][index].Media = update.Media
 			state.Messages[update.ChatID][index].Sticker = update.Sticker
@@ -1013,6 +1021,9 @@ func reduceMessageUpserted(state *State, message domain.Message) []Effect {
 	messages := state.Messages[message.ChatID]
 	existed := messageIndex(messages, message.ID) >= 0
 	state.Messages[message.ChatID] = limitMessages(mergeMessages(messages, []domain.Message{message}))
+	if index := messageIndex(state.Messages[message.ChatID], message.ID); index >= 0 {
+		syncMessageMenuLinks(state, state.Messages[message.ChatID][index])
+	}
 	reconcileReplyTarget(state, message.ChatID)
 	reconcileEditTarget(state, message.ChatID)
 	reconcileForwardPicker(state)
@@ -1226,6 +1237,44 @@ func reduceAction(state *State, event ActionReceived) []Effect {
 		return reducePhotoSend(state, event)
 	}
 	if state.MessageMenu != nil {
+		menu := state.MessageMenu
+		if menu.LinkAction != NoAction {
+			switch event.Action {
+			case Close:
+				menu.LinkAction = NoAction
+			case SelectNext, SelectPrevious:
+				if len(menu.Links) > 0 {
+					delta := 1
+					if event.Action == SelectPrevious {
+						delta = -1
+					}
+					menu.LinkSelected = (menu.LinkSelected + delta + len(menu.Links)) % len(menu.Links)
+				}
+			case Activate:
+				return reduceAction(state, ActionReceived{Action: SelectMessageLink, ChatID: menu.ChatID, MessageID: menu.MessageID, CommandIndex: menu.LinkSelected})
+			case SelectMessageLink:
+				if event.ChatID != menu.ChatID || event.MessageID != menu.MessageID || event.CommandIndex < 0 || event.CommandIndex >= len(menu.Links) {
+					return nil
+				}
+				message, ok := messageByIdentity(*state, menu.ChatID, menu.MessageID)
+				if !ok {
+					return nil
+				}
+				links := messageLinks(message)
+				if event.CommandIndex >= len(links) || links[event.CommandIndex] != menu.Links[event.CommandIndex] {
+					return nil
+				}
+				url := links[event.CommandIndex].URL
+				action := menu.LinkAction
+				state.Focus = menu.PreviousFocus
+				state.MessageMenu = nil
+				if action == CopyMessageLink {
+					return []Effect{WriteClipboard{Text: url, Label: "Link copied"}}
+				}
+				return []Effect{OpenWebLink{URL: url}}
+			}
+			return nil
+		}
 		if state.MessageMenu.JumpRequestID != 0 && event.Action != Close {
 			return nil
 		}
@@ -1276,6 +1325,13 @@ func reduceAction(state *State, event ActionReceived) []Effect {
 		case DeleteForEveryone:
 			if _, ok := messageByIdentity(*state, state.MessageMenu.ChatID, state.MessageMenu.MessageID); ok && state.MessageMenu.Capabilities.DeleteForAll {
 				return beginDelete(state, state.MessageMenu, true)
+			}
+		case CopyMessageLink, OpenMessageLink:
+			if len(menu.Links) > 0 {
+				if _, ok := messageByIdentity(*state, menu.ChatID, menu.MessageID); ok {
+					menu.LinkAction = event.Action
+					menu.LinkSelected = 0
+				}
 			}
 		case CopyMessage:
 			if message, ok := messageByIdentity(*state, state.MessageMenu.ChatID, state.MessageMenu.MessageID); ok && state.MessageMenu.Capabilities.Copy {
@@ -3054,7 +3110,7 @@ func openMessageActionMenu(state *State) []Effect {
 	if message.HasReply && message.ReplyToMessageID > 0 {
 		referenceID = message.ReplyToMessageID
 	}
-	state.MessageMenu = &MessageActionMenu{ChatID: message.ChatID, MessageID: message.ID, ReferencedMessageID: referenceID, UserID: senderID, Pinned: message.Pinned, Capabilities: local, PreviousFocus: state.Focus, CanReact: canReact, MediaFile: mediaFile, MediaKind: message.Kind}
+	state.MessageMenu = &MessageActionMenu{ChatID: message.ChatID, MessageID: message.ID, ReferencedMessageID: referenceID, UserID: senderID, Pinned: message.Pinned, Capabilities: local, PreviousFocus: state.Focus, CanReact: canReact, MediaFile: mediaFile, MediaKind: message.Kind, Links: messageLinks(message)}
 	state.Focus = FocusModal
 	if message.ID <= 0 || message.SendState == domain.SendPending || message.SendState == domain.SendFailed || message.Service || message.Kind == domain.MessageService {
 		return nil
@@ -3063,6 +3119,19 @@ func openMessageActionMenu(state *State) []Effect {
 	state.MessageMenu.RequestID = requestID
 	state.MessageMenu.Loading = true
 	return []Effect{GetMessageProperties{RequestID: requestID, ChatID: message.ChatID, MessageID: message.ID}}
+}
+
+func syncMessageMenuLinks(state *State, message domain.Message) {
+	menu := state.MessageMenu
+	if menu == nil || menu.ChatID != message.ChatID || menu.MessageID != message.ID {
+		return
+	}
+	links := messageLinks(message)
+	if !slices.Equal(menu.Links, links) {
+		menu.Links = links
+		menu.LinkAction = NoAction // an edited message requires a fresh target choice
+		clampMessageMenuSelection(menu)
+	}
 }
 
 func messageMenuMatches(menu *MessageActionMenu, requestID uint64, chatID domain.ChatID, messageID domain.MessageID) bool {
@@ -3135,6 +3204,18 @@ func selectMessageMenuAction(menu *MessageActionMenu, action Action) {
 		}
 		index++
 	}
+	if len(menu.Links) > 0 {
+		if action == CopyMessageLink {
+			menu.Selected = index
+			return
+		}
+		index++
+		if action == OpenMessageLink {
+			menu.Selected = index
+			return
+		}
+		index++
+	}
 	if menu.UserID != 0 {
 		if action == ViewUserInfo {
 			menu.Selected = index
@@ -3197,6 +3278,9 @@ func actionMenuItemCount(menu *MessageActionMenu) int {
 	if menu.Capabilities.Copy {
 		count++
 	}
+	if len(menu.Links) > 0 {
+		count += 2
+	}
 	if menu.UserID != 0 {
 		count++
 	}
@@ -3253,6 +3337,16 @@ func selectedMenuAction(menu *MessageActionMenu) Action {
 	if menu.Capabilities.Copy {
 		if menu.Selected == index {
 			return CopyMessage
+		}
+		index++
+	}
+	if len(menu.Links) > 0 {
+		if menu.Selected == index {
+			return CopyMessageLink
+		}
+		index++
+		if menu.Selected == index {
+			return OpenMessageLink
 		}
 		index++
 	}
@@ -4468,6 +4562,10 @@ func normalizeEvent(event Event) Event {
 		if event != nil {
 			return *event
 		}
+	case *WebLinkOpening:
+		if event != nil {
+			return *event
+		}
 	case *ClipboardWriteFailed:
 		if event != nil {
 			return *event
@@ -4524,7 +4622,7 @@ func normalizeEvent(event Event) Event {
 		if event != nil {
 			return *event
 		}
-	case Started, Resized, AdministrationLoaded, ChatSettingsValueChanged, ChatSettingsLoaded, ChatSettingsLoadFailed, ChatSettingSaved, ChatSettingSaveFailed, AdministrationLoadFailed, MemberAdministrationLoaded, MemberAdministrationLoadFailed, DefaultPermissionsSaved, DefaultPermissionsSaveFailed, MemberAdministrationApplied, MemberAdministrationApplyFailed, ChatsLoaded, ChatsLoadFailed, TopicsLoaded, TopicsLoadFailed, MessagesLoaded, MessagesLoadFailed, ChatMessagesSearched, ChatMessagesSearchFailed, SearchMessageContextLoaded, SearchMessageContextFailed, MembersLoaded, MembersLoadFailed, InviteLinksLoaded, InviteLinksLoadFailed, InviteLinkCreated, InviteLinkCreateFailed, InviteLinkRevoked, InviteLinkRevokeFailed, InviteLinkCopied, InviteLinkCopyFailed, UserInfoLoaded, UserInfoLoadFailed, MemberUsernameCopied, MemberUsernameCopyFailed, MemberContactChanged, MemberContactFailed, MemberBlockChanged, MemberBlockFailed, ChatActionApplied, ChatActionFailed, PinnedMessagesLoaded, PinnedMessagesLoadFailed, PinnedMessageContextLoaded, PinnedMessageContextFailed, BotCommandsLoaded, BotCommandsLoadFailed, TelegramEvent, DraftSaved, DraftSaveFailed, TextQueued, TextQueueFailed, PhotoQueued, PhotoQueueFailed, VideoQueued, VideoQueueFailed, AudioQueued, AudioQueueFailed, DocumentQueued, DocumentQueueFailed, StickersLoaded, StickersLoadFailed, StickerThumbnailRendered, StickerThumbnailFailed, StickerQueued, StickerQueueFailed, AvatarRendered, AvatarRenderFailed, AvatarOpenFailed, AvatarOpened, StartupFailed, ShutdownComplete, OperationFailed, PromptRequested, ClipboardWritten, ClipboardWriteFailed, ToastExpired, MessagePropertiesLoaded, MessagePropertiesLoadFailed, TextEdited, TextEditFailed, MessageDeleted, MessageDeleteFailed, MessageForwarded, MessageForwardFailed, MessagePinChanged, MessagePinFailed, ReactionChanged, ReactionFailed, MessageMediaOpened, MessageMediaOpenFailed, PublicChatSearched, PublicChatSearchFailed, PublicChatsSearched, PublicChatsSearchFailed, AllMessagesSearched, AllMessagesSearchFailed, ChatSearchValueChanged, ThumbnailDownloaded, ThumbnailDownloadFailed, ThumbnailRendered, ComposerValueChanged, PromptValueChanged, PhotoPathValueChanged, MessageSearchValueChanged, TerminalFocusChanged, ActionReceived:
+	case Started, Resized, AdministrationLoaded, ChatSettingsValueChanged, ChatSettingsLoaded, ChatSettingsLoadFailed, ChatSettingSaved, ChatSettingSaveFailed, AdministrationLoadFailed, MemberAdministrationLoaded, MemberAdministrationLoadFailed, DefaultPermissionsSaved, DefaultPermissionsSaveFailed, MemberAdministrationApplied, MemberAdministrationApplyFailed, ChatsLoaded, ChatsLoadFailed, TopicsLoaded, TopicsLoadFailed, MessagesLoaded, MessagesLoadFailed, ChatMessagesSearched, ChatMessagesSearchFailed, SearchMessageContextLoaded, SearchMessageContextFailed, MembersLoaded, MembersLoadFailed, InviteLinksLoaded, InviteLinksLoadFailed, InviteLinkCreated, InviteLinkCreateFailed, InviteLinkRevoked, InviteLinkRevokeFailed, InviteLinkCopied, InviteLinkCopyFailed, UserInfoLoaded, UserInfoLoadFailed, MemberUsernameCopied, MemberUsernameCopyFailed, MemberContactChanged, MemberContactFailed, MemberBlockChanged, MemberBlockFailed, ChatActionApplied, ChatActionFailed, PinnedMessagesLoaded, PinnedMessagesLoadFailed, PinnedMessageContextLoaded, PinnedMessageContextFailed, BotCommandsLoaded, BotCommandsLoadFailed, TelegramEvent, DraftSaved, DraftSaveFailed, TextQueued, TextQueueFailed, PhotoQueued, PhotoQueueFailed, VideoQueued, VideoQueueFailed, AudioQueued, AudioQueueFailed, DocumentQueued, DocumentQueueFailed, StickersLoaded, StickersLoadFailed, StickerThumbnailRendered, StickerThumbnailFailed, StickerQueued, StickerQueueFailed, AvatarRendered, AvatarRenderFailed, AvatarOpenFailed, AvatarOpened, StartupFailed, ShutdownComplete, OperationFailed, PromptRequested, ClipboardWritten, WebLinkOpening, ClipboardWriteFailed, ToastExpired, MessagePropertiesLoaded, MessagePropertiesLoadFailed, TextEdited, TextEditFailed, MessageDeleted, MessageDeleteFailed, MessageForwarded, MessageForwardFailed, MessagePinChanged, MessagePinFailed, ReactionChanged, ReactionFailed, MessageMediaOpened, MessageMediaOpenFailed, PublicChatSearched, PublicChatSearchFailed, PublicChatsSearched, PublicChatsSearchFailed, AllMessagesSearched, AllMessagesSearchFailed, ChatSearchValueChanged, ThumbnailDownloaded, ThumbnailDownloadFailed, ThumbnailRendered, ComposerValueChanged, PromptValueChanged, PhotoPathValueChanged, MessageSearchValueChanged, TerminalFocusChanged, ActionReceived:
 		return event
 	default:
 		return nil

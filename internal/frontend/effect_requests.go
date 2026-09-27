@@ -169,7 +169,11 @@ type OpenAvatar struct {
 }
 type SubmitPrompt struct{ Response auth.Response }
 type BeginShutdown struct{}
-type WriteClipboard struct{ Text string }
+type WriteClipboard struct {
+	Text  string
+	Label string // optional success toast; defaults to "Message copied"
+}
+type OpenWebLink struct{ URL string }
 type GetMessageProperties struct {
 	RequestID uint64
 	ChatID    domain.ChatID

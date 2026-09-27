@@ -716,15 +716,28 @@ func (h *Handler) dispatch(command Effect, collect func(Event)) {
 	case BeginShutdown:
 		h.beginShutdown(collect)
 	case WriteClipboard:
+		copyFailure := func(err error) ClipboardWriteFailed {
+			failure := clipboardError(err)
+			if command.Label != "" {
+				failure.Message = "Could not copy link"
+			}
+			return ClipboardWriteFailed{Error: failure}
+		}
 		if h.clipboard == nil {
-			collect(ClipboardWriteFailed{Error: clipboardError(errors.New("clipboard unavailable"))})
+			collect(copyFailure(errors.New("clipboard unavailable")))
 			return
 		}
 		if err := h.clipboard.WriteText(h.workCtx, command.Text); err != nil {
-			collect(ClipboardWriteFailed{Error: clipboardError(err)})
+			collect(copyFailure(err))
 			return
 		}
-		collect(ClipboardWritten{})
+		collect(ClipboardWritten{Label: command.Label})
+	case OpenWebLink:
+		if err := platform.OpenURL(h.workCtx, command.URL); err != nil {
+			collect(OperationFailed{Error: domain.AppError{Kind: domain.ErrorInternal, Op: "open link", Message: "Could not open link"}})
+		} else {
+			collect(WebLinkOpening{})
+		}
 	case ShowDesktopNotification:
 		h.mutex.Lock()
 		n := h.notifier

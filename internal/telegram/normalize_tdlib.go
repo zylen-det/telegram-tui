@@ -556,7 +556,9 @@ func messageEntities(value td.MessageContent) []domain.TextEntity {
 			continue
 		}
 		var kind domain.TextEntityKind
-		switch entity.Type.(type) {
+		var link domain.TextLinkKind
+		var url string
+		switch value := entity.Type.(type) {
 		case *td.TextEntityTypeBold:
 			kind = domain.EntityBold
 		case *td.TextEntityTypeItalic:
@@ -573,8 +575,14 @@ func messageEntities(value td.MessageContent) []domain.TextEntity {
 			kind = domain.EntityPre
 		case *td.TextEntityTypeBlockQuote, *td.TextEntityTypeExpandableBlockQuote:
 			kind = domain.EntityQuote
-		case *td.TextEntityTypeUrl, *td.TextEntityTypeTextUrl, *td.TextEntityTypeEmailAddress,
-			*td.TextEntityTypePhoneNumber, *td.TextEntityTypeBankCardNumber:
+		case *td.TextEntityTypeTextUrl:
+			kind = domain.EntityLink
+			link = domain.LinkTextURL
+			url = value.Url
+		case *td.TextEntityTypeUrl:
+			kind = domain.EntityLink
+			link = domain.LinkPlainURL
+		case *td.TextEntityTypeEmailAddress, *td.TextEntityTypePhoneNumber, *td.TextEntityTypeBankCardNumber:
 			kind = domain.EntityLink
 		case *td.TextEntityTypeMention, *td.TextEntityTypeMentionName:
 			kind = domain.EntityMention
@@ -585,7 +593,7 @@ func messageEntities(value td.MessageContent) []domain.TextEntity {
 		default:
 			continue
 		}
-		result = append(result, domain.TextEntity{Offset: int(entity.Offset), Length: int(entity.Length), Kind: kind})
+		result = append(result, domain.TextEntity{Offset: int(entity.Offset), Length: int(entity.Length), Kind: kind, Link: link, URL: url})
 	}
 	return result
 }

@@ -171,7 +171,37 @@ func buildActionModalLayer(model ViewModel, styles renderStyles) surfaceResult {
 	if model.MessageMenu == nil {
 		return surfaceResult{Cursor: renderCursor{X: -1, Y: -1}}
 	}
-	return buildListModalWidth(image.Rect(0, 0, model.Width, model.Height), "Message actions", messageActionRows(model.MessageMenu), styles, messageActionModalWidth)
+	menu := model.MessageMenu
+	if menu.LinkAction != NoAction {
+		title := "Copy link"
+		if menu.LinkAction == OpenMessageLink {
+			title = "Open link"
+		}
+		rows := messageLinkRows(menu)
+		// Keep the selected link visible when the list exceeds the terminal.
+		visible := max(1, model.Height-5)
+		if len(rows) > visible {
+			start := max(0, menu.LinkSelected-visible+1)
+			rows = rows[start:min(len(rows), start+visible)]
+		}
+		return buildListModalWidth(image.Rect(0, 0, model.Width, model.Height), title, rows, styles, messageActionModalWidth)
+	}
+	return buildListModalWidth(image.Rect(0, 0, model.Width, model.Height), "Message actions", messageActionRows(menu), styles, messageActionModalWidth)
+}
+
+func messageLinkRows(menu *MessageActionMenu) []modalRowSpec {
+	if menu == nil || menu.LinkAction == NoAction {
+		return nil
+	}
+	rows := make([]modalRowSpec, 0, len(menu.Links))
+	for index, link := range menu.Links {
+		rows = append(rows, modalRowSpec{
+			ID: fmt.Sprintf("message-link:%d", index), Label: link.Label,
+			Selected: index == menu.LinkSelected,
+			Action:   ActionReceived{Action: SelectMessageLink, ChatID: menu.ChatID, MessageID: menu.MessageID, CommandIndex: index},
+		})
+	}
+	return rows
 }
 
 // messageActionRows is the single displayed row source for the message action
@@ -249,6 +279,12 @@ func messageActionRows(menu *MessageActionMenu) []modalRowSpec {
 			Label:  "Copy",
 			Action: ActionReceived{Action: CopyMessage, ChatID: menu.ChatID, MessageID: menu.MessageID},
 		})
+	}
+	if len(menu.Links) > 0 {
+		rows = append(rows,
+			modalRowSpec{ID: "action:copy-link", Label: "Copy link", Action: ActionReceived{Action: CopyMessageLink, ChatID: menu.ChatID, MessageID: menu.MessageID}},
+			modalRowSpec{ID: "action:open-link", Label: "Open link", Action: ActionReceived{Action: OpenMessageLink, ChatID: menu.ChatID, MessageID: menu.MessageID}},
+		)
 	}
 	if menu.UserID != 0 {
 		rows = append(rows, modalRowSpec{

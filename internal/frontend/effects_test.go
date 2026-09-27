@@ -3,7 +3,11 @@ package frontend
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -38,6 +42,55 @@ func TestHandlerCopyMessageUsesInjectedClipboardAndSafeEvents(t *testing.T) {
 	failed, ok := events[0].(ClipboardWriteFailed)
 	if !ok || failed.Error.Message != "Could not copy message" || failed.Error.Cause == nil {
 		t.Fatalf("copy failure event = type:%T safe:%t cause:%t", events[0], ok && failed.Error.Message == "Could not copy message", ok && failed.Error.Cause != nil)
+	}
+}
+
+func TestHandlerCopyLinkUsesSafeFeedback(t *testing.T) {
+	clipboard := &platform.FakeClipboard{Matches: func(value string) bool { return value == "https://example.org" }}
+	handler := NewHandler(context.Background(), nil, nil, nil, nil, clipboard)
+	events := collectHandlerEvents(handler, WriteClipboard{Text: "https://example.org", Label: "Link copied"})
+	if len(events) != 1 || events[0] != (ClipboardWritten{Label: "Link copied"}) || !clipboard.Matched {
+		t.Fatalf("copy link event = %#v, matched=%v", events, clipboard.Matched)
+	}
+	clipboard.Err = errors.New("raw private error")
+	events = collectHandlerEvents(handler, WriteClipboard{Text: "https://example.org", Label: "Link copied"})
+	failed, ok := events[0].(ClipboardWriteFailed)
+	if !ok || failed.Error.Message != "Could not copy link" || strings.Contains(failed.Error.Message, "example.org") {
+		t.Fatalf("copy link failure = %#v", events)
+	}
+}
+
+func TestHandlerOpenLinkFailureDoesNotExposeTarget(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	handler := NewHandler(context.Background(), nil, nil, nil, nil)
+	events := collectHandlerEvents(handler, OpenWebLink{URL: "https://private.example"})
+	if len(events) != 1 {
+		t.Fatalf("open failure events = %#v", events)
+	}
+	failed, ok := events[0].(OperationFailed)
+	if !ok || failed.Error.Message != "Could not open link" || strings.Contains(fmt.Sprint(events), "private.example") {
+		t.Fatalf("open link failure = %#v", events)
+	}
+}
+
+func TestHandlerOpenLinkReportsLaunchToState(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("gio launcher test")
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "gio"), []byte("#!/bin/sh\ntest \"$1\" = open\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	handler := NewHandler(context.Background(), nil, nil, nil, nil)
+	events := collectHandlerEvents(handler, OpenWebLink{URL: "https://private.example"})
+	if len(events) != 1 || events[0] != (WebLinkOpening{}) {
+		t.Fatalf("open result = %#v", events)
+	}
+	state := InitialState()
+	updateState(&state, events[0])
+	if state.Toast == nil || state.Toast.Message != "Opening link in browser" {
+		t.Fatalf("open feedback = %#v", state.Toast)
 	}
 }
 

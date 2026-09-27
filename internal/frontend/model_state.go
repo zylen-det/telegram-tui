@@ -78,6 +78,9 @@ type MessageActionMenu struct {
 	CanReact            bool
 	MediaFile           domain.MediaFileRef
 	MediaKind           domain.MessageKind
+	Links               []messageLink
+	LinkAction          Action // CopyMessageLink or OpenMessageLink while choosing a target
+	LinkSelected        int
 }
 
 type ForwardPicker struct {

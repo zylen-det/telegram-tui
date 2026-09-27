@@ -72,7 +72,16 @@ type TextEntity struct {
 	Offset int
 	Length int
 	Kind   TextEntityKind
+	Link   TextLinkKind // only TDLib URL and text-url entities are actionable links
+	URL    string       // target for a text-url; URL entities use the text range
 }
+
+type TextLinkKind uint8
+
+const (
+	LinkPlainURL TextLinkKind = iota + 1
+	LinkTextURL
+)
 
 type TextEntityKind uint8
 

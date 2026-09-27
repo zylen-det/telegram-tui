@@ -30,6 +30,9 @@ const (
 	SelectMessage
 	OpenMessageActionMenu
 	CopyMessage
+	CopyMessageLink
+	OpenMessageLink
+	SelectMessageLink
 	ViewUserInfo
 	SelectNextMessage
 	SelectPreviousMessage
