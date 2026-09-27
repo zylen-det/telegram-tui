@@ -78,6 +78,25 @@ func TestAuthorizationPlainContent(t *testing.T) {
 	}
 }
 
+func TestAuthorizationTitleKeepsTopBorderContinuous(t *testing.T) {
+	for _, width := range []int{60, 100} {
+		frame := composeAuthorization(image.Rect(0, 0, width, 24), authorizationDataForInput(""))
+		lines := strings.Split(plainText(frame.Content), "\n")
+		var top string
+		for _, line := range lines {
+			if strings.Contains(line, "Authorization") {
+				top = line
+				break
+			}
+		}
+		start := strings.Index(top, "Authorization") + len("Authorization")
+		end := strings.Index(top, "╮")
+		if top == "" || end <= start || strings.Trim(top[start:end], "─") != "" {
+			t.Fatalf("width %d: top border does not resume after title: %q", width, top)
+		}
+	}
+}
+
 func TestAuthorizationNoManualBorderConcatenation(t *testing.T) {
 	// The shared builder must rely on Lipgloss's rounded border, not manually
 	// concatenated border glyphs. The rendered frame must still contain the

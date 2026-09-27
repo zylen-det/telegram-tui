@@ -72,10 +72,9 @@ func buildAuthorizationLayer(bounds image.Rectangle, data authorizationData, sty
 	innerWidth := frameWidth - 4
 	inputRect := authorizationInputRect(bounds)
 
-	// Title sits on the top border row, exactly like the legacy rounded title.
-	// It is clipped to the inner width so it never overwrites the top-right
-	// border corner.
-	frame.AddLayers(lipgloss.NewLayer(renderLine(styles.Title, "Authorization", max(0, innerWidth))).X(2).Y(0).Z(zAuthContent))
+	// Title sits on the top border row. Clip without padding: a fixed-width
+	// title layer would cover the remaining horizontal border with spaces.
+	frame.AddLayers(lipgloss.NewLayer(styles.Title.Render(ansi.Truncate("Authorization", max(0, innerWidth), ""))).X(2).Y(0).Z(zAuthContent))
 
 	cursor := renderCursor{X: -1, Y: -1}
 
