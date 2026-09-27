@@ -11,6 +11,36 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
+func TestComposerTextHostPlaceholderOnlyWhenEmptyAndBlurred(t *testing.T) {
+	h := newComposerTextHost()
+	chat := composerTextIdentity{ChatID: 9}
+	const hint = "[i] to type"
+
+	for _, step := range []struct {
+		name    string
+		value   string
+		focused bool
+		want    bool
+	}{
+		{"empty blurred", "", false, true},
+		{"empty focused", "", true, false},
+		{"draft focused", "hello", true, false},
+		{"draft blurred", "hello", false, false},
+		{"cleared blurred", "", false, true},
+	} {
+		t.Run(step.name, func(t *testing.T) {
+			h.Sync(chat, step.value, step.focused, 30, 2)
+			visible := strings.Contains(ansi.Strip(h.View()), hint)
+			if visible != step.want {
+				t.Errorf("hint visible = %t, want %t; view = %q", visible, step.want, ansi.Strip(h.View()))
+			}
+			if got := h.Value(); got != step.value {
+				t.Errorf("draft = %q, want %q", got, step.value)
+			}
+		})
+	}
+}
+
 // TestComposerTextHostControlledUnicodeEditing verifies that a blurred host
 // ignores input, and a focused host correctly updates via keypress, paste,
 // and backspace with exact complete Unicode values.

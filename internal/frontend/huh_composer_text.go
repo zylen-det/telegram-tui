@@ -86,6 +86,14 @@ func (h *composerTextHost) Sync(identity composerTextIdentity, value string, foc
 		h.field.Value(&h.value)
 	}
 
+	// The hint is only useful before entering an empty composer. Huh keeps
+	// placeholder text separate from the bound draft value.
+	if focused {
+		h.field.Placeholder("")
+	} else {
+		h.field.Placeholder("[i] to type...")
+	}
+
 	// Focus transition handling.
 	var cmd tea.Cmd
 	if focused && !h.focused {
