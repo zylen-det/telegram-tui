@@ -583,13 +583,13 @@ func (m AppModel) syncAuthorizationInputHost() tea.Cmd {
 		value    string
 		secret   bool
 	)
-	if snap.Prompt != nil {
+	if snap.Prompt != nil && !snap.Prompt.Submitting {
 		promptID = snap.Prompt.Prompt.ID
 		value = string(snap.Prompt.Input)
 		secret = snap.Prompt.Prompt.Secret
 	}
 
-	focused := snap.Prompt != nil && snap.Focus == FocusAuth
+	focused := snap.Prompt != nil && !snap.Prompt.Submitting && snap.Focus == FocusAuth
 	width := authorizationInputRect(image.Rect(0, 0, max(0, snap.Width), max(0, snap.Height))).Dx()
 
 	return m.authorizationInput.Sync(promptID, value, focused, secret, width)

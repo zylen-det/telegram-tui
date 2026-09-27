@@ -688,6 +688,25 @@ func TestAuthorizationGuidanceParity(t *testing.T) {
 	}
 }
 
+func TestAuthorizationSubmitStatusParity(t *testing.T) {
+	tests := []struct {
+		kind auth.PromptKind
+		want string
+	}{
+		{auth.PromptAPIID, "Checking API ID…"},
+		{auth.PromptAPIHash, "Saving API credentials…"},
+		{auth.PromptPhone, "Sending verification code…"},
+		{auth.PromptCode, "Checking verification code…"},
+		{auth.PromptPassword, "Checking two-step password…"},
+		{auth.PromptKind(255), "Processing authorization…"},
+	}
+	for _, test := range tests {
+		if got := authorizationSubmitStatus(test.kind); got != test.want {
+			t.Errorf("authorizationSubmitStatus(%v) = %q, want %q", test.kind, got, test.want)
+		}
+	}
+}
+
 func TestStaleHitClearedAfterResizeAndModalTopologyChange(t *testing.T) {
 	t.Run("resize update then view", func(t *testing.T) {
 		model := mainSurfaceModel(t, 100, 24)

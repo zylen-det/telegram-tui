@@ -18,6 +18,7 @@ type authorizationData struct {
 	Input     string
 	Secret    bool
 	Submitted bool
+	Status    string
 	Waiting   bool
 }
 
@@ -78,7 +79,13 @@ func buildAuthorizationLayer(bounds image.Rectangle, data authorizationData, sty
 
 	cursor := renderCursor{X: -1, Y: -1}
 
-	if data.Waiting {
+	if data.Status != "" {
+		// Submitted prompts remain visible as a non-interactive progress state
+		// until Telegram requests the next value or completes authorization.
+		frame.AddLayers(lipgloss.NewLayer(renderLine(styles.Emphasis, data.Label, innerWidth)).X(2).Y(1).Z(zAuthContent))
+		frame.AddLayers(lipgloss.NewLayer(renderLine(styles.Accent, data.Status, innerWidth)).X(2).Y(3).Z(zAuthContent))
+		frame.AddLayers(lipgloss.NewLayer(renderLine(styles.Muted, "Please wait for Telegram", innerWidth)).X(2).Y(5).Z(zAuthContent))
+	} else if data.Waiting {
 		// Waiting state: no input field or cursor.
 		frame.AddLayers(lipgloss.NewLayer(renderLine(styles.Emphasis, "Connecting to Telegram", innerWidth)).X(2).Y(2).Z(zAuthContent))
 		frame.AddLayers(lipgloss.NewLayer(renderLine(styles.Muted, "Waiting for authorization", innerWidth)).X(2).Y(4).Z(zAuthContent))

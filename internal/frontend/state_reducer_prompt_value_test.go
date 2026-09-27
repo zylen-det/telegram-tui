@@ -40,6 +40,7 @@ func TestPromptValueChangedRejectsStaleOrInactiveIdentity(t *testing.T) {
 		{name: "wrong prompt ID", fn: promptValueState, event: PromptValueChanged{PromptID: 99, Value: "new"}},
 		{name: "zero prompt ID", fn: promptValueState, event: PromptValueChanged{PromptID: 0, Value: "new"}},
 		{name: "wrong focus", fn: func() State { s := promptValueState(); s.Focus = FocusConversation; return s }, event: PromptValueChanged{PromptID: 41, Value: "new"}},
+		{name: "submitting", fn: func() State { s := promptValueState(); s.Prompt.Submitting = true; return s }, event: PromptValueChanged{PromptID: 41, Value: "new"}},
 		{name: "no prompt", fn: func() State { s := promptValueState(); s.Prompt = nil; return s }, event: PromptValueChanged{PromptID: 41, Value: "new"}},
 		{name: "quitting", fn: func() State { s := promptValueState(); s.Quitting = true; return s }, event: PromptValueChanged{PromptID: 41, Value: "new"}},
 	}

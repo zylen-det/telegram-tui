@@ -39,6 +39,7 @@ type PromptState struct {
 	Prompt        auth.Prompt
 	Input         []rune
 	PreviousFocus Focus
+	Submitting    bool
 }
 
 type AvatarState struct {

@@ -414,7 +414,9 @@ func defaultModalStack() modalStack {
 						Guidance: authorizationPromptGuidance(ctx.model.Prompt.Prompt.Kind),
 						Input:    string(ctx.model.Prompt.Input),
 						Secret:   ctx.model.Prompt.Prompt.Secret,
-						Waiting:  false,
+					}
+					if ctx.model.Prompt.Submitting {
+						data.Status = authorizationSubmitStatus(ctx.model.Prompt.Prompt.Kind)
 					}
 				} else {
 					data = authorizationData{Waiting: true}

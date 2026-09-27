@@ -232,6 +232,26 @@ func TestAuthorizationSubmittedState(t *testing.T) {
 	}
 }
 
+func TestAuthorizationHandlingState(t *testing.T) {
+	frame := composeAuthorization(image.Rect(0, 0, 100, 24), authorizationData{
+		Label:  "Phone number",
+		Input:  "+15551234567",
+		Status: "Sending verification code…",
+	})
+	text := plainText(frame.Content)
+	for _, want := range []string{"Phone number", "Sending verification code…", "Please wait for Telegram"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("handling state missing %q", want)
+		}
+	}
+	if strings.Contains(text, "+15551234567") || strings.Contains(text, "Type here…") {
+		t.Error("handling state rendered submitted input")
+	}
+	if frame.Cursor.Visible {
+		t.Error("handling state should have no cursor")
+	}
+}
+
 func TestAuthorizationWaitingState(t *testing.T) {
 	frame := composeAuthorization(image.Rect(0, 0, 100, 24), authorizationData{
 		Label:   "Telegram API ID",

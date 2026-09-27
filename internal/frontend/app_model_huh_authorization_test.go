@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"image"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -104,11 +105,15 @@ func TestAppModelHuhAuthorizationRoutesWholeValueEditingAndSubmit(t *testing.T) 
 	if cmd == nil {
 		t.Fatal("authorization submit delivery command was dropped")
 	}
-	if model.Snapshot().Prompt != nil {
-		t.Fatal("Enter no longer submits and clears authoritative prompt")
+	if prompt := model.Snapshot().Prompt; prompt == nil || !prompt.Submitting || prompt.Input != nil {
+		t.Fatalf("Enter did not retain a cleared authorization progress state: %#v", prompt)
 	}
 	if got := model.authorizationInput; got.Identity() != 0 || got.Value() != "" || got.focused {
 		t.Fatalf("submitted host not cleared/blurred: id:%d value:%q focus:%t", got.Identity(), got.Value(), got.focused)
+	}
+	plain := plainText(model.View().Content)
+	if !strings.Contains(plain, "Checking two-step password…") || strings.Contains(plain, "a界🙂") {
+		t.Fatalf("submitted authorization view did not show safe progress status:\n%s", plain)
 	}
 }
 

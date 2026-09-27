@@ -667,7 +667,11 @@ func updateState(state *State, raw Event) []Effect {
 			state.ToastDuration = 0
 		}
 	case PromptRequested:
-		state.Prompt = &PromptState{Prompt: event.Prompt, PreviousFocus: state.Focus}
+		previousFocus := state.Focus
+		if state.Prompt != nil && state.Prompt.Submitting {
+			previousFocus = state.Prompt.PreviousFocus
+		}
+		state.Prompt = &PromptState{Prompt: event.Prompt, PreviousFocus: previousFocus}
 		state.Focus = FocusAuth
 	}
 	return nil
@@ -750,6 +754,11 @@ func reduceTelegramUpdate(state *State, event TelegramEvent) []Effect {
 			return reduceTelegramUpdate(state, event)
 		}
 	case telegram.Ready:
+		if state.Prompt != nil {
+			state.Prompt.Input = nil
+			state.Focus = state.Prompt.PreviousFocus
+			state.Prompt = nil
+		}
 		requestID := allocateRequestID(state)
 		state.ChatRequestID = requestID
 		state.ChatsLoading = true
@@ -1129,6 +1138,9 @@ func reduceThumbnailDownloaded(state *State, event ThumbnailDownloaded) []Effect
 }
 
 func reducePromptAction(state *State, event ActionReceived) []Effect {
+	if state.Prompt.Submitting {
+		return nil
+	}
 	switch event.Action {
 	case ComposerBackspace:
 		if size := len(state.Prompt.Input); size > 0 {
@@ -1136,9 +1148,8 @@ func reducePromptAction(state *State, event ActionReceived) []Effect {
 		}
 	case ComposerSubmit:
 		command := SubmitPrompt{Response: auth.Response{PromptID: state.Prompt.Prompt.ID, Value: string(state.Prompt.Input)}}
-		state.Focus = state.Prompt.PreviousFocus
 		state.Prompt.Input = nil
-		state.Prompt = nil
+		state.Prompt.Submitting = true
 		return []Effect{command}
 	case NoAction:
 		if event.Rune != 0 {
@@ -3807,7 +3818,7 @@ func reduceComposerValueChanged(state *State, event ComposerValueChanged) []Effe
 }
 
 func reducePromptValueChanged(state *State, event PromptValueChanged) []Effect {
-	if state.Prompt == nil {
+	if state.Prompt == nil || state.Prompt.Submitting {
 		return nil
 	}
 	if state.Focus != FocusAuth {

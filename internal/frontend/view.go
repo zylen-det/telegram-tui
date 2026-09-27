@@ -112,3 +112,20 @@ func authorizationPromptGuidance(kind auth.PromptKind) string {
 		return "Type a value and press Enter"
 	}
 }
+
+func authorizationSubmitStatus(kind auth.PromptKind) string {
+	switch kind {
+	case auth.PromptAPIID:
+		return "Checking API ID…"
+	case auth.PromptAPIHash:
+		return "Saving API credentials…"
+	case auth.PromptPhone:
+		return "Sending verification code…"
+	case auth.PromptCode:
+		return "Checking verification code…"
+	case auth.PromptPassword:
+		return "Checking two-step password…"
+	default:
+		return "Processing authorization…"
+	}
+}

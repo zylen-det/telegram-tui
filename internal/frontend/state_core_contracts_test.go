@@ -7,6 +7,7 @@ import (
 
 	"github.com/zylen-det/telegram-tui/internal/auth"
 	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/telegram-tui/internal/telegram"
 )
 
 func TestLayoutBreakpoints(t *testing.T) {
@@ -63,7 +64,7 @@ func TestAvatarResultAndStaleResultPreserveModalFocus(t *testing.T) {
 	assertModalFocusInvariant(t, state)
 }
 
-func TestPromptSubmitClearsSensitiveInputAndRestoresFocus(t *testing.T) {
+func TestPromptSubmitClearsSensitiveInputAndKeepsProgressVisible(t *testing.T) {
 	state := InitialState()
 	state.Focus = FocusAuth
 	promptState := &PromptState{
@@ -79,18 +80,40 @@ func TestPromptSubmitClearsSensitiveInputAndRestoresFocus(t *testing.T) {
 	state.Prompt = promptState
 
 	commands := updateState(&state, ActionReceived{Action: ComposerSubmit})
-	got := state
 
-	if got.Prompt != nil || promptState.Input != nil {
-		t.Fatalf("sensitive prompt retained: state=%#v input=%q", got.Prompt, string(promptState.Input))
+	if state.Prompt != promptState || !promptState.Submitting || promptState.Input != nil {
+		t.Fatalf("submitted prompt state = %#v, want cleared progress state", state.Prompt)
 	}
-	if got.Focus != FocusConversation {
-		t.Fatalf("Focus = %v, want %v", got.Focus, FocusConversation)
+	if state.Focus != FocusAuth {
+		t.Fatalf("Focus = %v, want %v while submitting", state.Focus, FocusAuth)
 	}
 	assertCommands(t, commands, []Effect{SubmitPrompt{Response: auth.Response{
 		PromptID: 44,
 		Value:    "秘密",
 	}}})
+}
+
+func TestAuthorizationProgressTransitionsToNextPromptAndReady(t *testing.T) {
+	state := InitialState()
+	state.Focus = FocusAuth
+	state.Prompt = &PromptState{
+		Prompt:        auth.Prompt{ID: 10, Kind: auth.PromptPhone, Label: "Phone number"},
+		PreviousFocus: FocusChats,
+		Submitting:    true,
+	}
+
+	updateState(&state, PromptRequested{Prompt: auth.Prompt{ID: 11, Kind: auth.PromptCode, Label: "Verification code", Secret: true}})
+	if state.Prompt == nil || state.Prompt.Prompt.ID != 11 || state.Prompt.Submitting || state.Prompt.PreviousFocus != FocusChats || state.Focus != FocusAuth {
+		t.Fatalf("next authorization prompt = %#v focus=%v", state.Prompt, state.Focus)
+	}
+
+	state.Prompt.Input = []rune("12345")
+	updateState(&state, ActionReceived{Action: ComposerSubmit})
+	commands := updateState(&state, TelegramEvent{Value: telegram.Ready{}})
+	if state.Prompt != nil || state.Focus != FocusChats {
+		t.Fatalf("ready authorization state = prompt:%#v focus:%v", state.Prompt, state.Focus)
+	}
+	assertCommands(t, commands, []Effect{LoadChats{RequestID: 1, Cursor: telegram.ChatCursor{Limit: pageSize}}})
 }
 
 func TestTypedNilPointerEventsAreNoOps(t *testing.T) {
