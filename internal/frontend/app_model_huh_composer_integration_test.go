@@ -94,6 +94,38 @@ func TestAppModelHuhComposerRoutesEditingMessages(t *testing.T) {
 	}
 }
 
+func TestAppModelHuhComposerArrowKeysMoveCaret(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		keys []tea.Key
+		want string
+	}{
+		{"left across Unicode", []tea.Key{{Code: tea.KeyLeft}}, "abc\nxy!🙂"},
+		{"right", []tea.Key{{Code: tea.KeyLeft}, {Code: tea.KeyLeft}, {Code: tea.KeyRight}}, "abc\nxy!🙂"},
+		{"up", []tea.Key{{Code: tea.KeyUp}}, "abc!\nxy🙂"},
+		{"down", []tea.Key{{Code: tea.KeyUp}, {Code: tea.KeyLeft}, {Code: tea.KeyDown}}, "abc\nxy!🙂"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			state := InitialState()
+			state.Connection = domain.ConnectionOnline
+			state.Chats = []domain.Chat{{ID: 9, CanSend: true}}
+			state.SelectedChat = 0
+			state.Focus = FocusComposer
+			state.Width, state.Height = 100, 24
+			state.Drafts[9] = "abc\nxy🙂"
+			model := newAppModelForTest(t, state, newTestSession(t))
+			for _, key := range test.keys {
+				model, _ = updateAppModel(t, model, tea.KeyPressMsg(key))
+				if model.Snapshot().Focus != FocusComposer || model.Snapshot().Drafts[9] != "abc\nxy🙂" {
+					t.Fatalf("arrow changed focus or draft: focus=%v draft=%q", model.Snapshot().Focus, model.Snapshot().Drafts[9])
+				}
+			}
+			model, _ = updateAppModel(t, model, tea.KeyPressMsg(tea.Key{Text: "!"}))
+			assertHuhComposerValue(t, model, test.want)
+		})
+	}
+}
+
 func TestAppModelHuhComposerAppliesCleanRemoteDraftImmediately(t *testing.T) {
 	state := InitialState()
 	state.Chats = []domain.Chat{{ID: 9, CanSend: true}}

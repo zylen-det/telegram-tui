@@ -348,7 +348,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(m.deliver(commands), m.syncComposerTextHost(), m.syncAuthorizationInputHost(), m.syncPhotoPathInputHost(), m.syncMessageSearchInputHost(), m.syncChatSearchInputHost())
 			}
 		}
-		if focus == FocusComposer && textInputAllowed(msg.Key()) {
+		key := msg.Key()
+		key.Mod &^= tea.ModCapsLock | tea.ModNumLock | tea.ModScrollLock
+		if focus == FocusComposer && (textInputAllowed(msg.Key()) || key.Mod == 0 && (key.Code == tea.KeyLeft || key.Code == tea.KeyRight || key.Code == tea.KeyUp || key.Code == tea.KeyDown)) {
 			var preSync tea.Cmd
 			if snapForID := m.Snapshot(); snapForID.SelectedChat >= 0 && snapForID.SelectedChat < len(snapForID.Chats) {
 				wantID := snapForID.Chats[snapForID.SelectedChat].ID
