@@ -209,7 +209,7 @@ func (n *normalizer) update(value td.Type) []Update {
 		if content, ok := update.NewContent.(*td.MessageSticker); ok {
 			sticker = stickerRef(content.Sticker)
 		}
-		return []Update{MessageContentUpdated{ChatID: domain.ChatID(update.ChatId), MessageID: domain.MessageID(update.MessageId), Kind: kind, Text: text, FileName: fileName, Media: media, Sticker: sticker}}
+		return []Update{MessageContentUpdated{ChatID: domain.ChatID(update.ChatId), MessageID: domain.MessageID(update.MessageId), Kind: kind, Text: text, Entities: messageEntities(update.NewContent), FileName: fileName, Media: media, Sticker: sticker}}
 	case *td.UpdateMessageEdited:
 		return []Update{MessageEdited{ChatID: domain.ChatID(update.ChatId), MessageID: domain.MessageID(update.MessageId), EditedAt: time.Unix(int64(update.EditDate), 0)}}
 	case *td.UpdateMessageIsPinned:
@@ -378,6 +378,7 @@ func (n *normalizer) messageLocked(value *td.Message) domain.Message {
 		EditedAt:          editedAt,
 		Kind:              kind,
 		Text:              text,
+		Entities:          messageEntities(value.Content),
 		FileName:          fileName,
 		Media:             media,
 		Outgoing:          value.IsOutgoing,
@@ -525,6 +526,68 @@ func mediaFileRef(value *td.File) domain.MediaFileRef {
 	return ref
 }
 
+// messageEntities keeps TDLib's UTF-16 ranges only for text actually displayed
+// as Message.Text. Other entity types require separate behavior (custom emoji,
+// timestamps) or have no distinct terminal formatting.
+func messageEntities(value td.MessageContent) []domain.TextEntity {
+	var formatted *td.FormattedText
+	switch content := value.(type) {
+	case *td.MessageText:
+		formatted = content.Text
+	case *td.MessageVideo:
+		formatted = content.Caption
+	case *td.MessageAudio:
+		formatted = content.Caption
+	case *td.MessageDocument:
+		formatted = content.Caption
+	case *td.MessageAnimation:
+		formatted = content.Caption
+	case *td.MessageVoiceNote:
+		formatted = content.Caption
+	}
+	if formatted == nil {
+		return nil
+	}
+	var result []domain.TextEntity
+	for _, entity := range formatted.Entities {
+		if entity == nil || entity.Offset < 0 || entity.Length <= 0 {
+			continue
+		}
+		var kind domain.TextEntityKind
+		switch entity.Type.(type) {
+		case *td.TextEntityTypeBold:
+			kind = domain.EntityBold
+		case *td.TextEntityTypeItalic:
+			kind = domain.EntityItalic
+		case *td.TextEntityTypeUnderline:
+			kind = domain.EntityUnderline
+		case *td.TextEntityTypeStrikethrough:
+			kind = domain.EntityStrikethrough
+		case *td.TextEntityTypeSpoiler:
+			kind = domain.EntitySpoiler
+		case *td.TextEntityTypeCode:
+			kind = domain.EntityCode
+		case *td.TextEntityTypePre, *td.TextEntityTypePreCode:
+			kind = domain.EntityPre
+		case *td.TextEntityTypeBlockQuote, *td.TextEntityTypeExpandableBlockQuote:
+			kind = domain.EntityQuote
+		case *td.TextEntityTypeUrl, *td.TextEntityTypeTextUrl, *td.TextEntityTypeEmailAddress,
+			*td.TextEntityTypePhoneNumber, *td.TextEntityTypeBankCardNumber:
+			kind = domain.EntityLink
+		case *td.TextEntityTypeMention, *td.TextEntityTypeMentionName:
+			kind = domain.EntityMention
+		case *td.TextEntityTypeHashtag, *td.TextEntityTypeCashtag:
+			kind = domain.EntityTag
+		case *td.TextEntityTypeBotCommand:
+			kind = domain.EntityCommand
+		default:
+			continue
+		}
+		result = append(result, domain.TextEntity{Offset: int(entity.Offset), Length: int(entity.Length), Kind: kind})
+	}
+	return result
+}
+
 func messageContent(value td.MessageContent) (domain.MessageKind, string, string, domain.MessageMedia) {
 	switch content := value.(type) {
 	case *td.MessageText:
@@ -538,8 +601,12 @@ func messageContent(value td.MessageContent) (domain.MessageKind, string, string
 		}
 		return domain.MessagePhoto, "", "", photoMedia(content.Photo.Sizes)
 	case *td.MessageVideo:
+		caption := ""
+		if content.Caption != nil {
+			caption = content.Caption.Text
+		}
 		if content.Video == nil {
-			return domain.MessageVideo, "", "", domain.MessageMedia{}
+			return domain.MessageVideo, caption, "", domain.MessageMedia{}
 		}
 		v := content.Video
 		var thumbnail domain.MediaFileRef
@@ -555,7 +622,7 @@ func messageContent(value td.MessageContent) (domain.MessageKind, string, string
 			h = 0
 		}
 		dur := time.Duration(max(v.Duration, 0)) * time.Second
-		return domain.MessageVideo, "", v.FileName, domain.MessageMedia{
+		return domain.MessageVideo, caption, v.FileName, domain.MessageMedia{
 			File:      mediaFileRef(v.Video),
 			Thumbnail: thumbnail,
 			MIMEType:  v.MimeType,

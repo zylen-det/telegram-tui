@@ -66,6 +66,31 @@ const (
 	SendFailed
 )
 
+// TextEntity marks a UTF-16 range in Message.Text, as supplied by Telegram.
+// Unknown entity types are omitted; Text remains plain for copying and previews.
+type TextEntity struct {
+	Offset int
+	Length int
+	Kind   TextEntityKind
+}
+
+type TextEntityKind uint8
+
+const (
+	EntityBold TextEntityKind = iota + 1
+	EntityItalic
+	EntityUnderline
+	EntityStrikethrough
+	EntitySpoiler
+	EntityCode
+	EntityPre
+	EntityQuote
+	EntityLink
+	EntityMention
+	EntityTag
+	EntityCommand
+)
+
 type Message struct {
 	ID                MessageID
 	ChatID            ChatID
@@ -79,6 +104,7 @@ type Message struct {
 	EditedAt          time.Time
 	Kind              MessageKind
 	Text              string
+	Entities          []TextEntity
 	FileName          string
 	Media             MessageMedia
 	Sticker           StickerRef

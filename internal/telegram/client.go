@@ -386,6 +386,7 @@ type MessageContentUpdated struct {
 	MessageID domain.MessageID
 	Kind      domain.MessageKind
 	Text      string
+	Entities  []domain.TextEntity
 	FileName  string
 	Media     domain.MessageMedia
 	Sticker   domain.StickerRef

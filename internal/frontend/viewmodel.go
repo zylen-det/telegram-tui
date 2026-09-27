@@ -343,6 +343,7 @@ func cloneMessageSearch(search *MessageSearchState) *MessageSearchState {
 	for index := range clone.Results {
 		clone.Results[index].Failure = cloneAppError(search.Results[index].Failure)
 		clone.Results[index].Reactions = append([]domain.MessageReaction(nil), search.Results[index].Reactions...)
+		clone.Results[index].Entities = append([]domain.TextEntity(nil), search.Results[index].Entities...)
 	}
 	clone.Error = cloneAppError(search.Error)
 	return &clone
@@ -454,6 +455,7 @@ func clonePinnedMessages(pinned *PinnedMessagesState) *PinnedMessagesState {
 	for index := range clone.Results {
 		clone.Results[index].Failure = cloneAppError(pinned.Results[index].Failure)
 		clone.Results[index].Reactions = append([]domain.MessageReaction(nil), pinned.Results[index].Reactions...)
+		clone.Results[index].Entities = append([]domain.TextEntity(nil), pinned.Results[index].Entities...)
 	}
 	clone.Error = cloneAppError(pinned.Error)
 	return &clone
@@ -501,6 +503,7 @@ func cloneMessageGroup(group MessageGroup) MessageGroup {
 	}
 	for index := range group.Messages {
 		group.Messages[index].Failure = cloneAppError(group.Messages[index].Failure)
+		group.Messages[index].Entities = append([]domain.TextEntity(nil), group.Messages[index].Entities...)
 	}
 	return group
 }

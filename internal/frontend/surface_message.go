@@ -65,6 +65,7 @@ type messageRowSpec struct {
 	messageID    domain.MessageID
 	frameID      domain.MessageID // includes reply/marker/padding rows without changing click identity
 	chips        []messageChipSpec
+	spans        []messageTextSpan
 	senderHeader bool
 }
 
@@ -241,10 +242,17 @@ func renderMessageGroupLayer(
 				}
 				continue
 			}
-			clip := ansi.Truncate(row.text, available, "")
-			if clip != "" {
-				style := messageRowStyle(row.kind, styles)
-				root.AddLayers(lipgloss.NewLayer(style.Render(clip)).X(x).Y(i).Z(zContent))
+			if len(row.spans) > 0 {
+				clip := ansi.Truncate(renderEntityRow(row, styles), available, "")
+				if clip != "" {
+					root.AddLayers(lipgloss.NewLayer(clip).X(x).Y(i).Z(zContent))
+				}
+			} else {
+				clip := ansi.Truncate(row.text, available, "")
+				if clip != "" {
+					style := messageRowStyle(row.kind, styles)
+					root.AddLayers(lipgloss.NewLayer(style.Render(clip)).X(x).Y(i).Z(zContent))
+				}
 			}
 		}
 	}
@@ -486,8 +494,15 @@ func buildMessageRows(
 		if isAttachmentMetadataKind(message.Kind) {
 			// Caption wraps above one bounded, ANSI-safe metadata row.
 			if strings.TrimSpace(message.Text) != "" {
-				for _, line := range wrapText(message.Text, widthForMessage) {
-					rows = append(rows, messageRowSpec{text: line, kind: messageRowPanel, outgoing: message.Outgoing, chatID: message.ChatID, messageID: message.ID})
+				if len(message.Entities) > 0 {
+					for _, line := range wrapEntityText(message.Text, message.Entities, widthForMessage) {
+						line.kind, line.outgoing, line.chatID, line.messageID = messageRowPanel, message.Outgoing, message.ChatID, message.ID
+						rows = append(rows, line)
+					}
+				} else {
+					for _, line := range wrapText(message.Text, widthForMessage) {
+						rows = append(rows, messageRowSpec{text: line, kind: messageRowPanel, outgoing: message.Outgoing, chatID: message.ChatID, messageID: message.ID})
+					}
 				}
 			}
 			rows = append(rows, messageRowSpec{
@@ -505,16 +520,23 @@ func buildMessageRows(
 			case domain.SendFailed:
 				text += " !"
 			}
-			lines := wrapText(text, widthForMessage)
-			if len(lines) == 0 {
-				lines = []string{""}
-			}
 			kind := messageRowPanel
 			if message.Service {
 				kind = messageRowMuted
 			}
-			for _, line := range lines {
-				rows = append(rows, messageRowSpec{text: line, kind: kind, outgoing: message.Outgoing, chatID: message.ChatID, messageID: message.ID})
+			if message.Kind == domain.MessageText && len(message.Entities) > 0 {
+				for _, line := range wrapEntityText(text, message.Entities, widthForMessage) {
+					line.kind, line.outgoing, line.chatID, line.messageID = kind, message.Outgoing, message.ChatID, message.ID
+					rows = append(rows, line)
+				}
+			} else {
+				lines := wrapText(text, widthForMessage)
+				if len(lines) == 0 {
+					lines = []string{""}
+				}
+				for _, line := range lines {
+					rows = append(rows, messageRowSpec{text: line, kind: kind, outgoing: message.Outgoing, chatID: message.ChatID, messageID: message.ID})
+				}
 			}
 		}
 		if message.Edited() {

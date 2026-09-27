@@ -1563,6 +1563,7 @@ func filterTopicMessages(messages []domain.Message, topicID domain.TopicID) []do
 }
 
 func cloneMessage(message domain.Message) domain.Message {
+	message.Entities = append([]domain.TextEntity(nil), message.Entities...)
 	if message.Failure != nil {
 		failure := *message.Failure
 		message.Failure = &failure

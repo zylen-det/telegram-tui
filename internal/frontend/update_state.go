@@ -421,6 +421,7 @@ func updateState(state *State, raw Event) []Effect {
 				replacement := original
 				replacement.Kind = event.Message.Kind
 				replacement.Text = event.Message.Text
+				replacement.Entities = append([]domain.TextEntity(nil), event.Message.Entities...)
 				if !event.Message.EditedAt.IsZero() {
 					replacement.EditedAt = event.Message.EditedAt
 				}
@@ -794,6 +795,7 @@ func reduceTelegramUpdate(state *State, event TelegramEvent) []Effect {
 			existing := state.Messages[update.ChatID][index].Media.Thumbnail
 			state.Messages[update.ChatID][index].Kind = update.Kind
 			state.Messages[update.ChatID][index].Text = update.Text
+			state.Messages[update.ChatID][index].Entities = append([]domain.TextEntity(nil), update.Entities...)
 			state.Messages[update.ChatID][index].FileName = update.FileName
 			state.Messages[update.ChatID][index].Media = update.Media
 			state.Messages[update.ChatID][index].Sticker = update.Sticker
@@ -4217,6 +4219,7 @@ func avatarPixelDimensions(role avatar.Role) (int, int) {
 }
 
 func cloneDomainMessage(message domain.Message) domain.Message {
+	message.Entities = append([]domain.TextEntity(nil), message.Entities...)
 	message.Failure = cloneDomainError(message.Failure)
 	message.Reactions = append([]domain.MessageReaction(nil), message.Reactions...)
 	return message
