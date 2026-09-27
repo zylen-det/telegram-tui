@@ -699,6 +699,7 @@ func TestNormalizerMapsMessageMediaIdentity(t *testing.T) {
 			name: "photo",
 			args: args{
 				content: &td.MessagePhoto{
+					Caption: &td.FormattedText{Text: "photo caption"},
 					Photo: &td.Photo{Sizes: []*td.PhotoSize{
 						{
 							Type:   "small",
@@ -723,6 +724,7 @@ func TestNormalizerMapsMessageMediaIdentity(t *testing.T) {
 			},
 			want: want{
 				kind: domain.MessagePhoto,
+				text: "photo caption",
 				media: domain.MessageMedia{
 					File: domain.MediaFileRef{
 						ID: 12, UniqueID: "photo-large", Size: 500, ExpectedSize: 1000,
@@ -1206,6 +1208,7 @@ func TestNormalizerMapsMessageContentMediaUpdate(t *testing.T) {
 		ChatId:    3,
 		MessageId: 50,
 		NewContent: &td.MessagePhoto{
+			Caption: &td.FormattedText{Text: "updated caption"},
 			Photo: &td.Photo{
 				Sizes: []*td.PhotoSize{
 					{Type: "s", Photo: &td.File{Id: 55, Remote: &td.RemoteFile{UniqueId: "upd-photo"}}, Width: 200, Height: 200},
@@ -1224,8 +1227,8 @@ func TestNormalizerMapsMessageContentMediaUpdate(t *testing.T) {
 	if content.Kind != domain.MessagePhoto {
 		t.Fatalf("kind = %v, want %v", content.Kind, domain.MessagePhoto)
 	}
-	if content.Text != "" {
-		t.Fatalf("text = %q, want empty", content.Text)
+	if content.Text != "updated caption" {
+		t.Fatalf("text = %q, want updated caption", content.Text)
 	}
 	if content.FileName != "" {
 		t.Fatalf("fileName = %q, want empty", content.FileName)

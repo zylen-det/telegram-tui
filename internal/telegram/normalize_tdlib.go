@@ -534,6 +534,8 @@ func messageEntities(value td.MessageContent) []domain.TextEntity {
 	switch content := value.(type) {
 	case *td.MessageText:
 		formatted = content.Text
+	case *td.MessagePhoto:
+		formatted = content.Caption
 	case *td.MessageVideo:
 		formatted = content.Caption
 	case *td.MessageAudio:
@@ -596,10 +598,14 @@ func messageContent(value td.MessageContent) (domain.MessageKind, string, string
 		}
 		return domain.MessageText, content.Text.Text, "", domain.MessageMedia{}
 	case *td.MessagePhoto:
-		if content.Photo == nil {
-			return domain.MessagePhoto, "", "", domain.MessageMedia{}
+		caption := ""
+		if content.Caption != nil {
+			caption = content.Caption.Text
 		}
-		return domain.MessagePhoto, "", "", photoMedia(content.Photo.Sizes)
+		if content.Photo == nil {
+			return domain.MessagePhoto, caption, "", domain.MessageMedia{}
+		}
+		return domain.MessagePhoto, caption, "", photoMedia(content.Photo.Sizes)
 	case *td.MessageVideo:
 		caption := ""
 		if content.Caption != nil {

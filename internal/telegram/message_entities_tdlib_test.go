@@ -54,7 +54,8 @@ func TestMessageEntitiesNormalizeAndUpdate(t *testing.T) {
 		t.Fatalf("content update entities = %#v", update)
 	}
 	for _, content := range []td.MessageContent{
-		&td.MessageVideo{Caption: text}, &td.MessageAudio{Caption: text},
+		&td.MessagePhoto{Caption: text}, &td.MessageVideo{Caption: text},
+		&td.MessageAudio{Caption: text},
 	} {
 		caption := n.message(&td.Message{Id: 2, Content: content})
 		if caption.Text != text.Text || !reflect.DeepEqual(caption.Entities, want) {

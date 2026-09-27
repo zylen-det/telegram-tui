@@ -755,7 +755,7 @@ func TestHistoryEmptyAndTinyViewportSafety(t *testing.T) {
 // Kitty thumbnail surfaces as an absolute-viewport Inline placement.
 func TestHistoryPublishesKittyPlacementsAbsolute(t *testing.T) {
 	styles := newRenderStyles(false)
-	msg := testMessage(4001, 9, "[Photo]")
+	msg := testMessage(4001, 9, "")
 	msg.Kind = domain.MessagePhoto
 	group := styledMessageGroup("Mina", false, msg)
 
@@ -782,7 +782,7 @@ func TestHistoryPublishesKittyPlacementsAbsolute(t *testing.T) {
 // absolute-viewport placement instead of being dropped.
 func TestHistoryClipsKittyPlacementsToViewport(t *testing.T) {
 	styles := newRenderStyles(false)
-	msg := testMessage(4002, 9, "[Photo]")
+	msg := testMessage(4002, 9, "")
 	msg.Kind = domain.MessagePhoto
 	group := styledMessageGroup("Mina", false, msg)
 

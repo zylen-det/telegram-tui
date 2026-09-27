@@ -610,8 +610,9 @@ func videoMetadata(message domain.Message) string {
 // caption-plus-metadata conversation layout.
 func isAttachmentMetadataKind(kind domain.MessageKind) bool {
 	switch kind {
-	case domain.MessageVideo, domain.MessageAudio, domain.MessageDocument,
-		domain.MessageAnimation, domain.MessageVoiceNote, domain.MessageVideoNote:
+	case domain.MessagePhoto, domain.MessageVideo, domain.MessageAudio,
+		domain.MessageDocument, domain.MessageAnimation, domain.MessageVoiceNote,
+		domain.MessageVideoNote:
 		return true
 	}
 	return false

@@ -940,7 +940,7 @@ func TestMessageGroupSliceFullUnchangedSourceNotMutated(t *testing.T) {
 // inline thumbnail block reserves the correct number of placeholder rows.
 func TestMessageGroupWithThumbnailReservesRows(t *testing.T) {
 	styles := newRenderStyles(false)
-	msg := testMessage(1001, 5, "[Photo]")
+	msg := testMessage(1001, 5, "")
 	msg.Kind = domain.MessagePhoto
 	group := styledMessageGroup("Mina", false, msg)
 
@@ -961,7 +961,7 @@ func TestMessageGroupWithThumbnailReservesRows(t *testing.T) {
 // contains the thumbnail block text via the compositor.
 func TestMessageGroupThumbnailPlacedAsLayer(t *testing.T) {
 	styles := newRenderStyles(false)
-	msg := testMessage(1002, 6, "[Photo]")
+	msg := testMessage(1002, 6, "")
 	msg.Kind = domain.MessagePhoto
 	group := styledMessageGroup("Mina", false, msg)
 
@@ -995,7 +995,7 @@ func TestMessageGroupThumbnailPlacedAsLayer(t *testing.T) {
 // is reserved when a photo has no inline thumbnail.
 func TestMessageGroupNoThumbnailKeepsSingleRow(t *testing.T) {
 	styles := newRenderStyles(false)
-	msg := testMessage(1003, 7, "[Photo]")
+	msg := testMessage(1003, 7, "")
 	msg.Kind = domain.MessagePhoto
 	group := styledMessageGroup("Mina", false, msg)
 
@@ -1016,9 +1016,9 @@ func TestMessageGroupNoThumbnailKeepsSingleRow(t *testing.T) {
 // each with their own thumbnail block both get rendered as layers.
 func TestMessageGroupMultipleThumbnailsCoexist(t *testing.T) {
 	styles := newRenderStyles(false)
-	msg1 := testMessage(1004, 8, "[Photo]")
+	msg1 := testMessage(1004, 8, "")
 	msg1.Kind = domain.MessagePhoto
-	msg2 := testMessage(1005, 8, "[Photo]")
+	msg2 := testMessage(1005, 8, "")
 	msg2.Kind = domain.MessagePhoto
 	group := styledMessageGroup("Mina", false, msg1, msg2)
 
@@ -1056,7 +1056,7 @@ func TestMessageGroupMultipleThumbnailsCoexist(t *testing.T) {
 // emitted outside the text compositor.
 func TestMessageGroupKittyThumbnailRecordedAsPlacement(t *testing.T) {
 	styles := newRenderStyles(false)
-	msg := testMessage(2001, 7, "[Photo]")
+	msg := testMessage(2001, 7, "")
 	msg.Kind = domain.MessagePhoto
 	group := styledMessageGroup("Mina", false, msg)
 
@@ -1091,7 +1091,7 @@ func TestMessageGroupKittyThumbnailRecordedAsPlacement(t *testing.T) {
 // emitted.
 func TestMessageGroupKittyPlacementSurvivesSlice(t *testing.T) {
 	styles := newRenderStyles(false)
-	msg := testMessage(3001, 8, "[Photo]")
+	msg := testMessage(3001, 8, "")
 	msg.Kind = domain.MessagePhoto
 	group := styledMessageGroup("Mina", false, msg)
 

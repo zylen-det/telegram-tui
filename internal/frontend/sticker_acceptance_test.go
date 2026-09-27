@@ -120,7 +120,7 @@ func TestStickerMessagesSharingCachedKittyBlockGetPlacementSpecificTransmits(t *
 	stickerB := testMessage(-2, 9, "[Sticker]")
 	stickerB.Kind = domain.MessageSticker
 	stickerB.Outgoing = true
-	photoMsg := testMessage(77, 9, "[Photo]")
+	photoMsg := testMessage(77, 9, "")
 	photoMsg.Kind = domain.MessagePhoto
 	photoMsg.Outgoing = true
 	group := styledMessageGroup("Mina", false, stickerA, photoMsg, stickerB)

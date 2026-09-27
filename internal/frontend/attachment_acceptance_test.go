@@ -7,6 +7,7 @@ import (
 	"unicode"
 
 	"github.com/zylen-det/telegram-tui/internal/domain"
+	"github.com/zylen-det/telegram-tui/internal/media/thumbnail"
 )
 
 func TestAttachmentMetadataAndFallbacks(t *testing.T) {
@@ -55,6 +56,23 @@ func TestAttachmentMetadataAndFallbacks(t *testing.T) {
 				t.Fatalf("fallback = %q, want %q", got, test.message.DisplayText())
 			}
 		})
+	}
+}
+
+func TestPhotoCaptionRendersBelowThumbnailAndAboveFallback(t *testing.T) {
+	message := domain.Message{ID: 77, ChatID: 9, Kind: domain.MessagePhoto, Text: "photo caption"}
+	group := RenderedMessageGroup{MessageGroup: MessageGroup{Messages: []domain.Message{message}}}
+	preview := thumbnail.Block{Text: "preview", Width: 20, Height: 2}
+
+	rows, _ := buildMessageRows(group, 80, time.UTC, messageSelection{}, map[domain.MessageID]thumbnail.Block{77: preview})
+	want := []string{"", "", "", "photo caption", "[Photo]", ""}
+	if len(rows) != len(want) {
+		t.Fatalf("rows = %#v, want texts %#v", rows, want)
+	}
+	for index, text := range want {
+		if rows[index].text != text {
+			t.Fatalf("row %d text = %q, want %q", index, rows[index].text, text)
+		}
 	}
 }
 
