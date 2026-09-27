@@ -74,7 +74,7 @@ Start the client:
 telegram-tui
 ```
 
-On first launch, enter your Telegram application credentials, phone number, login code, and—if enabled—2FA password in the TUI. The application credentials and a generated TDLib database key are saved in `config.toml` with mode `0600`; login codes and passwords are not saved.
+On first launch, enter your Telegram application credentials, phone number, login code, and—if enabled—2FA password in the TUI. If Telegram rejects an invalid phone number, the TUI prompts for it again instead of exiting. The application credentials and a generated TDLib database key are saved in `config.toml` with mode `0600`; login codes and passwords are not saved.
 
 For one-off launches, application credentials may be supplied through the environment:
 
@@ -132,6 +132,16 @@ The interface adapts to the terminal size:
 
 telegram-tui uses the terminal's default background. Configure translucency in Kitty—for example, `background_opacity 0.9`—rather than in the application.
 
+Sender names above messages use the sender accent-color ID assigned by Telegram; the adjacent timestamp keeps the normal text color. IDs 0–6 default to a Telegram Android-style palette. Newly generated `config.toml` files include a `[sender_colors]` section with all seven defaults. Edit any of its six-digit RGB values in `~/.config/telegram-tui/config.toml` (or under `XDG_CONFIG_HOME`) and restart to apply changes. For an older config, add the section yourself:
+
+```toml
+[sender_colors]
+"0" = "#CC5049" # red
+"3" = "#40A920" # green
+```
+
+Unspecified IDs retain their defaults. For other accent IDs, telegram-tui uses TDLib's dark-theme RGB values when available. This does not sync themes with another Telegram app.
+
 ## Local data and privacy
 
 | Data | Default location |
@@ -144,7 +154,7 @@ telegram-tui uses the terminal's default background. Configure translucency in K
 
 The corresponding XDG environment variables override these roots. Removing the avatar cache does not remove the Telegram session.
 
-Logs are rotating and restricted to an allow-list. They do not contain credentials, message or draft text, Telegram payloads, local media paths, commands, or raw errors.
+Logs are rotating and restricted to an allow-list. They do not contain credentials, message or draft text, Telegram payloads, local media paths, commands, or raw errors. Normal and failed exits are recorded in `~/.local/state/telegram-tui/telegram-tui.log` (or under `XDG_STATE_HOME`); failed startup logs only a safe error category, not raw TDLib details, and returns a nonzero exit status.
 
 ## Known limitations
 

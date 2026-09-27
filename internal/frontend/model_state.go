@@ -1,9 +1,11 @@
 package frontend
 
 import (
+	"image/color"
 	"time"
 
 	"github.com/zylen-det/telegram-tui/internal/auth"
+	"github.com/zylen-det/telegram-tui/internal/config"
 	"github.com/zylen-det/telegram-tui/internal/domain"
 	"github.com/zylen-det/telegram-tui/internal/media/avatar"
 	"github.com/zylen-det/telegram-tui/internal/media/pixel"
@@ -355,6 +357,9 @@ type State struct {
 	FocusedChat              int
 	SelectedChat             int
 	Messages                 map[domain.ChatID][]domain.Message
+	SenderPalette            [7]color.RGBA
+	SenderAccents            map[domain.SenderRef]int32
+	CustomSenderColors       map[int32]uint32
 	SelectedMessageChat      domain.ChatID
 	SelectedMessage          domain.MessageID
 	MessageMenu              *MessageActionMenu
@@ -421,7 +426,10 @@ type State struct {
 }
 
 func InitialState() State {
+	palette, _ := (config.Preferences{}).SenderPalette()
 	return State{
+		SenderPalette:            palette,
+		SenderAccents:            make(map[domain.SenderRef]int32),
 		Layout:                   LayoutTooSmall,
 		Focus:                    FocusChats,
 		TerminalFocused:          true,

@@ -5,6 +5,7 @@ package telegram
 import (
 	"context"
 	"errors"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -26,21 +27,29 @@ const (
 
 type recordingPrompter struct {
 	value   string
+	values  []string
 	err     error
 	prompts []auth.Prompt
 }
 
 func (p *recordingPrompter) Ask(_ context.Context, prompt auth.Prompt) (string, error) {
 	p.prompts = append(p.prompts, prompt)
+	if len(p.values) > 0 {
+		value := p.values[0]
+		p.values = p.values[1:]
+		return value, p.err
+	}
 	return p.value, p.err
 }
 
 type recordingAuthorizationClient struct {
-	parameters *td.SetTdlibParametersRequest
-	phone      *td.SetAuthenticationPhoneNumberRequest
-	code       *td.CheckAuthenticationCodeRequest
-	password   *td.CheckAuthenticationPasswordRequest
-	err        error
+	parameters  *td.SetTdlibParametersRequest
+	phone       *td.SetAuthenticationPhoneNumberRequest
+	phones      []string
+	phoneErrors []error
+	code        *td.CheckAuthenticationCodeRequest
+	password    *td.CheckAuthenticationPasswordRequest
+	err         error
 }
 
 func (c *recordingAuthorizationClient) SetTdlibParameters(_ context.Context, request *td.SetTdlibParametersRequest) (*td.Ok, error) {
@@ -50,6 +59,12 @@ func (c *recordingAuthorizationClient) SetTdlibParameters(_ context.Context, req
 
 func (c *recordingAuthorizationClient) SetAuthenticationPhoneNumber(_ context.Context, request *td.SetAuthenticationPhoneNumberRequest) (*td.Ok, error) {
 	c.phone = request
+	c.phones = append(c.phones, request.PhoneNumber)
+	if len(c.phoneErrors) > 0 {
+		err := c.phoneErrors[0]
+		c.phoneErrors = c.phoneErrors[1:]
+		return &td.Ok{}, err
+	}
 	return &td.Ok{}, c.err
 }
 
@@ -182,6 +197,46 @@ func TestAuthorizationHandlerSubmitsPhoneNumber(t *testing.T) {
 	assertSinglePrompt(t, prompts, auth.Prompt{Kind: auth.PromptPhone, Label: "Phone number"})
 	if client.phone == nil || client.phone.PhoneNumber != testPhone {
 		t.Fatal("phone request does not contain the prompted phone number")
+	}
+}
+
+func TestAuthorizationHandlerRetriesInvalidPhoneWithVisibleFeedback(t *testing.T) {
+	prompts := &recordingPrompter{values: []string{"invalid-phone-private", testPhone}}
+	client := &recordingAuthorizationClient{phoneErrors: []error{
+		td.ResponseError{Err: &td.Error{Code: 400, Message: "PHONE_NUMBER_INVALID"}}, nil,
+	}}
+	handler := newAuthorizationHandler(context.Background(), testRuntime(), prompts)
+	if err := handler.handle(client, &td.AuthorizationStateWaitPhoneNumber{}); err != nil {
+		t.Fatalf("invalid phone caused authorization exit: %v", err)
+	}
+	if !reflect.DeepEqual(client.phones, []string{"invalid-phone-private", testPhone}) {
+		t.Fatalf("phone submissions = %v", client.phones)
+	}
+	if len(prompts.prompts) != 2 || prompts.prompts[0].Kind != auth.PromptPhone ||
+		prompts.prompts[1].Kind != auth.PromptPhone || prompts.prompts[1].Label != "Invalid phone number; enter again" ||
+		prompts.prompts[1].Secret {
+		t.Fatalf("retry prompt = %#v", prompts.prompts)
+	}
+	if strings.Contains(prompts.prompts[1].Label, "invalid-phone-private") {
+		t.Fatal("rejection feedback contains the submitted phone")
+	}
+}
+
+func TestAuthorizationHandlerDoesNotRetryOtherPhoneErrors(t *testing.T) {
+	for _, response := range []td.ResponseError{
+		{Err: &td.Error{Code: 429, Message: "FLOOD_WAIT_60"}},
+		{Err: &td.Error{Code: 406, Message: "private payload"}},
+	} {
+		prompts := &recordingPrompter{value: testPhone}
+		client := &recordingAuthorizationClient{err: response}
+		handler := newAuthorizationHandler(context.Background(), testRuntime(), prompts)
+		err := handler.handle(client, &td.AuthorizationStateWaitPhoneNumber{})
+		if !errors.Is(err, response) || len(prompts.prompts) != 1 || len(client.phones) != 1 {
+			t.Fatalf("error %d: result %v, prompts %d, submissions %d", response.Err.Code, err, len(prompts.prompts), len(client.phones))
+		}
+		if strings.Contains(err.Error(), response.Err.Message) || strings.Contains(err.Error(), testPhone) {
+			t.Fatalf("error %d exposed private response", response.Err.Code)
+		}
 	}
 }
 

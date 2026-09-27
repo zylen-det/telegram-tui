@@ -58,13 +58,14 @@ type messageChipSpec struct {
 
 // messageRowSpec is one semantic row of a message group.
 type messageRowSpec struct {
-	text      string
-	kind      messageRowKind
-	outgoing  bool
-	chatID    domain.ChatID
-	messageID domain.MessageID
-	frameID   domain.MessageID // includes reply/marker/padding rows without changing click identity
-	chips     []messageChipSpec
+	text         string
+	kind         messageRowKind
+	outgoing     bool
+	chatID       domain.ChatID
+	messageID    domain.MessageID
+	frameID      domain.MessageID // includes reply/marker/padding rows without changing click identity
+	chips        []messageChipSpec
+	senderHeader bool
 }
 
 // messageGroupLocalInteraction is one interactive region of a message group.
@@ -225,6 +226,21 @@ func renderMessageGroupLayer(
 		}
 		available := max(0, width-x)
 		if available > 0 && row.text != "" {
+			if row.senderHeader && group.HasSenderColor {
+				name := strings.TrimSpace(group.SenderName)
+				nameClip := ansi.Truncate(name, available, "")
+				if nameClip != "" {
+					root.AddLayers(lipgloss.NewLayer(styles.Emphasis.Foreground(group.SenderColor).Render(nameClip)).X(x).Y(i).Z(zContent))
+				}
+				used := displayWidth(nameClip)
+				if used < available && used == displayWidth(name) {
+					tail := ansi.Truncate(strings.TrimPrefix(row.text, name), available-used, "")
+					if tail != "" {
+						root.AddLayers(lipgloss.NewLayer(styles.Emphasis.Render(tail)).X(x + used).Y(i).Z(zContent))
+					}
+				}
+				continue
+			}
 			clip := ansi.Truncate(row.text, available, "")
 			if clip != "" {
 				style := messageRowStyle(row.kind, styles)
@@ -421,7 +437,7 @@ func buildMessageRows(
 		contentWidth = max(1, width-6) // frame starts at x=4, text at x=5
 		first := group.Messages[0]
 		header := strings.TrimSpace(group.SenderName + "  " + first.SentAt.In(location).Format("15:04"))
-		rows = append(rows, messageRowSpec{text: header, kind: messageRowEmphasis})
+		rows = append(rows, messageRowSpec{text: header, kind: messageRowEmphasis, senderHeader: true})
 	}
 
 	selected := false

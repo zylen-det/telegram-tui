@@ -67,29 +67,31 @@ const (
 )
 
 type Message struct {
-	ID               MessageID
-	ChatID           ChatID
-	TopicID          TopicID
-	Sender           SenderRef
-	SenderName       string
-	SenderAvatar     AvatarRef
-	SentAt           time.Time
-	EditedAt         time.Time
-	Kind             MessageKind
-	Text             string
-	FileName         string
-	Media            MessageMedia
-	Sticker          StickerRef
-	Outgoing         bool
-	Service          bool
-	HasReply         bool
-	ReplyToMessageID MessageID
-	HasForward       bool
-	Pinned           bool
-	Reactions        []MessageReaction
-	SendState        SendState
-	Failure          *AppError
-	RetryAt          time.Time
+	ID                MessageID
+	ChatID            ChatID
+	TopicID           TopicID
+	Sender            SenderRef
+	SenderName        string
+	SenderAvatar      AvatarRef
+	SenderAccentID    int32
+	SenderAccentKnown bool
+	SentAt            time.Time
+	EditedAt          time.Time
+	Kind              MessageKind
+	Text              string
+	FileName          string
+	Media             MessageMedia
+	Sticker           StickerRef
+	Outgoing          bool
+	Service           bool
+	HasReply          bool
+	ReplyToMessageID  MessageID
+	HasForward        bool
+	Pinned            bool
+	Reactions         []MessageReaction
+	SendState         SendState
+	Failure           *AppError
+	RetryAt           time.Time
 }
 
 func (m Message) Edited() bool { return !m.EditedAt.IsZero() }

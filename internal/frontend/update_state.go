@@ -703,6 +703,11 @@ func reduceTelegramUpdate(state *State, event TelegramEvent) []Effect {
 			event.Value = *update
 			return reduceTelegramUpdate(state, event)
 		}
+	case *telegram.AccentColorsChanged:
+		if update != nil {
+			event.Value = *update
+			return reduceTelegramUpdate(state, event)
+		}
 	case *telegram.MessageUpserted:
 		if update != nil {
 			event.Value = *update
@@ -752,6 +757,10 @@ func reduceTelegramUpdate(state *State, event TelegramEvent) []Effect {
 	case telegram.ConnectionChanged:
 		state.Connection = update.State
 	case telegram.ChatUpserted:
+		if state.SenderAccents == nil {
+			state.SenderAccents = make(map[domain.SenderRef]int32)
+		}
+		state.SenderAccents[domain.SenderRef{Kind: domain.SenderChat, ID: int64(update.Chat.ID)}] = update.Chat.AccentColorID
 		selectedID, _ := activeChatID(*state)
 		focusedID, _ := focusedChatID(*state)
 		if update.Chat.IsArchived && (state.ChatActions == nil || state.ChatActions.ChatID != update.Chat.ID || !state.ChatActions.Working) {
@@ -770,6 +779,13 @@ func reduceTelegramUpdate(state *State, event TelegramEvent) []Effect {
 		return requestMissingChatAvatars(state, []domain.Chat{update.Chat})
 	case telegram.DraftChanged:
 		applyCloudDraft(state, update.ChatID, update.Draft)
+	case telegram.UserUpserted:
+		if state.SenderAccents == nil {
+			state.SenderAccents = make(map[domain.SenderRef]int32)
+		}
+		state.SenderAccents[domain.SenderRef{Kind: domain.SenderUser, ID: int64(update.User.ID)}] = update.User.AccentColorID
+	case telegram.AccentColorsChanged:
+		state.CustomSenderColors = update.DarkRGB
 	case telegram.MessageUpserted:
 		return reduceMessageUpsertedAndNotify(state, update.Message)
 	case telegram.MessageContentUpdated:

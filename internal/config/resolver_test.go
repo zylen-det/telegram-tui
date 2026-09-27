@@ -55,6 +55,13 @@ func TestResolverFirstRunPromptsAndPersistsLocalConfig(t *testing.T) {
 	if stored.APIID != 12345 || stored.APIHash != "first-run-api-hash" || stored.DatabaseKey == "" {
 		t.Fatal("local config did not persist all first-run values")
 	}
+	if len(stored.SenderColors) != 7 || stored.SenderColors["0"] != "#CC5049" || stored.SenderColors["6"] != "#C7508B" {
+		t.Fatalf("generated config sender colors = %v", stored.SenderColors)
+	}
+	contents, err := os.ReadFile(paths.ConfigFile)
+	if err != nil || !strings.Contains(string(contents), "[sender_colors]") {
+		t.Fatalf("generated config missing sender_colors section: %v", err)
+	}
 	decoded, err := base64.RawStdEncoding.DecodeString(stored.DatabaseKey)
 	if err != nil || !reflect.DeepEqual(decoded, runtime.DatabaseKey) {
 		t.Fatal("stored database key does not match runtime database key")
@@ -77,7 +84,7 @@ func TestResolverRestartUsesStoredConfigWithoutPromptingOrRewritingKey(t *testin
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
-	if len(prompts.prompts) != 0 || runtime.APIID != want.APIID || runtime.APIHash != want.APIHash || runtime.Preferences != want {
+	if len(prompts.prompts) != 0 || runtime.APIID != want.APIID || runtime.APIHash != want.APIHash || !reflect.DeepEqual(runtime.Preferences, want) {
 		t.Fatal("restart did not reuse stored config")
 	}
 	for _, value := range runtime.DatabaseKey {
@@ -102,7 +109,7 @@ func TestResolverEnvironmentOverridesStoredCredentialsWithoutPersistingOverrides
 		t.Fatal("environment credentials did not override stored credentials")
 	}
 	after, _ := LoadPreferences(paths.ConfigFile)
-	if after != stored {
+	if !reflect.DeepEqual(after, stored) {
 		t.Fatal("one-launch environment override was copied to config")
 	}
 }

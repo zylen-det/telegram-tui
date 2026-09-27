@@ -67,6 +67,14 @@ func (n *normalizer) update(value td.Type) []Update {
 		if update.AuthorizationState != nil && update.AuthorizationState.AuthorizationStateConstructor() == td.ConstructorAuthorizationStateClosed {
 			return []Update{Closed{}}
 		}
+	case *td.UpdateAccentColors:
+		colors := make(map[int32]uint32, len(update.Colors))
+		for _, entry := range update.Colors {
+			if entry != nil && len(entry.DarkThemeColors) > 0 {
+				colors[entry.Id] = uint32(entry.DarkThemeColors[0]) & 0xffffff
+			}
+		}
+		return []Update{AccentColorsChanged{DarkRGB: colors}}
 	case *td.UpdateUser:
 		if update.User == nil {
 			return nil
@@ -114,6 +122,8 @@ func (n *normalizer) update(value td.Type) []Update {
 		return n.changeChatLocked(update.ChatId, func(chat *domain.Chat) { chat.Title = update.Title })
 	case *td.UpdateChatPhoto:
 		return n.changeChatLocked(update.ChatId, func(chat *domain.Chat) { chat.Avatar = avatarFromChatPhoto(update.Photo) })
+	case *td.UpdateChatAccentColors:
+		return n.changeChatLocked(update.ChatId, func(chat *domain.Chat) { chat.AccentColorID = update.AccentColorId })
 	case *td.UpdateChatReadInbox:
 		return n.changeChatLocked(update.ChatId, func(chat *domain.Chat) { chat.UnreadCount = int(update.UnreadCount) })
 	case *td.UpdateChatUnreadMentionCount:
@@ -279,6 +289,7 @@ func (n *normalizer) chatWithLastMessageLocked(value *td.Chat) (domain.Chat, dom
 		Kind:                 peer.kind,
 		Title:                value.Title,
 		Username:             n.peerUsernameLocked(peer),
+		AccentColorID:        value.AccentColorId,
 		Avatar:               avatarFromChatPhoto(value.Photo),
 		UnreadCount:          int(value.UnreadCount),
 		UnreadMentionCount:   int(value.UnreadMentionCount),
@@ -327,10 +338,11 @@ func (n *normalizer) userLocked(value *td.User) domain.User {
 		name = "Unknown"
 	}
 	user := domain.User{
-		ID:       domain.UserID(value.Id),
-		Name:     name,
-		Username: firstUsername(value.Usernames),
-		Avatar:   avatarFromProfilePhoto(value.ProfilePhoto),
+		ID:            domain.UserID(value.Id),
+		Name:          name,
+		Username:      firstUsername(value.Usernames),
+		AccentColorID: value.AccentColorId,
+		Avatar:        avatarFromProfilePhoto(value.ProfilePhoto),
 	}
 	n.users[value.Id] = user
 	return user
@@ -347,30 +359,33 @@ func (n *normalizer) messageLocked(value *td.Message) domain.Message {
 		return domain.Message{}
 	}
 	sender, senderName, senderAvatar := n.senderLocked(value.SenderId)
+	accentID, accentKnown := n.senderAccentLocked(sender)
 	kind, text, fileName, media := messageContent(value.Content)
 	editedAt := time.Time{}
 	if value.EditDate > 0 {
 		editedAt = time.Unix(int64(value.EditDate), 0)
 	}
 	message := domain.Message{
-		ID:           domain.MessageID(value.Id),
-		ChatID:       domain.ChatID(value.ChatId),
-		TopicID:      topicIDFromMessage(value.TopicId),
-		Sender:       sender,
-		SenderName:   senderName,
-		SenderAvatar: senderAvatar,
-		SentAt:       time.Unix(int64(value.Date), 0),
-		EditedAt:     editedAt,
-		Kind:         kind,
-		Text:         text,
-		FileName:     fileName,
-		Media:        media,
-		Outgoing:     value.IsOutgoing,
-		Service:      kind == domain.MessageService,
-		HasReply:     value.ReplyTo != nil,
-		HasForward:   value.ForwardInfo != nil,
-		Pinned:       value.IsPinned,
-		Reactions:    reactionsFromMessageLocked(value.InteractionInfo),
+		ID:                domain.MessageID(value.Id),
+		ChatID:            domain.ChatID(value.ChatId),
+		TopicID:           topicIDFromMessage(value.TopicId),
+		Sender:            sender,
+		SenderName:        senderName,
+		SenderAvatar:      senderAvatar,
+		SenderAccentID:    accentID,
+		SenderAccentKnown: accentKnown,
+		SentAt:            time.Unix(int64(value.Date), 0),
+		EditedAt:          editedAt,
+		Kind:              kind,
+		Text:              text,
+		FileName:          fileName,
+		Media:             media,
+		Outgoing:          value.IsOutgoing,
+		Service:           kind == domain.MessageService,
+		HasReply:          value.ReplyTo != nil,
+		HasForward:        value.ForwardInfo != nil,
+		Pinned:            value.IsPinned,
+		Reactions:         reactionsFromMessageLocked(value.InteractionInfo),
 	}
 	if content, ok := value.Content.(*td.MessageSticker); ok {
 		message.Sticker = stickerRef(content.Sticker)
@@ -454,6 +469,18 @@ func (n *normalizer) senderLocked(value td.MessageSender) (domain.SenderRef, str
 	default:
 		return domain.SenderRef{}, "Unknown", domain.AvatarRef{}
 	}
+}
+
+func (n *normalizer) senderAccentLocked(sender domain.SenderRef) (int32, bool) {
+	switch sender.Kind {
+	case domain.SenderUser:
+		user, ok := n.users[sender.ID]
+		return user.AccentColorID, ok
+	case domain.SenderChat:
+		chat, ok := n.chats[sender.ID]
+		return chat.AccentColorID, ok
+	}
+	return 0, false
 }
 
 func staticDocumentThumbnail(value *td.Thumbnail) domain.MediaFileRef {

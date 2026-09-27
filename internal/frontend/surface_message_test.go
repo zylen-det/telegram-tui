@@ -13,6 +13,7 @@ import (
 	"github.com/zylen-det/telegram-tui/internal/domain"
 	"github.com/zylen-det/telegram-tui/internal/media/pixel"
 	"github.com/zylen-det/telegram-tui/internal/media/thumbnail"
+	"github.com/zylen-det/telegram-tui/internal/telegram"
 )
 
 func messageGroupCanvas(
@@ -80,6 +81,40 @@ func selectMessageInteractions(result messageGroupResult) []messageGroupLocalInt
 		}
 	}
 	return out
+}
+
+func TestSenderAccentPaletteAndUpdatesColorOnlyName(t *testing.T) {
+	state := InitialState()
+	state.Chats = []domain.Chat{{ID: 90, Kind: domain.ChatSupergroup, Title: "Group"}}
+	message := testMessage(1, 90, "Hello")
+	message.Sender = domain.SenderRef{Kind: domain.SenderUser, ID: 41}
+	message.SenderName = "Ada"
+	message.SenderAccentKnown = true
+	message.SenderAccentID = 3
+	message.SentAt = time.Date(2026, time.July, 20, 15, 4, 0, 0, time.UTC)
+	state.Messages[90] = []domain.Message{message}
+
+	check := func(want color.RGBA) {
+		t.Helper()
+		groups := Select(state, time.UTC).Groups
+		if len(groups) != 1 || !groups[0].HasSenderColor || groups[0].SenderColor != want {
+			t.Fatalf("sender color = %+v, want %v", groups, want)
+		}
+		canvas, _, _ := messageGroupCanvas(groups[0], 40, time.UTC, messageSelection{}, nil, newRenderStyles(false))
+		if got := colorOf(canvas.CellAt(5, 0).Style.Fg); got != want {
+			t.Errorf("name color = %v, want %v", got, want)
+		}
+		if got := colorOf(canvas.CellAt(10, 0).Style.Fg); got != rgba(textColor) {
+			t.Errorf("timestamp color = %v, want text color", got)
+		}
+	}
+	check(state.SenderPalette[3]) // Loaded message can carry its sender's ID.
+	updateState(&state, TelegramEvent{Value: telegram.UserUpserted{User: domain.User{ID: 41, AccentColorID: 0}}})
+	state.SenderPalette[0] = color.RGBA{R: 1, G: 2, B: 3, A: 255}
+	check(state.SenderPalette[0]) // ID 0 is valid and the user update supersedes old messages.
+	updateState(&state, TelegramEvent{Value: telegram.UserUpserted{User: domain.User{ID: 41, AccentColorID: 8}}})
+	updateState(&state, TelegramEvent{Value: telegram.AccentColorsChanged{DarkRGB: map[int32]uint32{8: 0x123456}}})
+	check(color.RGBA{R: 0x12, G: 0x34, B: 0x56, A: 255})
 }
 
 func TestMessageGroupEmptyOrNonPositiveWidthZeroResult(t *testing.T) {

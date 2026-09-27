@@ -4,6 +4,7 @@ package telegram
 
 import (
 	"context"
+	"errors"
 	"runtime"
 
 	td "github.com/zelenin/go-tdlib/client"
@@ -59,12 +60,18 @@ func (handler *authorizationHandler) handle(client authorizationClient, state td
 		_, err := client.SetTdlibParameters(handler.ctx, handler.parameters)
 		return safeAuthorizationError("set TDLib parameters", err)
 	case td.ConstructorAuthorizationStateWaitPhoneNumber:
-		value, err := handler.ask(auth.Prompt{Kind: auth.PromptPhone, Label: "Phone number"})
-		if err != nil {
-			return err
+		prompt := auth.Prompt{Kind: auth.PromptPhone, Label: "Phone number"}
+		for {
+			value, err := handler.ask(prompt)
+			if err != nil {
+				return err
+			}
+			_, err = client.SetAuthenticationPhoneNumber(handler.ctx, &td.SetAuthenticationPhoneNumberRequest{PhoneNumber: value})
+			if !invalidPhoneNumber(err) {
+				return safeAuthorizationError("submit phone number", err)
+			}
+			prompt.Label = "Invalid phone number; enter again"
 		}
-		_, err = client.SetAuthenticationPhoneNumber(handler.ctx, &td.SetAuthenticationPhoneNumberRequest{PhoneNumber: value})
-		return safeAuthorizationError("submit phone number", err)
 	case td.ConstructorAuthorizationStateWaitCode:
 		value, err := handler.ask(auth.Prompt{Kind: auth.PromptCode, Label: "Verification code", Secret: true})
 		if err != nil {
@@ -110,6 +117,14 @@ func (handler *authorizationHandler) ask(prompt auth.Prompt) (string, error) {
 		}
 	}
 	return value, nil
+}
+
+// Only this explicit TDLib rejection is retried. Other failures (including
+// rate limits, storage errors, and cancellation) must not loop indefinitely.
+func invalidPhoneNumber(err error) bool {
+	var response td.ResponseError
+	return errors.As(err, &response) && response.Err != nil &&
+		response.Err.Code == 400 && response.Err.Message == "PHONE_NUMBER_INVALID"
 }
 
 func safeAuthorizationError(operation string, cause error) error {

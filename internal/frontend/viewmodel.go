@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"image"
+	"image/color"
 	"time"
 
 	"github.com/zylen-det/telegram-tui/internal/domain"
@@ -90,9 +91,11 @@ type RenderedThumbnail struct {
 
 type RenderedMessageGroup struct {
 	MessageGroup
-	AvatarKey   string
-	Avatar      pixel.Avatar
-	AvatarError *domain.AppError
+	AvatarKey      string
+	Avatar         pixel.Avatar
+	AvatarError    *domain.AppError
+	SenderColor    color.RGBA
+	HasSenderColor bool
 }
 
 func Select(state State, location *time.Location) ViewModel {
@@ -188,6 +191,13 @@ func Select(state State, location *time.Location) ViewModel {
 			Avatar:       cloneAvatar(avatar.Cells),
 			AvatarError:  cloneAppError(avatar.Error),
 		}
+		accentID, known := state.SenderAccents[group.Sender]
+		if !known && len(group.Messages) > 0 {
+			accentID, known = group.Messages[0].SenderAccentID, group.Messages[0].SenderAccentKnown
+		}
+		if known {
+			model.Groups[index].SenderColor, model.Groups[index].HasSenderColor = senderColor(state, accentID)
+		}
 	}
 	model.Draft = state.Drafts[model.ActiveChat.ID]
 	if state.EditTarget != nil && state.EditTarget.ChatID == model.ActiveChat.ID {
@@ -223,6 +233,17 @@ func Select(state State, location *time.Location) ViewModel {
 		}
 	}
 	return model
+}
+
+func senderColor(state State, id int32) (color.RGBA, bool) {
+	if id >= 0 && id < int32(len(state.SenderPalette)) {
+		value := state.SenderPalette[id]
+		return value, value.A != 0
+	}
+	if rgb, ok := state.CustomSenderColors[id]; ok {
+		return color.RGBA{R: uint8(rgb >> 16), G: uint8(rgb >> 8), B: uint8(rgb), A: 255}, true
+	}
+	return color.RGBA{}, false
 }
 
 func cloneChatActions(menu *ChatActionMenuState) *ChatActionMenuState {

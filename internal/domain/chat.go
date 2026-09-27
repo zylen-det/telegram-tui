@@ -8,11 +8,12 @@ type AvatarRef struct {
 }
 
 type User struct {
-	ID        UserID
-	Name      string
-	Username  string
-	Avatar    AvatarRef
-	IsCurrent bool
+	ID            UserID
+	Name          string
+	Username      string
+	Avatar        AvatarRef
+	IsCurrent     bool
+	AccentColorID int32
 }
 
 type ChatMemberRole uint8
@@ -46,6 +47,7 @@ type Chat struct {
 	IsForum              bool
 	Title                string
 	Username             string
+	AccentColorID        int32
 	Avatar               AvatarRef
 	LastMessage          string
 	LastMessageAt        int64

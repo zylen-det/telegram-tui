@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -17,7 +18,9 @@ import (
 	"github.com/blacktop/go-termimg"
 	"github.com/zylen-det/telegram-tui/internal/auth"
 	"github.com/zylen-det/telegram-tui/internal/config"
+	"github.com/zylen-det/telegram-tui/internal/domain"
 	"github.com/zylen-det/telegram-tui/internal/frontend"
+	"github.com/zylen-det/telegram-tui/internal/logging"
 	"github.com/zylen-det/telegram-tui/internal/platform"
 	"github.com/zylen-det/telegram-tui/internal/telegram"
 )
@@ -181,6 +184,41 @@ func TestEnsureRuntimeDirectoriesCreatesPrivatePaths(t *testing.T) {
 		if err != nil || !info.IsDir() || info.Mode().Perm() != 0o700 {
 			t.Fatalf("directory %q info=%#v err=%v", path, info, err)
 		}
+	}
+}
+
+func TestReportApplicationExitLogsStartupFailureWithoutSecrets(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "telegram-tui.log")
+	logger, closer, err := logging.New(path, slog.LevelInfo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	private := "api-hash-secret database-key-secret"
+	fatal := &domain.AppError{Kind: domain.ErrorAuthorization, Op: "authorize", Message: "could not authorize", Cause: errors.New(private)}
+	if got := reportApplicationExit(logger, fatal, nil); !errors.Is(got, fatal) {
+		t.Fatalf("exit error = %v, want startup failure", got)
+	}
+	runFailure := errors.New(private)
+	if got := reportApplicationExit(logger, nil, runFailure); !errors.Is(got, runFailure) {
+		t.Fatalf("runtime exit error = %v", got)
+	}
+	if got := reportApplicationExit(logger, nil, nil); got != nil {
+		t.Fatalf("normal exit error = %v", got)
+	}
+	if err := closer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(contents, []byte(private)) || bytes.Contains(contents, []byte(fatal.Message)) || bytes.Contains(contents, []byte(fatal.Op)) {
+		t.Fatalf("exit log contains a raw failure: %s", contents)
+	}
+	if !bytes.Contains(contents, []byte(`"level":"ERROR","msg":"telegram-tui","operation":"exit:startup","kind":"authorization"`)) ||
+		!bytes.Contains(contents, []byte(`"level":"ERROR","msg":"telegram-tui","operation":"exit:application","kind":"internal"`)) ||
+		!bytes.Contains(contents, []byte(`"level":"INFO","msg":"telegram-tui","operation":"exit:application"`)) {
+		t.Fatalf("exit log lacks status metadata: %s", contents)
 	}
 }
 

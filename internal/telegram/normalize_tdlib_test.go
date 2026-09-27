@@ -37,6 +37,36 @@ func TestNormalizerMapsConnectionAndClosedUpdates(t *testing.T) {
 	}
 }
 
+func TestNormalizerSenderAccentColors(t *testing.T) {
+	n := newNormalizer()
+	user := singleUpdate(t, n.update(&td.UpdateUser{User: &td.User{Id: 41, FirstName: "Ada", AccentColorId: 3}})).(UserUpserted)
+	if user.User.AccentColorID != 3 {
+		t.Fatalf("user accent ID = %d", user.User.AccentColorID)
+	}
+	message := n.message(tdTextMessage(1, 90, 41, 100, "Hi"))
+	if !message.SenderAccentKnown || message.SenderAccentID != 3 {
+		t.Fatalf("user message accent = %d, known %v", message.SenderAccentID, message.SenderAccentKnown)
+	}
+	chat := singleChat(t, n.update(&td.UpdateNewChat{Chat: &td.Chat{Id: 90, Type: &td.ChatTypeSupergroup{SupergroupId: 9}, Title: "Channel", AccentColorId: 6}}))
+	if chat.AccentColorID != 6 {
+		t.Fatalf("chat accent ID = %d", chat.AccentColorID)
+	}
+	chat = singleChat(t, n.update(&td.UpdateChatAccentColors{ChatId: 90, AccentColorId: 8}))
+	if chat.AccentColorID != 8 {
+		t.Fatalf("changed chat accent ID = %d", chat.AccentColorID)
+	}
+	chatMessage := tdTextMessage(2, 90, 41, 100, "Channel post")
+	chatMessage.SenderId = &td.MessageSenderChat{ChatId: 90}
+	message = n.message(chatMessage)
+	if !message.SenderAccentKnown || message.SenderAccentID != 8 {
+		t.Fatalf("chat message accent = %d, known %v", message.SenderAccentID, message.SenderAccentKnown)
+	}
+	colors := singleUpdate(t, n.update(&td.UpdateAccentColors{Colors: []*td.AccentColor{{Id: 8, DarkThemeColors: []int32{0x123456}}, {Id: 9}}})).(AccentColorsChanged)
+	if !reflect.DeepEqual(colors.DarkRGB, map[int32]uint32{8: 0x123456}) {
+		t.Fatalf("custom colors = %v", colors.DarkRGB)
+	}
+}
+
 func TestNormalizerCachesFullUserIdentity(t *testing.T) {
 	n := newNormalizer()
 	updates := n.update(&td.UpdateUser{User: &td.User{

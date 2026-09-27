@@ -18,6 +18,7 @@ import (
 	"github.com/zylen-det/telegram-tui/internal/auth"
 	"github.com/zylen-det/telegram-tui/internal/buildinfo"
 	"github.com/zylen-det/telegram-tui/internal/config"
+	"github.com/zylen-det/telegram-tui/internal/domain"
 	"github.com/zylen-det/telegram-tui/internal/frontend"
 	"github.com/zylen-det/telegram-tui/internal/logging"
 	"github.com/zylen-det/telegram-tui/internal/media/avatar"
@@ -97,15 +98,25 @@ func withInstanceOwnership(stateDir string, start func() error) (resultErr error
 	return start()
 }
 
-func runOwnedProductionApplication(parent context.Context, options appOptions, paths config.Paths) error {
+func runOwnedProductionApplication(parent context.Context, options appOptions, paths config.Paths) (resultErr error) {
 	logger, logCloser, err := logging.New(filepath.Join(paths.StateDir, "telegram-tui.log"), slog.LevelInfo)
 	if err != nil {
 		return err
 	}
 	defer logCloser.Close()
+	var fatal *domain.AppError
+	defer func() { resultErr = reportApplicationExit(logger, fatal, resultErr) }()
 	slog.SetDefault(logger)
 	logger.Info("startup", logging.Attrs(logging.Fields{Operation: "startup"})...)
 
+	preferences, err := config.LoadPreferences(paths.ConfigFile)
+	if err != nil {
+		return err
+	}
+	palette, err := preferences.SenderPalette()
+	if err != nil {
+		return err
+	}
 	broker := auth.NewBroker()
 	resolver := config.Resolver{Paths: paths, Prompts: broker, Getenv: os.Getenv}
 	cache := pixel.NewCache(paths.AvatarCacheDir)
@@ -114,7 +125,9 @@ func runOwnedProductionApplication(parent context.Context, options appOptions, p
 	protocol := resolveThumbnailProtocol(paths)
 	os.Setenv("TERMIMG_BYPASS_DETECTION", thumbnailProtocolBypass(protocol))
 	handler := newProductionHandler(ctx, resolver, telegram.New, broker, avatarRenderer, options.clipboard, logger, protocol)
-	model, err := frontend.NewAppModel(frontend.InitialState(), handler)
+	initial := frontend.InitialState()
+	initial.SenderPalette = palette
+	model, err := frontend.NewAppModel(initial, handler)
 	if err != nil {
 		cancel()
 		return err
@@ -137,7 +150,25 @@ func runOwnedProductionApplication(parent context.Context, options appOptions, p
 	signals := make(chan os.Signal, 2)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(signals)
-	return runProductionBubbleTea(parent, cancel, output, program, model, signals)
+	resultErr = runProductionBubbleTea(parent, cancel, output, program, model, signals)
+	fatal = model.Snapshot().Fatal
+	return resultErr
+}
+
+// reportApplicationExit records only allow-listed metadata, never raw errors or
+// TDLib payloads. A startup failure must also make the process exit nonzero;
+// shutdown can otherwise complete successfully after the original failure.
+func reportApplicationExit(logger *slog.Logger, fatal *domain.AppError, err error) error {
+	if fatal != nil {
+		logger.Error("exit", logging.Attrs(logging.Fields{Operation: "exit:startup", Kind: fatal.Kind})...)
+		return errors.Join(err, fatal)
+	}
+	if err != nil {
+		logger.Error("exit", logging.Attrs(logging.Fields{Operation: "exit:application", Kind: domain.ErrorInternal})...)
+		return err
+	}
+	logger.Info("exit", logging.Attrs(logging.Fields{Operation: "exit:application"})...)
+	return nil
 }
 
 func newProductionHandler(ctx context.Context, resolver frontend.RuntimeResolver, factory frontend.ClientFactory, broker *auth.Broker, avatars frontend.AvatarRenderer, clipboard platform.Clipboard, logger *slog.Logger, protocol termimg.Protocol) *frontend.Handler {

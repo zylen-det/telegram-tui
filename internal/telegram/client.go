@@ -368,6 +368,9 @@ type DraftChanged struct {
 	Draft  domain.Draft
 }
 type UserUpserted struct{ User domain.User }
+
+// AccentColorsChanged carries non-built-in dark-theme RGB colors by ID.
+type AccentColorsChanged struct{ DarkRGB map[int32]uint32 }
 type MessageUpserted struct{ Message domain.Message }
 type MessageSendSucceeded struct {
 	OldID   domain.MessageID
@@ -427,6 +430,7 @@ func (ConnectionChanged) isUpdate()       {}
 func (ChatUpserted) isUpdate()            {}
 func (DraftChanged) isUpdate()            {}
 func (UserUpserted) isUpdate()            {}
+func (AccentColorsChanged) isUpdate()     {}
 func (MessageUpserted) isUpdate()         {}
 func (MessageSendSucceeded) isUpdate()    {}
 func (MessageSendFailed) isUpdate()       {}

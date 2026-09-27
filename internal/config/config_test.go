@@ -1,8 +1,10 @@
 package config
 
 import (
+	"image/color"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -24,7 +26,7 @@ func TestPreferencesRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadPreferences() error = %v", err)
 	}
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("LoadPreferences() = %#v, want %#v", got, want)
 	}
 
@@ -48,9 +50,16 @@ func TestLoadPreferencesReturnsDefaultsForMissingFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadPreferences() error = %v", err)
 	}
-	want := Preferences{ImageProtocol: "kitty"}
-	if got != want {
+	want := defaultPreferences()
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("LoadPreferences() = %#v, want %#v", got, want)
+	}
+	colors := map[string]string{
+		"0": "#CC5049", "1": "#D67722", "2": "#955CDB", "3": "#40A920",
+		"4": "#309EBA", "5": "#368AD1", "6": "#C7508B",
+	}
+	if !reflect.DeepEqual(got.SenderColors, colors) {
+		t.Fatalf("default sender colors = %v, want %v", got.SenderColors, colors)
 	}
 }
 
@@ -83,10 +92,43 @@ func TestLoadPreferencesDefaultsEmptyImageProtocol(t *testing.T) {
 			if err != nil {
 				t.Fatalf("LoadPreferences() error = %v", err)
 			}
-			if got != test.want {
+			if !reflect.DeepEqual(got, test.want) {
 				t.Fatalf("LoadPreferences() = %#v, want %#v", got, test.want)
 			}
 		})
+	}
+}
+
+func TestSenderPaletteOverridesAndValidation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[sender_colors]\n\"0\" = \"#102030\"\n\"6\" = \"#aBcDeF\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	preferences, err := LoadPreferences(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	palette, err := preferences.SenderPalette()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if palette[0] != (color.RGBA{R: 0x10, G: 0x20, B: 0x30, A: 255}) || palette[1] != (color.RGBA{R: 0xD6, G: 0x77, B: 0x22, A: 255}) || palette[6] != (color.RGBA{R: 0xAB, G: 0xCD, B: 0xEF, A: 255}) {
+		t.Fatalf("palette = %v", palette)
+	}
+	if err := SavePreferences(path, preferences); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := LoadPreferences(path)
+	if err != nil || !reflect.DeepEqual(reloaded.SenderColors, preferences.SenderColors) {
+		t.Fatalf("round trip colors = %v, %v", reloaded.SenderColors, err)
+	}
+	for _, entry := range []string{"\"7\" = \"#123456\"", "\"2\" = \"#ff12zz\"", "\"1\" = \"123456\""} {
+		if err := os.WriteFile(path, []byte("[sender_colors]\n"+entry+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := LoadPreferences(path); err == nil {
+			t.Fatalf("LoadPreferences accepted %q", entry)
+		}
 	}
 }
 
@@ -163,7 +205,7 @@ func TestSavePreferencesReplacesExistingFileWithPrivateMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadPreferences() error = %v", err)
 	}
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("LoadPreferences() = %#v, want %#v", got, want)
 	}
 
