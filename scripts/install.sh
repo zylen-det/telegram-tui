@@ -48,7 +48,7 @@ trap 'exit 1' HUP INT TERM
 
 archive="${temporary_dir}/${archive_name}"
 checksums="${temporary_dir}/SHA256SUMS"
-curl --fail --location --silent --show-error "${release_url}/${archive_name}" --output "${archive}" || fail "could not download ${archive_name}"
+curl --fail --location --show-error --progress-bar "${release_url}/${archive_name}" --output "${archive}" || fail "could not download ${archive_name}"
 curl --fail --location --silent --show-error "${release_url}/SHA256SUMS" --output "${checksums}" || fail 'could not download SHA256SUMS'
 
 checksum="$(awk -v name="${archive_name}" '$2 == name { print $1; exit }' "${checksums}")"
