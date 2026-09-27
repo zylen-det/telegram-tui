@@ -91,6 +91,8 @@ const (
 	EntityCommand
 )
 
+// Message carries RetryText only while an outgoing formatted send is pending
+// or failed, so retries can resend its original markup.
 type Message struct {
 	ID                MessageID
 	ChatID            ChatID
@@ -105,6 +107,7 @@ type Message struct {
 	Kind              MessageKind
 	Text              string
 	Entities          []TextEntity
+	RetryText         string
 	FileName          string
 	Media             MessageMedia
 	Sticker           StickerRef

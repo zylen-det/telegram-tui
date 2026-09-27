@@ -112,7 +112,7 @@ In action menus, `j`/`k` move between options and Enter activates the selected o
 
 Moving through the chat list changes the focused row without replacing the selected conversation. Press Enter to open the focused conversation without moving focus from Chats; pane navigation wraps among visible Chats, Conversation, and Info panes without opening another chat. Press `a` for actions on the focused chat. Press `i` to focus the message input from a visible conversation.
 
-Typing `/` at the beginning of the composer opens bot-command completion where available. Plain `q` never quits the process; it only closes the current modal or page.
+Typing `/` at the beginning of the composer opens bot-command completion where available. Sent text messages use Telegram's human-friendly Markdown syntax: for example, `**bold**`, `__italic__`, `` `code` ``, and `~~strikethrough~~` become formatted text after sending. The composer does not preview formatting. Plain `q` never quits the process; it only closes the current modal or page.
 
 Command-line help and version information are available without starting the TUI:
 

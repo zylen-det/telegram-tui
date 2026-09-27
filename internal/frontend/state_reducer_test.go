@@ -580,6 +580,26 @@ func TestOptimisticSendQueueFailureAndCooldownRetry(t *testing.T) {
 	assertCommands(t, commands, []Effect{SendText{RequestID: 9, LocalID: -1, ChatID: 9, Text: "hello"}})
 }
 
+func TestFormattedTextRetryPreservesOriginalMarkup(t *testing.T) {
+	now := time.Unix(200, 0).UTC()
+	state := selectedWritableState()
+	state.Messages[9] = []domain.Message{{ID: -1, ChatID: 9, Kind: domain.MessageText, Text: "**bold**", Outgoing: true, SendState: domain.SendPending}}
+	queued := domain.Message{ID: -44, ChatID: 9, Kind: domain.MessageText, Text: "bold", Entities: []domain.TextEntity{{Offset: 0, Length: 4, Kind: domain.EntityBold}}, RetryText: "**bold**", Outgoing: true, SendState: domain.SendPending}
+	updateState(&state, TextQueued{LocalID: -1, Message: queued})
+	failure := domain.AppError{Kind: domain.ErrorNetwork, Message: "offline"}
+	updateState(&state, TelegramEvent{Value: telegram.MessageSendFailed{OldID: -44, Message: domain.Message{ID: -44, ChatID: 9, Kind: domain.MessageText, Text: "bold"}, Error: failure}, ReceivedAt: now})
+	commands := updateState(&state, ActionReceived{Action: Retry, MessageID: -44, At: now})
+	if got := state.Messages[9][0]; got.Text != "bold" || got.RetryText != "**bold**" {
+		t.Fatalf("retry state lost formatted text source: %#v", got)
+	}
+	if len(commands) != 1 {
+		t.Fatalf("retry effects = %#v", commands)
+	}
+	if send, ok := commands[0].(SendText); !ok || send.Text != "**bold**" {
+		t.Fatalf("retry text = %#v, want original markup", commands[0])
+	}
+}
+
 func TestQueuedTemporaryReplyIdentitySurvivesFailureAndSuccessReplacement(t *testing.T) {
 	now := time.Unix(200, 0).UTC()
 	state := selectedWritableState()

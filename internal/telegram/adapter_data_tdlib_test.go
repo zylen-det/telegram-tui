@@ -1062,6 +1062,38 @@ func TestAdapterSendTextBuildsExactRequestAndReturnsPendingMessage(t *testing.T)
 	}
 }
 
+func TestAdapterSendTextParsesMarkdownBeforeSending(t *testing.T) {
+	cases := []struct {
+		name, input, text string
+		entities          []domain.TextEntity
+	}{
+		{"bold after emoji", "🙂**bold**", "🙂bold", []domain.TextEntity{{Offset: 2, Length: 4, Kind: domain.EntityBold}}},
+		{"italic and code", "__italic__ `code`", "italic code", []domain.TextEntity{{Offset: 0, Length: 6, Kind: domain.EntityItalic}, {Offset: 7, Length: 4, Kind: domain.EntityCode}}},
+		{"unmatched markup stays literal", "**unfinished", "**unfinished", nil},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			transport := &dataTransport{sent: &td.Message{Id: -44, Content: &td.MessageText{Text: &td.FormattedText{Text: test.text}}}}
+			adapter := adapterForDataTests(transport)
+			sent, err := adapter.SendText(context.Background(), SendTextRequest{ChatID: 77, Text: test.input})
+			if err != nil {
+				t.Fatalf("SendText error: %v", err)
+			}
+			if test.input != test.text && sent.RetryText != test.input {
+				t.Fatalf("RetryText = %q, want original markup %q", sent.RetryText, test.input)
+			}
+			request := transport.sendMessageRequest
+			if request == nil {
+				t.Fatal("no send request")
+			}
+			content, ok := request.InputMessageContent.(*td.InputMessageText)
+			if !ok || content.Text == nil || content.Text.Text != test.text || !reflect.DeepEqual(messageEntities(&td.MessageText{Text: content.Text}), test.entities) {
+				t.Fatalf("sent content = %#v, want %q with %#v", request.InputMessageContent, test.text, test.entities)
+			}
+		})
+	}
+}
+
 func TestAdapterNilClientDoesNotInstallTypedNilOperations(t *testing.T) {
 	adapter := newAdapter(
 		config.Runtime{},

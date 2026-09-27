@@ -1470,6 +1470,18 @@ func (a *Adapter) SendText(ctx context.Context, request SendTextRequest) (domain
 	if err != nil {
 		return domain.Message{}, err
 	}
+	// TDLib's human-friendly parser understands Telegram's **bold**,
+	// __italic__, `code`, and other markup, leaving malformed markup literal.
+	formatted, err := td.ParseMarkdown(&td.ParseMarkdownRequest{Text: &td.FormattedText{Text: request.Text}})
+	if err != nil {
+		return domain.Message{}, normalizeError("send text", err)
+	}
+	if formatted == nil {
+		return domain.Message{}, domain.AppError{Kind: domain.ErrorInternal, Op: "send text", Message: "Could not parse message formatting"}
+	}
+	if err := ctx.Err(); err != nil {
+		return domain.Message{}, err
+	}
 	replyTo := td.InputMessageReplyTo(nil)
 	if request.ReplyToMessageID > 0 {
 		replyTo = &td.InputMessageReplyToMessage{MessageId: int64(request.ReplyToMessageID)}
@@ -1479,7 +1491,7 @@ func (a *Adapter) SendText(ctx context.Context, request SendTextRequest) (domain
 		TopicId: forumTopicID(request.TopicID),
 		ReplyTo: replyTo,
 		InputMessageContent: &td.InputMessageText{
-			Text:       &td.FormattedText{Text: request.Text},
+			Text:       formatted,
 			ClearDraft: true,
 		},
 	})
@@ -1497,6 +1509,9 @@ func (a *Adapter) SendText(ctx context.Context, request SendTextRequest) (domain
 	message.TopicID = request.TopicID
 	message.ReplyToMessageID = request.ReplyToMessageID
 	message.HasReply = request.ReplyToMessageID > 0
+	if formatted.Text != request.Text || len(formatted.Entities) > 0 {
+		message.RetryText = request.Text
+	}
 	message.SendState = domain.SendPending
 	message.Failure = nil
 	return message, nil

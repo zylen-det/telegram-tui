@@ -1873,7 +1873,11 @@ func retryMessage(state *State, messageID domain.MessageID, at time.Time) (Effec
 	requestID := allocateRequestID(state)
 	switch message.Kind {
 	case domain.MessageText:
-		return SendText{RequestID: requestID, LocalID: message.ID, ChatID: chatID, Text: message.Text, ReplyToMessageID: message.ReplyToMessageID}, true
+		text := message.Text
+		if message.RetryText != "" {
+			text = message.RetryText
+		}
+		return SendText{RequestID: requestID, LocalID: message.ID, ChatID: chatID, Text: text, ReplyToMessageID: message.ReplyToMessageID}, true
 	case domain.MessagePhoto:
 		if state.PhotoSendRequests == nil {
 			state.PhotoSendRequests = make(map[domain.MessageID]uint64)
@@ -2643,6 +2647,7 @@ func failSentMessage(state *State, update telegram.MessageSendFailed, receivedAt
 	}
 	original := state.Messages[chatID][index]
 	failed := update.Message
+	failed.RetryText = original.RetryText
 	preserveReplyIdentity(original, &failed)
 	preserveTopicIdentity(original, &failed)
 	if failed.ID == 0 {
