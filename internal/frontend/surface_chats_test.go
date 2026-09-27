@@ -73,7 +73,7 @@ func cellContent(c *lipgloss.Canvas, x, y int) string {
 	return ""
 }
 
-func TestChatRowSelectedUnselectedDimensionsAndContent(t *testing.T) {
+func TestChatRowFocusedSelectedStylesDimensionsAndContent(t *testing.T) {
 	styles := newRenderStyles(false)
 	rect := image.Rect(2, 3, 20, 7) // 18x4 row
 
@@ -111,28 +111,32 @@ func TestChatRowSelectedUnselectedDimensionsAndContent(t *testing.T) {
 		}
 	}
 
-	// Focused but not selected: the title carries the focus accent while the
-	// row remains on the terminal background.
+	// Focused but not selected: the row carries the focus fill while the title
+	// keeps its ordinary foreground.
 	focused := chatRowFor("Focused", 3, false)
 	focused.Focused = true
 	fCanvas, _, _ := chatRowSurface(focused, rect, time.Local, styles)
-	if got := colorOf(fCanvas.CellAt(rect.Min.X+7, rect.Min.Y).Style.Fg); got != rgba(accentColor) {
-		t.Errorf("focused title foreground = %v, want accentColor", got)
+	if got := colorOf(fCanvas.CellAt(rect.Min.X+7, rect.Min.Y).Style.Fg); got != rgba(textColor) {
+		t.Errorf("focused title foreground = %v, want textColor", got)
 	}
-	if got := fCanvas.CellAt(rect.Min.X+8, rect.Min.Y).Style.Bg; got != nil {
-		t.Errorf("focused unselected background = %v, want nil", colorOf(got))
+	if got := colorOf(fCanvas.CellAt(rect.Min.X+8, rect.Min.Y).Style.Bg); got != rgba(selectedColor) {
+		t.Errorf("focused background = %v, want selectedColor", got)
 	}
 
-	// Selected.
+	// Selected but not focused: the title carries the accent foreground while
+	// the row remains on the terminal background.
 	selected := chatRowFor("Weekend dev", 2, true)
 	sCanvas, _, sSurface := chatRowSurface(selected, rect, time.Local, styles)
 	if got := sSurface.Layer.GetID(); got != "chat:2" {
 		t.Errorf("selected ID = %q, want chat:2", got)
 	}
-	if got := colorOf(sCanvas.CellAt(rect.Min.X+8, rect.Min.Y).Style.Bg); got != rgba(selectedColor) {
-		t.Errorf("selected background = %v, want selectedColor", got)
-	}
 	titleCell := sCanvas.CellAt(rect.Min.X+7, rect.Min.Y)
+	if got := colorOf(titleCell.Style.Fg); got != rgba(accentColor) {
+		t.Errorf("selected title foreground = %v, want accentColor", got)
+	}
+	if got := sCanvas.CellAt(rect.Min.X+8, rect.Min.Y).Style.Bg; got != nil {
+		t.Errorf("selected background = %v, want nil", colorOf(got))
+	}
 	if titleCell.Style.Attrs&uv.AttrBold == 0 {
 		t.Errorf("selected title cell is not bold")
 	}
@@ -365,8 +369,11 @@ func TestChatsPaneCapacityAndStartKeepsSelectedVisible(t *testing.T) {
 	start := 2
 	selectedY := rowsTop + (6-start)*chatRowHeight
 	cell := canvas.CellAt(model.Layout.Chats.Min.X+10, selectedY)
-	if got := colorOf(cell.Style.Bg); got != rgba(selectedColor) {
-		t.Errorf("selected row background = %v, want selectedColor", got)
+	if got := colorOf(cell.Style.Fg); got != rgba(accentColor) {
+		t.Errorf("selected row foreground = %v, want accentColor", got)
+	}
+	if cell.Style.Bg != nil {
+		t.Errorf("selected row background = %v, want nil", colorOf(cell.Style.Bg))
 	}
 }
 

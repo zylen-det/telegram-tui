@@ -109,7 +109,7 @@ func buildChatRowLayer(row ChatRow, rect image.Rectangle, location *time.Locatio
 	}
 
 	rootStyle := styles.Panel
-	if row.Selected {
+	if row.Focused {
 		rootStyle = styles.Selected
 	}
 	rootContent := rootStyle.Width(rect.Dx()).Height(rect.Dy()).Render("")
@@ -161,7 +161,7 @@ func buildChatRowLayer(row ChatRow, rect image.Rectangle, location *time.Locatio
 		}
 	}
 	titleStyle := styles.Emphasis
-	if row.Focused {
+	if row.Selected {
 		titleStyle = styles.Accent
 	}
 	previewStyle := styles.Panel
@@ -169,7 +169,7 @@ func buildChatRowLayer(row ChatRow, rect image.Rectangle, location *time.Locatio
 		previewStyle = styles.Emphasis
 	}
 	metadataStyle := styles.Muted
-	if row.Selected {
+	if row.Focused {
 		titleStyle = titleStyle.Background(rgba(selectedColor))
 		previewStyle = previewStyle.Background(rgba(selectedColor))
 		metadataStyle = metadataStyle.Background(rgba(selectedColor))
