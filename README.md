@@ -3,39 +3,34 @@
 [![CI](https://github.com/zylen-det/telegram-tui/actions/workflows/ci.yml/badge.svg)](https://github.com/zylen-det/telegram-tui/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A Telegram client that lives in [Kitty](https://sw.kovidgoyal.net/kitty/). It is built with [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) and [TDLib](https://github.com/tdlib/td), combining a responsive terminal UI, inline images, mouse support, desktop notifications, and a persistent Telegram session.
+## What is this?
 
-> **Project status:** telegram-tui is an early release for Arch Linux x86-64 and Kitty. It supports one Telegram account. Calls, stories, and multi-account use are not implemented yet.
+A Telegram client that lives in your terminal. Built with [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) and [TDLib](https://github.com/tdlib/td), telegram-tui runs in [Kitty](https://sw.kovidgoyal.net/kitty/) with inline images, mouse support, desktop notifications, and a persistent Telegram session.
 
-telegram-tui is an unofficial client and is not affiliated with Telegram.
+![Animated demo of telegram-tui showing chats and message actions](docs/assets/demo.gif)
 
-![telegram-tui showing the chat list and an active group conversation](docs/assets/telegram-tui.png)
+> **Project status:** This is an early release for Arch Linux x86-64 and Kitty; see [Known limitations](#known-limitations).
 
-## Highlights
+telegram-tui is unofficial and is not affiliated with Telegram.
 
-- Sign in with a phone number, verification code, and optional Telegram 2FA without leaving the TUI.
-- Read and send messages in private chats, groups, supergroups, channels, and forum topics.
-- Navigate with Vim keys, conventional keys, a mouse, or any combination of them.
-- Search chats and messages, jump to unread or mentioned chats, browse pinned messages, and use bot-command completion.
-- Reply, edit, delete, forward, pin, copy, and react to messages when Telegram permits the action. Open a replied-to message from its message actions; copy or open a web link from a message or caption by choosing its link in a second menu.
-- Keep Telegram cloud drafts—including reply targets—synchronized across devices.
-- Send photos, videos, audio, documents, and stickers. Preview images and available thumbnails inline as terminal pixel cells, or view images at full fidelity through Kitty's graphics protocol; other media opens in the system application.
-- Browse members and use supported group/channel administration controls.
-- Continue reading cached content offline and reconnect without losing the active view.
-- Use a transparent terminal canvas that follows Kitty's configured background opacity.
+## Features
 
-## Requirements
+- **Chat:** Read and send messages in private chats, groups, supergroups, channels, and forum topics. Reply, edit, delete, forward, pin, copy, and react when Telegram permits it.
+- **Find your way:** Search chats and messages, jump to unread or mentioned chats, browse pinned messages, and complete bot commands. Navigate with Vim-style keys, conventional keys, or a mouse.
+- **Images and media:** See images and available thumbnails inline as terminal pixel cells, or open images at full fidelity with Kitty's graphics protocol. Send photos, videos, audio, documents, and stickers; open other media in the system application.
+- **Drafts and offline use:** Sync Telegram cloud drafts (including reply targets) across devices. Keep reading cached content offline and reconnect without losing the active view.
+- **Groups and channels:** Browse members and use supported administration controls.
+- **Terminal integration:** Use desktop notifications when available and follow Kitty's configured background opacity.
 
-The packaged release currently targets:
+## Installation
 
-- Arch Linux on x86-64
-- Kitty
-- the `gcc-libs`, `openssl`, and `zlib` runtime packages
-- a personal Telegram `api_id` and `api_hash` from <https://my.telegram.org/apps>
+### Requirements
 
-Desktop notifications are optional and require a freedesktop-compatible notification daemon such as Mako, Dunst, or SwayNotificationCenter.
+The packaged release currently requires Arch Linux x86-64, Kitty, and the `gcc-libs`, `openssl`, and `zlib` runtime packages. You'll also need a personal Telegram `api_id` and `api_hash` from <https://my.telegram.org/apps> for first-run sign-in.
 
-## Install
+Desktop notifications are optional; they need a freedesktop-compatible notification daemon such as Mako, Dunst, or SwayNotificationCenter.
+
+### Install the release
 
 Install the latest release without `sudo`:
 
@@ -64,7 +59,7 @@ tar -xzf telegram-tui_<version>_linux_x86_64.tar.gz
 ./telegram-tui_<version>_linux_x86_64/telegram-tui
 ```
 
-Keep the archive's `lib` directory beside the executable; it contains the matching TDLib shared library.
+Keep the archive's `lib` directory beside the executable; it contains the matching TDLib shared library. To build from source instead, see [Build from source](#build-from-source).
 
 ## First run
 
@@ -74,9 +69,16 @@ Start the client:
 telegram-tui
 ```
 
-On first launch, enter your Telegram application credentials, phone number, login code, and—if enabled—2FA password in the TUI. If Telegram rejects an invalid phone number, the TUI prompts for it again instead of exiting. The application credentials and a generated TDLib database key are saved in `config.toml` with mode `0600`; login codes and passwords are not saved.
+Follow the prompts in the TUI:
 
-For one-off launches, application credentials may be supplied through the environment:
+1. Enter your Telegram application **`api_id`** and **`api_hash`** from <https://my.telegram.org/apps>.
+2. Enter your **phone number**, including country code.
+3. Enter the **verification code** Telegram sends you.
+4. If enabled, enter your **two-step verification (2FA) password**.
+
+That's it. If Telegram rejects the phone number, you can enter it again without restarting. The app credentials and a generated TDLib database key are saved in `config.toml` with mode `0600`; login codes and passwords are not saved.
+
+You can also supply app credentials for a one-off launch:
 
 ```bash
 TELEGRAM_API_ID=12345 TELEGRAM_API_HASH=... telegram-tui
@@ -86,33 +88,40 @@ Credential lookup order is environment → config file → first-run prompt.
 
 ## Everyday controls
 
-| Action | Keys | Mouse |
+Keys depend on the focused pane. These are the everyday controls:
+
+| Action | Keyboard | Mouse |
 |---|---|---|
-| Move chat focus / list selection | `j` / `k` or Up / Down | Click a row or use the wheel |
-| Cycle visible panes (not the message input) | `h` / `l` or Left / Right; Shift-Tab / Tab | Click a pane |
-| Open focused conversation | Enter in the chat list | Double-click a chat row |
-| Chat actions | `a` in the chat list | Double-click an action once the menu is open |
-| Chat info | `K` or F2 | Click Info |
+| Move through a list | `j` / `k` or Up / Down | Click a row or scroll |
+| Cycle visible panes (not the input) | `h` / `l` or Left / Right; Shift-Tab / Tab | Click a pane |
+| Open a chat | Enter in the chat list | Double-click a chat row |
+| Open chat actions | `a` in the chat list | Double-click an action in the open menu |
+| Show chat info | `K` or F2 | Click Info |
 | Focus message input | `i` in a conversation | Click the input |
-| Activate a message or modal action | Enter; action menus also show direct keys at the right of each option | Double-click a list action |
-| Close or go back | Esc; `q` inside a modal | Click close or outside |
-| Search from the chat list | `/` | Double-click a result |
+| Activate a selected message or menu action | Enter | Double-click a list action |
+| Close / go back | Esc; `q` inside a modal | Click close or outside |
+| Search chats | `/` in the chat list | Double-click a result |
 | Next unread / mentioned chat | `u` / `m` in the chat list | — |
 | View pinned messages | `p` in a conversation | — |
-| Go to a referenced message | Select the reply, press Enter, choose Go to referenced message | Double-click Go to referenced message in the reply's actions |
-| Browse forum topics | `t` in a forum conversation | Double-click a topic once the list is open |
-| Page through history | Ctrl-u / Ctrl-d or Page Up / Page Down | Use the wheel |
-| Send a message | Enter | Click Send |
-| Insert a newline | Shift-Enter | — |
+| Open a reply's referenced message | Enter on the reply, then choose Go to referenced message | Double-click that action |
+| Browse forum topics | `t` in a forum conversation | Double-click a topic in the open list |
+| Page through history | Ctrl-u / Ctrl-d or Page Up / Page Down | Scroll |
+| Send a message / insert a newline | Enter / Shift-Enter in the input | Click Send |
 | Send media or a document | Ctrl+O | Click `[Photo]` |
 | Open the sticker picker | Ctrl+S | Click `[Sticker]` |
-| Stop the application | Ctrl-C | — |
+| Quit the application | Ctrl-C | — |
 
-In action menus, `j`/`k` move between options and Enter activates the selected one. Direct keys activate the indicated option without moving selection; only keys for visible actions are active. Message actions use `v` view/open media, `r` reply, `g` go to referenced message, `f` forward, `e` edit, `y` copy (yank), `c` copy link, `o` open link, `i` user info, `a` react, `p` pin/unpin, `d` delete for self, and `D` delete for everyone. Link actions open a second menu of TDLib-marked links to choose from; links behind display text appear as `URL(display text)`. Chat actions use `o` open, `i` info, `a` archive/unarchive, `p` pin/unpin, `m` mute/unmute, `r` mark read/unread, `c` clear history, `d` delete, `l` leave, and `J` join (`j` remains navigation). Confirmation uses `c` cancel or `y` confirm. Esc/`q` goes back; Ctrl-C still quits.
+**Action menus:** Use `j`/`k` and Enter, or press the direct key shown beside a visible action:
 
-A single click focuses any selectable list row (including modal actions, search results, bot commands, Info actions, and sticker tiles); a second click on the same row within 400 ms performs its Enter action. Non-list controls such as Send and Close still act on one click. Moving through the chat list changes the focused row without replacing the selected conversation. Press Enter to open the focused conversation without moving focus from Chats; pane navigation wraps among visible Chats, Conversation, and Info panes without opening another chat. Press `a` for actions on the focused chat. Press `i` to focus the message input from a visible conversation.
+- **Messages:** `v` view/open media, `r` reply, `g` go to referenced message, `f` forward, `e` edit, `y` copy (yank), `c` copy link, `o` open link, `i` user info, `a` react, `p` pin/unpin, `d` delete for self, `D` delete for everyone.
+- **Chats:** `o` open, `i` info, `a` archive/unarchive, `p` pin/unpin, `m` mute/unmute, `r` mark read/unread, `c` clear history, `d` delete, `l` leave, `J` join (`j` remains navigation).
+- **Confirmations:** `c` cancel, `y` confirm.
 
-Typing `/` at the beginning of the composer opens bot-command completion where available. Sent text messages use Telegram's human-friendly Markdown syntax: for example, `**bold**`, `__italic__`, `` `code` ``, and `~~strikethrough~~` become formatted text after sending. The composer does not preview formatting. Plain `q` never quits the process; it only closes the current modal or page.
+Link actions open a second menu of TDLib-marked links to choose from; links behind display text appear as `URL(display text)`.
+
+**Focus and mouse:** One click focuses a list row (including modal actions, search results, bot commands, Info actions, and sticker tiles); a second click on the same row within 400 ms activates it. Send and Close act on one click. Moving through the chat list changes focus without opening another conversation; press Enter to open the focused chat while keeping focus in Chats. Pane navigation wraps among visible Chats, Conversation, and Info panes without opening another chat. Esc or `q` goes back from a modal or page; plain `q` never quits the application.
+
+**Writing messages:** Type `/` at the start of the input for bot-command completion where available. Sent text supports Telegram's human-friendly Markdown (`**bold**`, `__italic__`, `` `code` ``, `~~strikethrough~~`); the input does not preview formatting.
 
 Command-line help and version information are available without starting the TUI:
 
@@ -121,7 +130,9 @@ telegram-tui --help
 telegram-tui --version
 ```
 
-## Layout and appearance
+## Other information
+
+### Layout and appearance
 
 The interface adapts to the terminal size:
 
@@ -142,7 +153,7 @@ Sender names above messages use the sender accent-color ID assigned by Telegram;
 
 Unspecified IDs retain their defaults. For other accent IDs, telegram-tui uses TDLib's dark-theme RGB values when available. This does not sync themes with another Telegram app.
 
-## Local data and privacy
+### Local data and privacy
 
 | Data | Default location |
 |---|---|
@@ -156,7 +167,7 @@ The corresponding XDG environment variables override these roots. Removing the a
 
 Logs are rotating and restricted to an allow-list. They do not contain credentials, message or draft text, Telegram payloads, local media paths, commands, or raw errors. Normal and failed exits are recorded in `~/.local/state/telegram-tui/telegram-tui.log` (or under `XDG_STATE_HOME`); failed startup logs only a safe error category, not raw TDLib details, and returns a nonzero exit status.
 
-## Known limitations
+### Known limitations
 
 - Packaged releases currently support only Linux x86-64 and Kitty.
 - Only one Telegram account is supported.
@@ -164,7 +175,7 @@ Logs are rotating and restricted to an allow-list. They do not contain credentia
 - Topic administration, advanced invite-link options, join-request moderation, and timed restrictions remain on the roadmap.
 - Some recently implemented group/channel controls and topic flows still need broader real-account manual acceptance; see [`docs/manual-acceptance.md`](docs/manual-acceptance.md).
 
-## Build from source
+### Build from source
 
 Install the Go/CGO toolchain and runtime dependencies:
 
@@ -192,7 +203,7 @@ make build
 
 Neither path uses `sudo` inside the repository.
 
-## Development and verification
+### Development and verification
 
 Default tests do not require Telegram credentials, Kitty, or native TDLib:
 
@@ -212,10 +223,11 @@ git diff --check
 
 See [`docs/architecture.md`](docs/architecture.md) for package boundaries and [`docs/manual-acceptance.md`](docs/manual-acceptance.md) for real-account checks.
 
-## Roadmap
+### Roadmap
 
-Near-term work focuses on richer group/channel administration: named or expiring invite links, join requests, timed restrictions, and topic administration. Longer-term possibilities include multiple accounts, additional terminal image protocols, macOS, calls, and stories.
+- **Near-term:** Richer group/channel administration, including named or expiring invite links, join requests, timed restrictions, and topic administration.
+- **Longer-term possibilities:** Multiple accounts, additional terminal image protocols, macOS, calls, and stories.
 
-## License
+### License
 
 telegram-tui is available under the [MIT License](LICENSE). Release archives also include license material for TDLib, the prebuilt package, and Go dependencies.
