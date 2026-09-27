@@ -6,11 +6,3 @@
 /dist/
 /.local/
 /.env
-
-# Local-only development and agent context.
-AGENTS.md
-my_mind.md
-termprobe/
-reference/kit/journal.md
-reference/kit/planning.md
-reference/kit/worker.md
